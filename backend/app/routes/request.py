@@ -51,25 +51,37 @@ def create_request():
     count = query_db("SELECT COUNT(*) as cnt FROM charge_request", one=True)
     request_id = f"REQ{count['cnt'] + 1:03d}"
     
-    # 插入数据库
+    # 准备预测数据（临时模拟值，待调度模块接入后替换）
+    estimated_wait_seconds = 600
+    estimated_start_time = "2026-03-31T10:10:00"
+    estimated_finish_time = "2026-03-31T11:10:00"
+    
+    # 插入数据库，状态直接设为 WAITING，同时写入预测字段
     execute_db("""
-        INSERT INTO charge_request (request_id, charge_mode, request_energy, status, submit_time)
-        VALUES (?, ?, ?, 'PENDING', ?)
+        INSERT INTO charge_request (
+            request_id, charge_mode, request_energy, status, submit_time,
+            estimated_wait_seconds, estimated_start_time, estimated_finish_time
+        )
+        VALUES (?, ?, ?, 'WAITING', ?, ?, ?, ?)
     """, [
         request_id,
         data['charge_mode'],
         data['request_energy'],
-        data['request_time']
+        data['request_time'],
+        estimated_wait_seconds,
+        estimated_start_time,
+        estimated_finish_time
     ])
     
-    # TODO: 调用调度模块获取预测结果
-    # 暂时返回模拟数据
+    # TODO: 调用调度模块获取真实预测结果
+    # scheduler_client.get_prediction(request_id, charge_mode, request_energy)
+    
     return success_response({
         "request_id": request_id,
         "status": "WAITING",
-        "estimated_wait_seconds": 600,
-        "estimated_start_time": "2026-03-31T10:10:00",
-        "estimated_finish_time": "2026-03-31T11:10:00"
+        "estimated_wait_seconds": estimated_wait_seconds,
+        "estimated_start_time": estimated_start_time,
+        "estimated_finish_time": estimated_finish_time
     })
 
 

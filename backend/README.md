@@ -88,9 +88,26 @@ curl http://localhost:8080/health
 ### 健康检查
 - `GET /health` - 服务健康检查
 
-### 充电请求
+### 充电请求（单次模拟核心接口）
 - `POST /api/request/create` - 提交充电请求
 - `GET /api/request/status/<request_id>` - 查询请求状态
+- `POST /api/request/cancel_queue` - 取消排队
+- `POST /api/request/confirm_arrival` - 确认到场
+- `POST /api/request/interrupt_charge` - 中断充电
+- `POST /api/request/confirm_leave` - 确认挪车
+- `GET /api/request/result/<request_id>` - 获取详单与账单
+- `POST /api/request/pay` - 支付确认
+
+**说明**：以上 8 个接口已实现框架和基础逻辑，但尚未接入调度模块（预计等待时间等使用临时模拟值）。
+
+### 批量模拟（待实现）
+- `POST /api/admin/simulate/batch` - 批量模拟入口
+
+### 管理端（待实现）
+- `GET /api/admin/overview` - 查看全场状态
+- `GET/PUT /api/admin/station/<id>` - 充电桩管理
+- `GET/PUT /api/admin/scheduler/config` - 调度策略配置
+- `GET/PUT /api/admin/billing/config` - 计费规则配置
 
 ## 配置说明
 

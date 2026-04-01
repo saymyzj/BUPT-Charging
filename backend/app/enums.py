@@ -40,6 +40,7 @@ class BillingMode(Enum):
     """计费模式枚举"""
     ENERGY = "ENERGY"                      # 按电量计费
     TIME = "TIME"                          # 按时间计费
+    MIXED = "MIXED"                        # 混合计费（当前保留字段，暂不完整实现）
 
 
 class PaymentStatus(Enum):
