@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当前任务 - 智能充电桩调度计费系统</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#faf8f5;--card:#ffffff;--primary:#2d6a4f;--secondary:#c45d3e;
+  --accent:#d4a853;--text:#2c2c2c;--text2:#7a7a7a;
+  --shadow:0 4px 12px rgba(120,80,40,0.08);--radius:10px;
+  --nav-bg:#f5f0e8;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+h1,h2,h3,h4,h5,h6{font-family:Georgia,serif;}
+
+/* Top Nav */
+.top-nav{background:var(--nav-bg);border-bottom:3px solid var(--accent);display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px;position:sticky;top:0;z-index:100;}
+.nav-brand{font-family:Georgia,serif;font-weight:bold;font-size:18px;color:var(--primary);white-space:nowrap;}
+.nav-center{display:flex;gap:4px;}
+.nav-tab{padding:8px 22px;border-radius:8px;cursor:pointer;font-size:15px;color:var(--text2);transition:all .2s;text-decoration:none;border:none;background:none;}
+.nav-tab:hover{color:var(--text);background:rgba(45,106,79,.06);}
+.nav-tab.active{color:var(--primary);font-weight:600;background:rgba(45,106,79,.1);}
+.nav-right{display:flex;align-items:center;gap:18px;font-size:14px;color:var(--text2);}
+.nav-right span{cursor:pointer;transition:color .2s;}.nav-right span:hover{color:var(--text);}
+.nav-right .logout{color:var(--secondary);}
+#liveClock{font-variant-numeric:tabular-nums;font-weight:500;color:var(--text);}
+
+/* Page Layout */
+.page-wrap{max-width:960px;margin:0 auto;padding:24px 32px 60px;}
+
+/* Request Info Strip */
+.req-strip{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 24px;display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap;}
+.req-strip .req-id{font-family:Georgia,serif;font-weight:700;font-size:15px;}
+.req-badge{padding:4px 14px;border-radius:14px;font-size:13px;font-weight:600;}
+.req-badge.fast{background:rgba(212,168,83,.15);color:#b8922e;}
+.req-badge.pile{background:rgba(45,106,79,.1);color:var(--primary);}
+.req-badge.status{background:var(--primary);color:#fff;}
+.req-strip .sep{color:#ddd;font-size:18px;}
+
+/* Main Card */
+.main-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:48px 40px;min-height:480px;position:relative;overflow:hidden;}
+
+/* State contents */
+.state-content{display:none;animation:cardFade .35s ease;}
+.state-content.active{display:block;}
+@keyframes cardFade{from{opacity:0;transform:scale(0.97);}to{opacity:1;transform:scale(1);}}
+
+/* State 1: Queue */
+.queue-pos{text-align:center;margin:20px 0 10px;}
+.queue-pos .num{font-family:Georgia,serif;font-size:120px;font-weight:700;color:var(--primary);line-height:1;animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.7;}}
+.queue-pos .label{font-size:20px;color:var(--text2);margin-top:8px;}
+.queue-wait{text-align:center;font-size:22px;color:var(--text);margin:20px 0;}
+.queue-wait .countdown{font-family:Georgia,serif;font-weight:700;color:var(--accent);}
+.queue-timeline{text-align:center;font-size:15px;color:var(--text2);margin:12px 0;}
+.queue-pile{text-align:center;font-size:15px;color:var(--text2);margin:12px 0 30px;}
+.queue-pile strong{color:var(--primary);}
+
+/* State 2: Call Confirm */
+.call-countdown{text-align:center;margin:20px 0 16px;}
+.call-countdown .timer{font-family:Georgia,serif;font-size:150px;font-weight:700;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums;}
+.call-msg{text-align:center;font-size:20px;margin:16px 0 8px;color:var(--text);}
+.call-msg strong{color:var(--primary);}
+.call-warning{text-align:center;font-size:14px;color:var(--secondary);margin-bottom:30px;}
+
+/* State 3: Charging */
+.ring-wrap{display:flex;justify-content:center;margin:10px 0 30px;}
+.progress-ring{width:250px;height:250px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative;background:conic-gradient(var(--primary) 0deg,#e8e3da 0deg);transition:background 1.5s ease;}
+.progress-ring::before{content:'';position:absolute;width:210px;height:210px;border-radius:50%;background:var(--card);}
+.ring-text{position:relative;z-index:1;text-align:center;}
+.ring-pct{font-family:Georgia,serif;font-size:52px;font-weight:700;color:var(--primary);line-height:1;}
+.ring-kwh{font-size:16px;color:var(--text2);margin-top:6px;}
+.charge-stats{display:flex;justify-content:center;gap:32px;margin:0 0 24px;flex-wrap:wrap;}
+.charge-stat{text-align:center;}
+.charge-stat .val{font-family:Georgia,serif;font-size:20px;font-weight:700;color:var(--text);}
+.charge-stat .lbl{font-size:13px;color:var(--text2);margin-top:4px;}
+.charge-pile-info{text-align:center;font-size:15px;color:var(--text2);margin-bottom:24px;}
+.charge-pile-info strong{color:var(--text);}
+
+/* State 4: Complete */
+.done-banner{text-align:center;font-size:26px;font-family:Georgia,serif;font-weight:700;color:var(--primary);margin-bottom:28px;padding:16px;background:rgba(45,106,79,.06);border-radius:var(--radius);}
+.receipt-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;animation:slideUp .4s ease;}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+.receipt-section h4{font-size:16px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #ebe6de;}
+.receipt-table{width:100%;border-collapse:collapse;}
+.receipt-table td{padding:8px 12px;font-size:14px;border-bottom:1px solid #f0ece4;}
+.receipt-table td:first-child{color:var(--text2);width:40%;}
+.receipt-table td:last-child{font-weight:500;text-align:right;}
+.receipt-table tr.total td{font-weight:700;font-size:15px;color:var(--text);border-top:2px solid #ebe6de;border-bottom:none;}
+.receipt-table .pending{color:var(--accent);font-weight:600;}
+
+/* Buttons */
+.btn-row{display:flex;justify-content:center;gap:16px;margin-top:28px;flex-wrap:wrap;}
+.btn{padding:14px 36px;border:none;border-radius:var(--radius);font-size:16px;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-primary{background:var(--primary);color:#fff;}.btn-primary:hover{background:#245a42;}
+.btn-secondary{background:var(--secondary);color:#fff;}.btn-secondary:hover{background:#a84e33;}
+.btn-outline{background:transparent;border:2px solid var(--accent);color:var(--accent);}.btn-outline:hover{background:rgba(212,168,83,.08);}
+.btn-sm{padding:10px 24px;font-size:14px;}
+.btn-lg{padding:16px 48px;font-size:18px;}
+
+/* State Selector */
+.state-selector{display:flex;justify-content:center;gap:8px;margin-top:32px;}
+.state-btn{padding:10px 22px;border-radius:20px;border:1.5px solid #ddd;background:var(--card);cursor:pointer;font-size:14px;color:var(--text2);transition:all .2s;display:flex;align-items:center;gap:6px;}
+.state-btn:hover{border-color:var(--accent);color:var(--text);}
+.state-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:200;animation:modalBgIn .2s;}
+.modal-overlay.show{display:flex;}
+@keyframes modalBgIn{from{opacity:0;}to{opacity:1;}}
+.modal-box{background:var(--card);border-radius:var(--radius);box-shadow:0 12px 40px rgba(0,0,0,.15);padding:32px 36px;max-width:420px;width:90%;text-align:center;animation:modalIn .25s ease;}
+@keyframes modalIn{from{opacity:0;transform:scale(.92);}to{opacity:1;transform:scale(1);}}
+.modal-box h3{font-size:20px;margin-bottom:12px;}
+.modal-box p{color:var(--text2);font-size:15px;margin-bottom:24px;line-height:1.6;}
+.modal-btns{display:flex;gap:12px;justify-content:center;}
+</style>
+</head>
+<body>
+
+<!-- Top Nav -->
+<nav class="top-nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统</div>
+  <div class="nav-center">
+    <a class="nav-tab" href="workspace-c.html">工作台</a>
+    <a class="nav-tab active" href="task-c.html">当前任务</a>
+    <a class="nav-tab" href="#">账户中心</a>
+  </div>
+  <div class="nav-right">
+    <span>🔔 通知(3)</span>
+    <span>用户: 张三</span>
+    <span class="logout">退出</span>
+    <span id="liveClock">--:--:--</span>
+  </div>
+</nav>
+
+<!-- Page -->
+<div class="page-wrap">
+  <!-- Request Strip -->
+  <div class="req-strip">
+    <span class="req-id">REQ-2026040115</span>
+    <span class="sep">|</span>
+    <span class="req-badge fast">快充 30kWh</span>
+    <span class="sep">|</span>
+    <span class="req-badge pile">FAST_01</span>
+    <span class="sep">|</span>
+    <span class="req-badge status" id="stripStatus">充电中</span>
+  </div>
+
+  <!-- Main Card -->
+  <div class="main-card">
+
+    <!-- State 1: 排队等待中 -->
+    <div class="state-content" id="state1">
+      <div class="queue-pos">
+        <div class="num">第 2 位</div>
+        <div class="label">当前排队位置</div>
+      </div>
+      <div class="queue-wait">预计等待 <span class="countdown" id="queueCountdown">8:12</span></div>
+      <div class="queue-timeline">预计开始 14:40 → 预计完成 15:25</div>
+      <div class="queue-pile">预分配充电桩: <strong>FAST_01</strong></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="showModal('cancel')">取消排队</button>
+      </div>
+    </div>
+
+    <!-- State 2: 叫号确认 -->
+    <div class="state-content" id="state2">
+      <div class="call-countdown">
+        <div class="timer" id="callTimer">2:38</div>
+      </div>
+      <div class="call-msg">您已被叫号！请尽快前往 <strong>FAST_01</strong></div>
+      <div class="call-warning">⚠️ 超时未确认将记为未到场</div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-lg" onclick="alert('已确认到场，开始充电！')">确认到场</button>
+        <button class="btn btn-secondary btn-sm" onclick="showModal('cancel')">取消排队</button>
+      </div>
+    </div>
+
+    <!-- State 3: 充电中 (DEFAULT) -->
+    <div class="state-content active" id="state3">
+      <div class="ring-wrap">
+        <div class="progress-ring" id="progressRing">
+          <div class="ring-text">
+            <div class="ring-pct" id="ringPct">0%</div>
+            <div class="ring-kwh">23.4 / 30 kWh</div>
+          </div>
+        </div>
+      </div>
+      <div class="charge-stats">
+        <div class="charge-stat"><div class="val" id="chargeTime">28分15秒</div><div class="lbl">已充时间</div></div>
+        <div class="charge-stat"><div class="val">~8分钟</div><div class="lbl">剩余时间</div></div>
+        <div class="charge-stat"><div class="val">¥35.10</div><div class="lbl">实时费用</div></div>
+        <div class="charge-stat"><div class="val">30kW</div><div class="lbl">输出功率</div></div>
+      </div>
+      <div class="charge-pile-info"><strong>FAST_01</strong> · 快充 · 30kW</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="showModal('interrupt')">中断充电</button>
+      </div>
+    </div>
+
+    <!-- State 4: 完成结算 -->
+    <div class="state-content" id="state4">
+      <div class="done-banner">✅ 充电已完成！</div>
+      <div class="receipt-grid">
+        <div class="receipt-section">
+          <h4>充电详单</h4>
+          <table class="receipt-table">
+            <tr><td>请求编号</td><td>REQ-2026040115</td></tr>
+            <tr><td>充电模式</td><td>快充</td></tr>
+            <tr><td>需求电量</td><td>30 kWh</td></tr>
+            <tr><td>实际电量</td><td>28.5 kWh</td></tr>
+            <tr><td>请求时间</td><td>2026-04-01 14:00:00</td></tr>
+            <tr><td>叫号时间</td><td>2026-04-01 14:32:00</td></tr>
+            <tr><td>开始充电</td><td>2026-04-01 14:35:00</td></tr>
+            <tr><td>结束充电</td><td>2026-04-01 15:12:30</td></tr>
+            <tr><td>充电桩</td><td>FAST_01</td></tr>
+            <tr><td>最终状态</td><td>已完成</td></tr>
+          </table>
+        </div>
+        <div class="receipt-section">
+          <h4>费用账单</h4>
+          <table class="receipt-table">
+            <tr><td>计费模式</td><td>按电量</td></tr>
+            <tr><td>计费电量</td><td>28.5 kWh</td></tr>
+            <tr><td>电费</td><td>¥42.75</td></tr>
+            <tr><td>时长费</td><td>¥0.00</td></tr>
+            <tr><td>占位费</td><td>¥0.00</td></tr>
+            <tr class="total"><td>合计</td><td>¥42.75</td></tr>
+            <tr><td>支付状态</td><td class="pending">待支付</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-lg" onclick="alert('支付成功！¥42.75')">立即支付 ¥42.75</button>
+        <button class="btn btn-outline" onclick="alert('已确认离场')">确认离场</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- State Selector -->
+  <div class="state-selector">
+    <button class="state-btn" data-state="1" onclick="switchState(1)">🕐 排队等待</button>
+    <button class="state-btn" data-state="2" onclick="switchState(2)">📢 叫号确认</button>
+    <button class="state-btn active" data-state="3" onclick="switchState(3)">⚡ 充电中</button>
+    <button class="state-btn" data-state="4" onclick="switchState(4)">✅ 完成结算</button>
+  </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)hideModal()">
+  <div class="modal-box">
+    <h3 id="modalTitle">确认操作</h3>
+    <p id="modalMsg">确定要执行此操作吗？</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" id="modalConfirm" onclick="hideModal()">确认</button>
+      <button class="btn btn-outline" onclick="hideModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Live clock
+function updateClock(){
+  document.getElementById('liveClock').textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+}
+updateClock();setInterval(updateClock,1000);
+
+// State switching
+const statusLabels={1:'排队等待中',2:'叫号确认',3:'充电中',4:'已完成'};
+let currentState=3;
+
+function switchState(n){
+  currentState=n;
+  document.querySelectorAll('.state-content').forEach(el=>el.classList.remove('active'));
+  document.getElementById('state'+n).classList.add('active');
+  document.querySelectorAll('.state-btn').forEach(b=>{
+    b.classList.toggle('active',parseInt(b.dataset.state)===n);
+  });
+  document.getElementById('stripStatus').textContent=statusLabels[n];
+  if(n===3)animateRing();
+}
+
+// Progress ring animation
+function animateRing(){
+  const ring=document.getElementById('progressRing');
+  const pctEl=document.getElementById('ringPct');
+  const target=78;
+  let current=0;
+  const duration=1500;
+  const start=performance.now();
+  function tick(now){
+    const elapsed=now-start;
+    const progress=Math.min(elapsed/duration,1);
+    const eased=1-Math.pow(1-progress,3);
+    current=Math.round(target*eased);
+    const deg=Math.round((current/100)*360);
+    ring.style.background=`conic-gradient(var(--primary) ${deg}deg, #e8e3da ${deg}deg)`;
+    pctEl.textContent=current+'%';
+    if(progress<1)requestAnimationFrame(tick);
+  }
+  ring.style.background='conic-gradient(var(--primary) 0deg, #e8e3da 0deg)';
+  pctEl.textContent='0%';
+  requestAnimationFrame(tick);
+}
+setTimeout(animateRing,300);
+
+// Call timer countdown (State 2)
+let callSeconds=158;// 2:38
+function tickCallTimer(){
+  if(callSeconds<=0)return;
+  callSeconds--;
+  const m=Math.floor(callSeconds/60);
+  const s=callSeconds%60;
+  document.getElementById('callTimer').textContent=m+':'+(s<10?'0':'')+s;
+}
+setInterval(tickCallTimer,1000);
+
+// Queue countdown (State 1)
+let queueSeconds=492;// 8:12
+function tickQueueCountdown(){
+  if(queueSeconds<=0)return;
+  queueSeconds--;
+  const m=Math.floor(queueSeconds/60);
+  const s=queueSeconds%60;
+  document.getElementById('queueCountdown').textContent=m+':'+(s<10?'0':'')+s;
+}
+setInterval(tickQueueCountdown,1000);
+
+// Modal
+function showModal(type){
+  const overlay=document.getElementById('modalOverlay');
+  const title=document.getElementById('modalTitle');
+  const msg=document.getElementById('modalMsg');
+  const confirm=document.getElementById('modalConfirm');
+  if(type==='cancel'){
+    title.textContent='确认取消排队';
+    msg.textContent='取消后您将失去当前排队位置，需要重新提交充电请求。确定要取消吗？';
+    confirm.textContent='确认取消';
+    confirm.onclick=()=>{hideModal();alert('已取消排队');};
+  }else if(type==='interrupt'){
+    title.textContent='确认中断充电';
+    msg.textContent='中断后将按已充电量计费结算。当前已充 23.4 kWh，预计费用 ¥35.10。确定要中断吗？';
+    confirm.textContent='确认中断';
+    confirm.onclick=()=>{hideModal();switchState(4);};
+  }
+  overlay.classList.add('show');
+}
+function hideModal(){
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+</script>
+</body>
+</html>

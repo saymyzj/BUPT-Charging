@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>记录中心 · 时间线 - 智能充电桩调度计费系统 · 管理端</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#faf8f5;--card:#ffffff;--primary:#2d6a4f;--secondary:#c45d3e;
+  --accent:#d4a853;--text:#2c2c2c;--text2:#7a7a7a;--shadow:0 4px 12px rgba(120,80,40,0.08);
+  --nav-bg:#f5f0e8;--radius:10px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+h1,h2,h3,h4,h5{font-family:Georgia,serif}
+
+/* NAV */
+.topnav{background:var(--nav-bg);border-bottom:3px solid var(--accent);display:flex;align-items:center;padding:0 28px;height:56px;position:sticky;top:0;z-index:100}
+.topnav .brand{font-family:Georgia,serif;font-size:16px;font-weight:700;color:var(--primary);white-space:nowrap}
+.topnav .tabs{display:flex;gap:4px;margin:0 auto}
+.topnav .tabs a{padding:8px 18px;border-radius:6px;text-decoration:none;color:var(--text2);font-size:14px;transition:all .2s}
+.topnav .tabs a:hover{background:rgba(45,106,79,.08);color:var(--primary)}
+.topnav .tabs a.active{background:var(--primary);color:#fff;font-weight:600}
+.topnav .right{display:flex;align-items:center;gap:18px;font-size:14px;color:var(--text2);white-space:nowrap}
+.topnav .alert-badge .dot{background:var(--secondary);color:#fff;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:2px}
+
+/* STATS STRIP */
+.stats-strip{background:var(--nav-bg);padding:14px 28px;display:flex;gap:24px;align-items:center;border-bottom:1px solid rgba(212,168,83,.2)}
+.stat-item{display:flex;align-items:baseline;gap:6px;font-size:14px;color:var(--text2)}
+.stat-item .val{font-size:20px;font-weight:700;color:var(--text);font-family:Georgia,serif}
+.stat-item .val.teal{color:var(--primary)}
+.stat-item .val.terr{color:var(--secondary)}
+.stat-item .val.gold{color:var(--accent)}
+
+/* FILTER BAR */
+.filter-bar{padding:14px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.toggle-group{display:flex;gap:0}
+.toggle-group .tog{padding:7px 16px;font-size:13px;border:1px solid #ddd;background:#fff;cursor:pointer;transition:all .2s;color:var(--text2)}
+.toggle-group .tog:first-child{border-radius:6px 0 0 6px}
+.toggle-group .tog:last-child{border-radius:0 6px 6px 0}
+.toggle-group .tog.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.toggle-group .tog:hover:not(.active){background:rgba(45,106,79,.06)}
+.filter-select{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;color:var(--text);cursor:pointer}
+.search-input{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:180px;outline:none;transition:border .2s}
+.search-input:focus{border-color:var(--primary)}
+.btn-export{padding:7px 18px;border:2px solid var(--primary);border-radius:6px;background:transparent;color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-export:hover{background:var(--primary);color:#fff}
+.filter-spacer{flex:1}
+
+/* MAIN LAYOUT */
+.main-layout{display:flex;flex:1;padding:0 28px 20px;gap:20px;min-height:0}
+
+/* TIMELINE */
+.timeline-area{flex:1;overflow-y:auto;padding:16px 0}
+.hour-group{margin-bottom:24px}
+.hour-label{font-family:Georgia,serif;font-size:13px;color:var(--accent);font-weight:700;padding:4px 0 8px 36px;letter-spacing:1px}
+.tl-entry{display:flex;gap:0;position:relative;min-height:40px}
+.tl-line{width:36px;display:flex;flex-direction:column;align-items:center;position:relative}
+.tl-line::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent);transform:translateX(-50%)}
+.tl-dot{width:12px;height:12px;border-radius:50%;z-index:2;margin-top:14px;transition:transform .2s;flex-shrink:0}
+.tl-dot:hover{transform:scale(1.4)}
+.tl-dot.schedule{background:var(--primary)}
+.tl-dot.charge{background:var(--primary)}
+.tl-dot.request-dot{background:#1b4332}
+.tl-dot.fault{background:var(--secondary)}
+.tl-dot.cancel{background:var(--secondary)}
+.tl-dot.noshow{background:var(--secondary)}
+.tl-dot.interrupt{background:var(--secondary)}
+.tl-dot.confirm{background:var(--accent)}
+.tl-dot.session{background:var(--accent)}
+.tl-dot.billing{background:var(--accent)}
+.tl-dot.payment{background:var(--primary)}
+.tl-dot.req-gold{background:var(--accent);width:16px;height:16px;margin-top:12px}
+.tl-content{flex:1;padding:6px 0 6px 12px}
+
+/* EVENT COMPACT */
+.evt-compact{display:flex;align-items:center;gap:10px;padding:6px 12px;font-size:13px;border-radius:6px;transition:background .2s}
+.evt-compact:hover{background:rgba(45,106,79,.04)}
+.evt-time{color:var(--text2);font-family:monospace;font-size:12px;min-width:64px}
+.evt-type{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;min-width:70px;text-align:center}
+.evt-type.schedule{background:rgba(45,106,79,.1);color:var(--primary)}
+.evt-type.charge{background:rgba(45,106,79,.1);color:var(--primary)}
+.evt-type.request{background:rgba(45,106,79,.15);color:#1b4332}
+.evt-type.fault{background:rgba(196,93,62,.1);color:var(--secondary)}
+.evt-type.cancel{background:rgba(196,93,62,.1);color:var(--secondary)}
+.evt-type.noshow{background:rgba(196,93,62,.1);color:var(--secondary)}
+.evt-type.interrupt{background:rgba(196,93,62,.1);color:var(--secondary)}
+.evt-type.confirm{background:rgba(212,168,83,.15);color:#a07d2e}
+.evt-type.session{background:rgba(212,168,83,.15);color:#a07d2e}
+.evt-type.billing{background:rgba(212,168,83,.15);color:#a07d2e}
+.evt-type.payment{background:rgba(45,106,79,.1);color:var(--primary)}
+.evt-desc{color:var(--text)}
+
+/* REQUEST CARD */
+.req-card-tl{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;cursor:pointer;transition:all .25s}
+.req-card-tl:hover{box-shadow:0 6px 18px rgba(120,80,40,.12);transform:translateY(-1px)}
+.req-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.req-id{font-weight:700;font-size:14px;color:var(--primary)}
+.user-badge{font-size:12px;color:var(--text2)}
+.mode-badge{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600}
+.mode-badge.fast{background:rgba(45,106,79,.1);color:var(--primary)}
+.mode-badge.slow{background:rgba(212,168,83,.15);color:#a07d2e}
+.status-badge{font-size:11px;padding:3px 10px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.status-badge.waiting{background:#eee;color:#888}
+.status-badge.called{background:rgba(212,168,83,.15);color:#a07d2e}
+.status-badge.charging{background:rgba(45,106,79,.1);color:var(--primary)}
+.status-badge.charging .dot-anim{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:pulse 1.2s infinite}
+.status-badge.wait-leave{background:rgba(212,168,83,.15);color:#a07d2e}
+.status-badge.done{background:rgba(45,106,79,.1);color:var(--primary)}
+.status-badge.paid{background:rgba(45,106,79,.12);color:var(--primary)}
+.status-badge.cancelled{background:rgba(196,93,62,.1);color:var(--secondary)}
+.status-badge.interrupted{background:rgba(196,93,62,.1);color:var(--secondary)}
+.status-badge.noshow{background:rgba(196,93,62,.1);color:var(--secondary)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.req-energy{font-size:13px;color:var(--text)}
+.req-fee{font-size:14px;font-weight:700;color:var(--text);margin-left:auto}
+.req-time-label{font-size:12px;color:var(--text2)}
+.req-expand-btn{font-size:12px;color:var(--primary);cursor:pointer;margin-left:auto;text-decoration:underline;user-select:none}
+
+/* ACCORDION DETAIL */
+.req-detail-accordion{max-height:0;overflow:hidden;transition:max-height .4s ease}
+.req-detail-accordion.open{max-height:500px}
+.req-detail-inner{padding:14px 0 0;border-top:1px solid #f0ebe3;margin-top:12px}
+.detail-table{width:100%;border-collapse:collapse}
+.detail-table td{padding:8px 0;font-size:13px;border-bottom:1px solid #f8f4ee}
+.detail-table td:first-child{color:var(--text2);width:100px;font-weight:500}
+.detail-table tr:last-child td{border-bottom:none}
+.bill-total{font-weight:700;color:var(--primary);font-size:15px}
+
+/* SIDEBAR */
+.sidebar{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;padding:16px 0}
+.sidebar-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+.sidebar-card h4{font-size:13px;color:var(--primary);margin-bottom:10px}
+.sidebar-stat{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;font-size:13px;color:var(--text2);border-bottom:1px solid #f8f4ee}
+.sidebar-stat:last-child{border-bottom:none}
+.sidebar-stat .sval{font-weight:700;font-family:Georgia,serif;font-size:16px;color:var(--text)}
+.sidebar-stat .sval.teal{color:var(--primary)}
+.sidebar-stat .sval.terr{color:var(--secondary)}
+.sidebar-stat .sval.gold{color:var(--accent)}
+
+/* STACKED BAR */
+.stacked-bar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin-bottom:8px}
+.bar-seg{transition:width .6s ease}
+.bar-labels{display:flex;flex-wrap:wrap;gap:8px;font-size:11px}
+.bar-label{display:flex;align-items:center;gap:4px}
+.bar-label .swatch{width:10px;height:10px;border-radius:2px}
+
+/* MODE BARS */
+.mode-bar-wrap{margin-top:6px}
+.mode-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px}
+.mode-row .label{min-width:36px;color:var(--text2)}
+.mode-row .bar-outer{flex:1;height:14px;background:#f0ebe3;border-radius:4px;overflow:hidden}
+.mode-row .bar-fill{height:100%;border-radius:4px;transition:width .8s ease}
+.mode-row .count{min-width:36px;text-align:right;color:var(--text);font-weight:600}
+
+.btn-export-full{width:100%;padding:10px;border:2px solid var(--primary);border-radius:var(--radius);background:transparent;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-export-full:hover{background:var(--primary);color:#fff}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#ccc}
+
+/* ANIMATIONS */
+.fade-in{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.stagger{opacity:0;animation:fadeIn .35s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="brand">&#9889; 智能充电桩调度计费系统 &middot; 管理端</div>
+  <div class="tabs">
+    <a href="#">运营总览</a>
+    <a href="#" class="active">记录中心</a>
+    <a href="#">系统配置</a>
+    <a href="#">统计分析</a>
+    <a href="#">用户管理</a>
+  </div>
+  <div class="right">
+    <span class="alert-badge">&#128276; 告警<span class="dot">2</span></span>
+    <span>管理员: 张三</span>
+    <span id="liveClock">--:--:--</span>
+  </div>
+</nav>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-item">今日请求 <span class="val">31</span>笔</div>
+  <div class="stat-item">完成 <span class="val teal">23</span>笔(74.2%)</div>
+  <div class="stat-item">异常 <span class="val terr">8</span>笔(25.8%)</div>
+  <div class="stat-item">收入 <span class="val gold">&yen;1,247.50</span></div>
+  <div class="stat-item">平均处理 <span class="val">45</span>分<span class="val">18</span>秒</div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="toggle-group" id="typeFilter">
+    <div class="tog active" data-v="all">全部</div>
+    <div class="tog" data-v="req">仅请求</div>
+    <div class="tog" data-v="evt">仅事件</div>
+  </div>
+  <select class="filter-select" id="timeRange">
+    <option value="today">今天</option>
+    <option value="7d">近7天</option>
+    <option value="30d">近30天</option>
+    <option value="custom">自定义</option>
+  </select>
+  <select class="filter-select" id="modeFilter">
+    <option value="all">模式: 全部</option>
+    <option value="fast">快充</option>
+    <option value="slow">慢充</option>
+  </select>
+  <select class="filter-select" id="statusFilter">
+    <option value="all">状态: 全部</option>
+    <option value="ongoing">进行中</option>
+    <option value="done">已完成</option>
+    <option value="error">异常</option>
+  </select>
+  <div class="filter-spacer"></div>
+  <input class="search-input" placeholder="搜索编号/用户..." id="searchInput">
+  <button class="btn-export">导出记录</button>
+</div>
+
+<!-- MAIN -->
+<div class="main-layout">
+  <!-- TIMELINE -->
+  <div class="timeline-area" id="timelineArea"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-card">
+      <h4>快速统计</h4>
+      <div class="sidebar-stat">今日请求<span class="sval" data-count="31">0</span></div>
+      <div class="sidebar-stat">完成<span class="sval teal" data-count="23">0</span></div>
+      <div class="sidebar-stat">异常<span class="sval terr" data-count="8">0</span></div>
+      <div class="sidebar-stat">收入<span class="sval gold" data-prefix="¥" data-count="1247.5" data-dec="2">¥0</span></div>
+    </div>
+    <div class="sidebar-card">
+      <h4>状态分布</h4>
+      <div class="stacked-bar">
+        <div class="bar-seg" style="width:26.7%;background:var(--primary)" title="已支付 4"></div>
+        <div class="bar-seg" style="width:13.3%;background:#3d8b6a" title="已完成 2"></div>
+        <div class="bar-seg" style="width:33.3%;background:var(--accent)" title="进行中 5"></div>
+        <div class="bar-seg" style="width:26.7%;background:var(--secondary)" title="异常 4"></div>
+      </div>
+      <div class="bar-labels">
+        <span class="bar-label"><span class="swatch" style="background:var(--primary)"></span>已支付(4)</span>
+        <span class="bar-label"><span class="swatch" style="background:#3d8b6a"></span>已完成(2)</span>
+        <span class="bar-label"><span class="swatch" style="background:var(--accent)"></span>进行中(5)</span>
+        <span class="bar-label"><span class="swatch" style="background:var(--secondary)"></span>异常(4)</span>
+      </div>
+    </div>
+    <div class="sidebar-card">
+      <h4>模式分布</h4>
+      <div class="mode-bar-wrap">
+        <div class="mode-row">
+          <span class="label">快充</span>
+          <div class="bar-outer"><div class="bar-fill" style="width:53%;background:var(--primary)"></div></div>
+          <span class="count">8笔</span>
+        </div>
+        <div class="mode-row">
+          <span class="label">慢充</span>
+          <div class="bar-outer"><div class="bar-fill" style="width:47%;background:var(--accent)"></div></div>
+          <span class="count">7笔</span>
+        </div>
+      </div>
+    </div>
+    <button class="btn-export-full">导出记录</button>
+  </div>
+</div>
+
+<script>
+// DATA
+const requests = [
+  {id:'REQ-0031',user:'user_012',mode:'快充',need:25,actual:null,time:'14:15',status:'等待中',pile:'-',fee:null,sortTime:'14:15:00'},
+  {id:'REQ-0030',user:'user_009',mode:'快充',need:30,actual:null,time:'14:08',status:'等待中',pile:'-',fee:null,sortTime:'14:08:00'},
+  {id:'REQ-0029',user:'user_005',mode:'快充',need:25,actual:null,time:'13:55',status:'已叫号',pile:'FAST_01',fee:null,sortTime:'13:55:00'},
+  {id:'REQ-0028',user:'user_003',mode:'快充',need:30,actual:23.4,time:'13:20',status:'充电中',pile:'FAST_01',fee:35.10,sortTime:'13:20:00'},
+  {id:'REQ-0027',user:'user_007',mode:'快充',need:30,actual:30,time:'12:45',status:'等待离场',pile:'FAST_02',fee:45.00,sortTime:'12:45:00'},
+  {id:'REQ-0026',user:'user_001',mode:'慢充',need:15,actual:6.75,time:'12:30',status:'充电中',pile:'SLOW_01',fee:10.13,sortTime:'12:30:00'},
+  {id:'REQ-0025',user:'user_006',mode:'慢充',need:20,actual:20,time:'11:00',status:'已完成',pile:'SLOW_02',fee:30.00,sortTime:'11:00:00'},
+  {id:'REQ-0024',user:'user_004',mode:'快充',need:25,actual:25,time:'10:30',status:'已完成',pile:'FAST_01',fee:37.50,sortTime:'10:30:00'},
+  {id:'REQ-0023',user:'user_002',mode:'慢充',need:10,actual:10,time:'10:00',status:'已支付',pile:'SLOW_01',fee:15.00,sortTime:'10:00:00'},
+  {id:'REQ-0022',user:'user_011',mode:'慢充',need:15,actual:null,time:'09:45',status:'已取消',pile:'-',fee:null,sortTime:'09:45:00'},
+  {id:'REQ-0021',user:'user_008',mode:'快充',need:30,actual:18.5,time:'09:30',status:'已中断',pile:'FAST_02',fee:27.75,sortTime:'09:30:00'},
+  {id:'REQ-0020',user:'user_010',mode:'慢充',need:20,actual:null,time:'09:15',status:'未到场',pile:'SLOW_03',fee:null,sortTime:'09:15:00'},
+  {id:'REQ-0019',user:'user_014',mode:'快充',need:25,actual:25,time:'08:45',status:'已支付',pile:'FAST_01',fee:37.50,sortTime:'08:45:00'},
+  {id:'REQ-0018',user:'user_015',mode:'慢充',need:12,actual:12,time:'08:20',status:'已支付',pile:'SLOW_02',fee:18.00,sortTime:'08:20:00'},
+  {id:'REQ-0017',user:'user_016',mode:'快充',need:20,actual:20,time:'08:00',status:'已支付',pile:'FAST_02',fee:30.00,sortTime:'08:00:00'}
+];
+
+const events = [
+  {time:'14:23:15',type:'SCHEDULE',desc:'叫号 user_005 → FAST_01'},
+  {time:'14:21:08',type:'CHARGE',desc:'FAST_01 充电完成 user_003 28.5kWh'},
+  {time:'14:18:45',type:'FAULT',desc:'SLOW_03 故障 通信超时'},
+  {time:'14:15:22',type:'REQUEST',desc:'新请求 user_012 快充 25kWh'},
+  {time:'14:12:33',type:'SESSION',desc:'FAST_02 user_007 等待离场'},
+  {time:'14:10:18',type:'SCHEDULE',desc:'分配 user_007 → FAST_02'},
+  {time:'14:08:05',type:'REQUEST',desc:'新请求 user_009 快充 30kWh'},
+  {time:'14:05:42',type:'CHARGE',desc:'SLOW_02 充电完成 user_006 20kWh'},
+  {time:'14:03:15',type:'CONFIRM',desc:'user_004 确认到场'},
+  {time:'14:01:08',type:'SCHEDULE',desc:'叫号 user_004 → FAST_01'},
+  {time:'13:58:22',type:'REQUEST',desc:'新请求 user_011 慢充 15kWh'},
+  {time:'13:55:30',type:'SESSION',desc:'SLOW_02 开始充电 user_006'},
+  {time:'13:52:18',type:'CANCEL',desc:'user_006_b 取消排队'},
+  {time:'13:50:05',type:'REQUEST',desc:'新请求 user_008 慢充 15kWh'},
+  {time:'13:45:20',type:'BILLING',desc:'生成账单 REQ-0023 ¥15.00'},
+  {time:'13:42:15',type:'PAYMENT',desc:'user_002 支付 REQ-0023'},
+  {time:'13:40:00',type:'CHARGE',desc:'SLOW_01 充电完成 user_002 10kWh'},
+  {time:'13:35:30',type:'NO_SHOW',desc:'user_010 叫号超时 未到场'},
+  {time:'13:32:00',type:'SCHEDULE',desc:'叫号 user_010 → SLOW_03'},
+  {time:'13:30:00',type:'INTERRUPT',desc:'user_008_b 中断充电 FAST_02 18.5kWh'}
+];
+
+const detailData={
+  'REQ-0025':{
+    reqTime:'2026-04-01 11:00',callTime:'11:45',confirmTime:'11:46',startTime:'11:48',endTime:'14:40',
+    billMode:'按电量',elecFee:30.00,timeFee:0,occFee:0,total:30.00,payStatus:'已支付'
+  }
+};
+
+function statusClass(s){
+  return {'等待中':'waiting','已叫号':'called','充电中':'charging','等待离场':'wait-leave','已完成':'done','已支付':'paid','已取消':'cancelled','已中断':'interrupted','未到场':'noshow'}[s]||'';
+}
+function statusHTML(s){
+  let cls=statusClass(s),extra='';
+  if(s==='充电中') extra='<span class="dot-anim"></span>';
+  if(s==='已支付') extra='&#10003; ';
+  return `<span class="status-badge ${cls}">${extra}${s}</span>`;
+}
+function evtTypeClass(t){
+  return {SCHEDULE:'schedule',CHARGE:'charge',REQUEST:'request',FAULT:'fault',CANCEL:'cancel',NO_SHOW:'noshow',CONFIRM:'confirm',SESSION:'session',BILLING:'billing',PAYMENT:'payment',INTERRUPT:'interrupt'}[t]||'';
+}
+function evtDotClass(t){
+  return {SCHEDULE:'schedule',CHARGE:'charge',REQUEST:'request-dot',FAULT:'fault',CANCEL:'cancel',NO_SHOW:'noshow',CONFIRM:'confirm',SESSION:'session',BILLING:'billing',PAYMENT:'payment',INTERRUPT:'interrupt'}[t]||'';
+}
+
+// Merge & sort
+function buildTimeline(filter){
+  let items=[];
+  if(filter!=='evt'){
+    requests.forEach(r=>{
+      items.push({kind:'req',sortKey:r.sortTime,data:r});
+    });
+  }
+  if(filter!=='req'){
+    events.forEach(e=>{
+      items.push({kind:'evt',sortKey:e.time,data:e});
+    });
+  }
+  items.sort((a,b)=>b.sortKey.localeCompare(a.sortKey));
+  return items;
+}
+
+function getHourGroup(timeStr){
+  const h=parseInt(timeStr.split(':')[0]);
+  return `${String(h).padStart(2,'0')}:00 — ${String(h+1).padStart(2,'0')}:00`;
+}
+
+function renderTimeline(filter='all'){
+  const area=document.getElementById('timelineArea');
+  const items=buildTimeline(filter);
+  let html='';
+  let currentGroup='';
+  items.forEach((item,i)=>{
+    const t=item.kind==='req'?item.data.sortTime||item.data.time:item.data.time;
+    const group=getHourGroup(t);
+    if(group!==currentGroup){
+      currentGroup=group;
+      html+=`<div class="hour-label stagger" style="animation-delay:${i*0.03}s">${group}</div>`;
+    }
+    if(item.kind==='evt'){
+      const e=item.data;
+      html+=`
+        <div class="tl-entry stagger" style="animation-delay:${i*0.03}s">
+          <div class="tl-line"><div class="tl-dot ${evtDotClass(e.type)}"></div></div>
+          <div class="tl-content">
+            <div class="evt-compact">
+              <span class="evt-time">${e.time}</span>
+              <span class="evt-type ${evtTypeClass(e.type)}">${e.type}</span>
+              <span class="evt-desc">${e.desc}</span>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      const r=item.data;
+      const accId='acc_'+r.id;
+      html+=`
+        <div class="tl-entry stagger" style="animation-delay:${i*0.03}s">
+          <div class="tl-line"><div class="tl-dot req-gold"></div></div>
+          <div class="tl-content">
+            <div class="req-card-tl" onclick="toggleAccordion('${accId}')">
+              <div class="req-top">
+                <span class="req-id">${r.id}</span>
+                <span class="user-badge">${r.user}</span>
+                <span class="mode-badge ${r.mode==='快充'?'fast':'slow'}">${r.mode}</span>
+                <span class="req-energy">${r.actual!==null?r.actual+'kWh':r.need+'kWh'}</span>
+                ${statusHTML(r.status)}
+                <span class="req-time-label">${r.time}</span>
+                <span class="req-fee">${r.fee!==null?'¥'+r.fee.toFixed(2):'-'}</span>
+                <span class="req-expand-btn">展开详情</span>
+              </div>
+              <div class="req-detail-accordion" id="${accId}">
+                <div class="req-detail-inner">
+                  ${renderAccordionDetail(r)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+  });
+  area.innerHTML=html;
+}
+
+function renderAccordionDetail(r){
+  const d=detailData[r.id];
+  let html=`<table class="detail-table">
+    <tr><td>请求编号</td><td>${r.id}</td></tr>
+    <tr><td>用户</td><td>${r.user}</td></tr>
+    <tr><td>充电模式</td><td>${r.mode}</td></tr>
+    <tr><td>需求电量</td><td>${r.need}kWh</td></tr>
+    <tr><td>实际电量</td><td>${r.actual!==null?r.actual+'kWh':'-'}</td></tr>
+    <tr><td>请求时间</td><td>${d?d.reqTime:'2026-04-01 '+r.time}</td></tr>`;
+  if(d){
+    html+=`<tr><td>叫号时间</td><td>${d.callTime}</td></tr>
+    <tr><td>确认时间</td><td>${d.confirmTime}</td></tr>
+    <tr><td>开始充电</td><td>${d.startTime}</td></tr>
+    <tr><td>结束时间</td><td>${d.endTime}</td></tr>`;
+  }
+  html+=`<tr><td>充电桩</td><td>${r.pile}</td></tr>
+    <tr><td>状态</td><td>${statusHTML(r.status)}</td></tr>
+  </table>`;
+  if(r.fee!==null){
+    html+=`<table class="detail-table" style="margin-top:10px">
+      <tr><td>计费模式</td><td>${d?d.billMode:'按电量'}</td></tr>
+      <tr><td>电费</td><td>¥${r.fee.toFixed(2)}</td></tr>
+      <tr><td>时长费</td><td>¥${d?d.timeFee.toFixed(2):'0.00'}</td></tr>
+      <tr><td>占位费</td><td>¥${d?d.occFee.toFixed(2):'0.00'}</td></tr>
+      <tr><td>合计</td><td class="bill-total">¥${(d?d.total:r.fee).toFixed(2)}</td></tr>
+      <tr><td>支付状态</td><td>${statusHTML(d?d.payStatus:(r.status==='已支付'?'已支付':'未支付'))}</td></tr>
+    </table>`;
+  }
+  return html;
+}
+
+function toggleAccordion(id){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+
+// FILTER TOGGLES
+document.querySelectorAll('.toggle-group .tog').forEach(t=>{
+  t.addEventListener('click',function(){
+    this.parentElement.querySelectorAll('.tog').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    renderTimeline(this.dataset.v);
+  });
+});
+
+// CLOCK
+function updateClock(){
+  document.getElementById('liveClock').textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// COUNT-UP ANIMATION
+function animateCounters(){
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const target=parseFloat(el.dataset.count);
+    const dec=parseInt(el.dataset.dec)||0;
+    const prefix=el.dataset.prefix||'';
+    let current=0;
+    const step=target/30;
+    const interval=setInterval(()=>{
+      current+=step;
+      if(current>=target){current=target;clearInterval(interval)}
+      el.textContent=prefix+(dec>0?current.toFixed(dec):Math.round(current));
+    },30);
+  });
+}
+
+// INIT
+renderTimeline('all');
+setTimeout(animateCounters,300);
+</script>
+</body>
+</html>

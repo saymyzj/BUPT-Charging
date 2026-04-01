@@ -321,8 +321,8 @@ git push origin <自己的分支名>
 5. docs/功能设计.md
 6. docs/架构设计.md
 7. docs/调度算法.md
-8. front/ui-static-ac/
-9. front/ui-static-ref/
+8. front/ui-static-ac/  （已经通过审查的静态 HTML 参考页）
+9. front/ui-static-ref/ （被归档的但可做参考的静态 HTML 参考页）
 
 我的身份是“成员C”，我的固定职责是：
 
