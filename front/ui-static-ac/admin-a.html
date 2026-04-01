@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理运营总览 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: #faf8f5;
+  color: #2c2c2c;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+h1, h2, h3, h4 { font-family: Georgia, 'Noto Serif SC', serif; font-weight: 700; }
+
+/* NAV */
+.top-nav {
+  background: #f5f0e8;
+  border-bottom: 3px solid #d4a853;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: #2d6a4f; white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 8px 20px;
+  border-radius: 8px 8px 0 0;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #7a7a7a;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: #2d6a4f; }
+.nav-tab.active { background: #ffffff; color: #2d6a4f; font-weight: 600; box-shadow: 0 -2px 0 #2d6a4f inset; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 13px; color: #7a7a7a; }
+.nav-alert { position: relative; cursor: pointer; padding: 4px 10px; background: rgba(196,93,62,0.1); border-radius: 6px; color: #c45d3e; font-weight: 600; }
+
+/* MAIN */
+.main-content { padding: 20px 24px; max-width: 1920px; margin: 0 auto; }
+
+/* KPI ROW */
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
+.kpi-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 12px rgba(120,80,40,0.08);
+  border-left: 4px solid #2d6a4f;
+  opacity: 0;
+  animation: fadeInUp 0.5s forwards;
+}
+.kpi-card:nth-child(1) { animation-delay: 0s; }
+.kpi-card:nth-child(2) { animation-delay: 0.08s; border-left-color: #d4a853; }
+.kpi-card:nth-child(3) { animation-delay: 0.16s; border-left-color: #c45d3e; }
+.kpi-card:nth-child(4) { animation-delay: 0.24s; border-left-color: #2d6a4f; }
+.kpi-card:nth-child(5) { animation-delay: 0.32s; border-left-color: #d4a853; }
+.kpi-label { font-size: 12px; color: #7a7a7a; margin-bottom: 6px; }
+.kpi-value { font-family: Georgia, serif; font-size: 26px; font-weight: 700; color: #2c2c2c; }
+.kpi-sub { font-size: 11px; color: #7a7a7a; margin-top: 4px; }
+.kpi-trend-up { color: #2d6a4f; font-weight: 600; }
+.kpi-trend-down { color: #c45d3e; font-weight: 600; }
+
+/* 3-COL LAYOUT */
+.three-col { display: grid; grid-template-columns: 45% 30% 25%; gap: 16px; margin-bottom: 20px; }
+
+/* PILE CARDS */
+.section-title { font-size: 15px; margin-bottom: 12px; color: #2d6a4f; display: flex; align-items: center; gap: 8px; }
+.section-title::before { content: ''; width: 4px; height: 18px; background: #2d6a4f; border-radius: 2px; }
+.pile-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(120,80,40,0.08);
+  margin-bottom: 12px;
+  opacity: 0;
+  animation: fadeInUp 0.5s forwards;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.pile-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(120,80,40,0.12); }
+.pile-card.fault {
+  border: 2px solid #c45d3e;
+  animation: fadeInUp 0.5s forwards, pulseFault 2s infinite;
+}
+.pile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pile-id { font-family: Georgia, serif; font-size: 16px; font-weight: 700; }
+.pile-type { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: #f0ebe3; color: #7a7a7a; }
+.pile-type.fast { background: rgba(45,106,79,0.1); color: #2d6a4f; }
+.pile-status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-charging { background: rgba(45,106,79,0.12); color: #2d6a4f; }
+.status-idle { background: #f0ebe3; color: #7a7a7a; }
+.status-fault { background: rgba(196,93,62,0.12); color: #c45d3e; }
+.status-waiting { background: rgba(212,168,83,0.15); color: #b8922e; }
+.pile-info { font-size: 13px; color: #7a7a7a; line-height: 1.8; }
+.pile-info strong { color: #2c2c2c; }
+.progress-wrap { background: #f0ebe3; border-radius: 6px; height: 8px; margin: 8px 0; overflow: hidden; }
+.progress-bar {
+  height: 100%;
+  border-radius: 6px;
+  background: #2d6a4f;
+  transition: width 1.5s ease;
+  animation: progressPulse 2s infinite;
+}
+.progress-bar.full { background: #d4a853; }
+.pile-actions { margin-top: 10px; display: flex; gap: 8px; }
+.btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.btn-fault { background: #c45d3e; color: #fff; }
+.btn-fault:hover { background: #a94d32; }
+.btn-restore { background: #2d6a4f; color: #fff; }
+.btn-restore:hover { background: #235a40; }
+.btn-outline { background: transparent; border: 1px solid #d4a853; color: #b8922e; }
+.btn-outline:hover { background: rgba(212,168,83,0.1); }
+
+/* QUEUE */
+.queue-section { margin-bottom: 16px; }
+.queue-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.queue-header h4 { font-size: 14px; color: #2d6a4f; }
+.queue-count { font-size: 12px; color: #7a7a7a; background: #f0ebe3; padding: 2px 8px; border-radius: 10px; }
+.queue-item {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  box-shadow: 0 2px 6px rgba(120,80,40,0.06);
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.queue-item:hover { box-shadow: 0 4px 12px rgba(120,80,40,0.1); }
+.queue-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.queue-user { font-weight: 600; color: #2c2c2c; }
+.queue-priority { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(45,106,79,0.1); color: #2d6a4f; }
+.queue-details { color: #7a7a7a; font-size: 11px; }
+.queue-assign { font-size: 11px; color: #d4a853; font-weight: 600; margin-top: 3px; }
+.priority-bar { height: 3px; border-radius: 2px; background: #f0ebe3; margin-top: 6px; overflow: hidden; }
+.priority-fill { height: 100%; border-radius: 2px; background: #2d6a4f; }
+
+/* EVENT LOG */
+.event-log-wrap {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(120,80,40,0.08);
+  padding: 0;
+  max-height: 580px;
+  display: flex;
+  flex-direction: column;
+}
+.event-log-header { padding: 14px 16px; border-bottom: 1px solid #f0ebe3; }
+.event-log-header h3 { font-size: 14px; color: #2d6a4f; }
+.event-log { overflow-y: auto; padding: 8px 12px; flex: 1; }
+.event-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #faf8f5;
+  font-size: 12px;
+  animation: slideIn 0.3s ease;
+}
+.event-time { color: #7a7a7a; font-family: 'Courier New', monospace; font-size: 11px; }
+.event-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin: 0 6px;
+}
+.badge-call { background: rgba(45,106,79,0.1); color: #2d6a4f; }
+.badge-complete { background: rgba(212,168,83,0.15); color: #b8922e; }
+.badge-fault { background: rgba(196,93,62,0.12); color: #c45d3e; }
+.badge-request { background: rgba(45,106,79,0.08); color: #2d6a4f; }
+.badge-remind { background: rgba(212,168,83,0.12); color: #b8922e; }
+.badge-start { background: rgba(45,106,79,0.15); color: #2d6a4f; }
+.badge-confirm { background: rgba(120,80,40,0.08); color: #7a7a7a; }
+.event-desc { color: #2c2c2c; }
+
+/* BOTTOM 2-COL */
+.bottom-row { display: grid; grid-template-columns: 60% 40%; gap: 16px; }
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(120,80,40,0.08);
+}
+
+/* BAR CHART */
+.bar-row { display: flex; align-items: center; margin-bottom: 10px; }
+.bar-label { width: 80px; font-size: 13px; color: #7a7a7a; text-align: right; padding-right: 12px; }
+.bar-track { flex: 1; background: #f0ebe3; border-radius: 6px; height: 22px; overflow: hidden; }
+.bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-size: 11px;
+  color: #fff;
+  font-weight: 600;
+  transition: width 1s ease;
+}
+.bar-fill.c1 { background: #2d6a4f; }
+.bar-fill.c2 { background: #c45d3e; }
+.bar-fill.c3 { background: #d4a853; }
+.bar-fill.c4 { background: #7a7a7a; }
+
+/* SYSTEM METRICS */
+.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.metric-block {
+  text-align: center;
+  padding: 14px;
+  background: #faf8f5;
+  border-radius: 8px;
+}
+.metric-val { font-family: Georgia, serif; font-size: 22px; font-weight: 700; color: #2d6a4f; }
+.metric-label { font-size: 11px; color: #7a7a7a; margin-top: 4px; }
+
+/* QUICK ACTIONS */
+.quick-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: center; }
+.btn-action {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 2px solid #2d6a4f;
+  background: transparent;
+  color: #2d6a4f;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.btn-action:hover { background: #2d6a4f; color: #fff; }
+
+/* ANIMATIONS */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseFault {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196,93,62,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(196,93,62,0); }
+}
+@keyframes progressPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4a853; border-radius: 3px; }
+
+/* DIALOG */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  text-align: center;
+  max-width: 360px;
+}
+.modal-box h3 { margin-bottom: 12px; color: #2c2c2c; }
+.modal-box p { font-size: 14px; color: #7a7a7a; margin-bottom: 20px; }
+.modal-btns { display: flex; gap: 10px; justify-content: center; }
+.modal-btns .btn { padding: 8px 24px; font-size: 13px; }
+.btn-cancel { background: #f0ebe3; color: #7a7a7a; }
+.btn-confirm { background: #2d6a4f; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="top-nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active">运营总览</button>
+    <button class="nav-tab">记录中心</button>
+    <button class="nav-tab">系统配置</button>
+    <button class="nav-tab">统计分析</button>
+    <button class="nav-tab">用户管理</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">🔔 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="clock"></span>
+  </div>
+</nav>
+
+<div class="main-content">
+
+<!-- KPI ROW -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kpi-label">充电桩在线率</div>
+    <div class="kpi-value" data-count="80">0%</div>
+    <div class="kpi-sub">4/5 在线</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">今日完成充电</div>
+    <div class="kpi-value" data-count="23">0笔</div>
+    <div class="kpi-sub">较昨日持平</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">当前等待人数</div>
+    <div class="kpi-value" data-count="7">0人</div>
+    <div class="kpi-sub">快充3 / 慢充4</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">平均等待时间</div>
+    <div class="kpi-value">12分32秒</div>
+    <div class="kpi-sub kpi-trend-down">↓ 较昨日 -2分</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">今日营收</div>
+    <div class="kpi-value">¥1,247.50</div>
+    <div class="kpi-sub kpi-trend-up">↑ 较昨日 +15%</div>
+  </div>
+</div>
+
+<!-- 3-COLUMN MIDDLE -->
+<div class="three-col">
+  <!-- COL1: PILE CARDS -->
+  <div>
+    <div class="section-title">充电桩实时状态</div>
+
+    <div class="pile-card" style="animation-delay:0.1s">
+      <div class="pile-header">
+        <div><span class="pile-id">FAST_01</span> <span class="pile-type fast">快充 30kW</span></div>
+        <span class="pile-status-badge status-charging">充电中</span>
+      </div>
+      <div class="pile-info">用户: <strong>user_003</strong> | 当前费用: <strong>¥35.10</strong></div>
+      <div class="pile-info">电量: 23.4 / 30 kWh (78%) | 预计完成 14:32</div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:78%"></div></div>
+      <div class="pile-actions"><button class="btn btn-fault" onclick="showModal('标记故障','确定将 FAST_01 标记为故障状态？')">标记故障</button></div>
+    </div>
+
+    <div class="pile-card" style="animation-delay:0.2s">
+      <div class="pile-header">
+        <div><span class="pile-id">FAST_02</span> <span class="pile-type fast">快充 30kW</span></div>
+        <span class="pile-status-badge status-waiting">等待离场</span>
+      </div>
+      <div class="pile-info">用户: <strong>user_007</strong> | 费用: ¥45.00 | 占位费: <strong style="color:#c45d3e">¥1.00</strong></div>
+      <div class="pile-info">电量: 30 / 30 kWh (100%) | 超时 <strong style="color:#c45d3e">2分钟</strong></div>
+      <div class="progress-wrap"><div class="progress-bar full" style="width:100%"></div></div>
+      <div class="pile-actions"><button class="btn btn-fault" onclick="showModal('标记故障','确定将 FAST_02 标记为故障状态？')">标记故障</button></div>
+    </div>
+
+    <div class="pile-card" style="animation-delay:0.3s">
+      <div class="pile-header">
+        <div><span class="pile-id">SLOW_01</span> <span class="pile-type">慢充 7kW</span></div>
+        <span class="pile-status-badge status-charging">充电中</span>
+      </div>
+      <div class="pile-info">用户: <strong>user_001</strong> | 当前费用: <strong>¥10.13</strong></div>
+      <div class="pile-info">电量: 6.75 / 15 kWh (45%) | 预计完成 16:20</div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:45%"></div></div>
+      <div class="pile-actions"><button class="btn btn-fault" onclick="showModal('标记故障','确定将 SLOW_01 标记为故障状态？')">标记故障</button></div>
+    </div>
+
+    <div class="pile-card" style="animation-delay:0.4s">
+      <div class="pile-header">
+        <div><span class="pile-id">SLOW_02</span> <span class="pile-type">慢充 7kW</span></div>
+        <span class="pile-status-badge status-idle">空闲就绪</span>
+      </div>
+      <div class="pile-info">上次使用: 13:45</div>
+      <div class="pile-actions"><button class="btn btn-fault" onclick="showModal('标记故障','确定将 SLOW_02 标记为故障状态？')">标记故障</button></div>
+    </div>
+
+    <div class="pile-card fault" style="animation-delay:0.5s">
+      <div class="pile-header">
+        <div><span class="pile-id">SLOW_03</span> <span class="pile-type">慢充 7kW</span></div>
+        <span class="pile-status-badge status-fault">故障</span>
+      </div>
+      <div class="pile-info">故障时间: <strong>14:18</strong> | 故障原因: <strong style="color:#c45d3e">通信超时</strong></div>
+      <div class="pile-actions"><button class="btn btn-restore" onclick="showModal('恢复故障','确定将 SLOW_03 恢复为正常状态？')">恢复</button></div>
+    </div>
+  </div>
+
+  <!-- COL2: QUEUES -->
+  <div>
+    <div class="section-title">排队信息</div>
+
+    <div class="queue-section">
+      <div class="queue-header"><h4>快充队列</h4><span class="queue-count">3人</span></div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_005</span><span class="queue-priority">优先级 2.35</span></div>
+        <div class="queue-details">需求 25kWh | 等待 8分12秒</div>
+        <div class="queue-assign">预分配 → FAST_01</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:78%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_009</span><span class="queue-priority">优先级 1.82</span></div>
+        <div class="queue-details">需求 30kWh | 等待 5分45秒</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:61%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_012</span><span class="queue-priority">优先级 1.15</span></div>
+        <div class="queue-details">需求 20kWh | 等待 2分10秒</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:38%"></div></div>
+      </div>
+    </div>
+
+    <div class="queue-section">
+      <div class="queue-header"><h4>慢充队列</h4><span class="queue-count">4人</span></div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_008</span><span class="queue-priority">优先级 2.61</span></div>
+        <div class="queue-details">需求 15kWh | 等待 11分20秒</div>
+        <div class="queue-assign">预分配 → SLOW_02</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:87%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_010</span><span class="queue-priority">优先级 1.93</span></div>
+        <div class="queue-details">需求 20kWh | 等待 7分55秒</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:64%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_011</span><span class="queue-priority">优先级 1.45</span></div>
+        <div class="queue-details">需求 10kWh | 等待 4分30秒</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:48%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-item-header"><span class="queue-user">user_013</span><span class="queue-priority">优先级 0.88</span></div>
+        <div class="queue-details">需求 18kWh | 等待 1分15秒</div>
+        <div class="priority-bar"><div class="priority-fill" style="width:29%"></div></div>
+      </div>
+    </div>
+
+    <button class="btn-action" style="width:100%;margin-top:8px" onclick="showModal('手动叫号','确定手动叫号排队首位用户？')">手动叫号</button>
+  </div>
+
+  <!-- COL3: EVENT LOG -->
+  <div>
+    <div class="event-log-wrap">
+      <div class="event-log-header"><h3>实时事件</h3></div>
+      <div class="event-log" id="eventLog"></div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM 2-COL -->
+<div class="bottom-row">
+  <div class="card">
+    <div class="section-title">今日运营统计</div>
+    <div class="bar-row"><div class="bar-label">完成充电</div><div class="bar-track"><div class="bar-fill c1" style="width:0%" data-width="76.7%">23次</div></div></div>
+    <div class="bar-row"><div class="bar-label">取消排队</div><div class="bar-track"><div class="bar-fill c2" style="width:0%" data-width="13.3%">4次</div></div></div>
+    <div class="bar-row"><div class="bar-label">超时未到</div><div class="bar-track"><div class="bar-fill c3" style="width:0%" data-width="6.7%">2次</div></div></div>
+    <div class="bar-row"><div class="bar-label">中断充电</div><div class="bar-track"><div class="bar-fill c4" style="width:0%" data-width="3.3%">1次</div></div></div>
+    <div class="bar-row"><div class="bar-label">故障处理</div><div class="bar-track"><div class="bar-fill c2" style="width:0%" data-width="3.3%">1次</div></div></div>
+    <div class="quick-actions" style="margin-top:20px">
+      <button class="btn-action" onclick="showModal('导出报表','确定导出今日运营报表？')">导出今日报表</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">系统指标</div>
+    <div class="metrics-grid">
+      <div class="metric-block"><div class="metric-val" data-count="76.4">0</div><div class="metric-label">桩利用率(%)</div></div>
+      <div class="metric-block"><div class="metric-val">45分18秒</div><div class="metric-label">平均完成时间</div></div>
+      <div class="metric-block"><div class="metric-val">22分05秒</div><div class="metric-label">最长等待</div></div>
+      <div class="metric-block"><div class="metric-val" data-count="4.6">0</div><div class="metric-label">今日吞吐(次/时)</div></div>
+      <div class="metric-block"><div class="metric-val" data-count="8.2">0</div><div class="metric-label">偏差率(%)</div></div>
+      <div class="metric-block"><div class="metric-val" data-count="31">0</div><div class="metric-label">今日总事件</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- main-content -->
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <h3 id="modalTitle"></h3>
+    <p id="modalMsg"></p>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="hideModal()">取消</button>
+      <button class="btn btn-confirm" onclick="hideModal()">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  const s = now.toLocaleString('zh-CN', { hour12: false });
+  document.getElementById('clock').textContent = s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Modal
+function showModal(title, msg) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMsg').textContent = msg;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// Events
+const eventData = [
+  { time: '14:23:15', type: '叫号', badge: 'badge-call', desc: 'user_005 已被叫号，等待确认' },
+  { time: '14:21:08', type: '充电完成', badge: 'badge-complete', desc: 'FAST_01 user_003 充电完成' },
+  { time: '14:18:45', type: '故障', badge: 'badge-fault', desc: 'SLOW_03 报告故障，通信超时' },
+  { time: '14:15:22', type: '新请求', badge: 'badge-request', desc: 'user_012 提交快充请求 25kWh' },
+  { time: '14:12:33', type: '离场提醒', badge: 'badge-remind', desc: 'user_007 充电完成，等待离场' },
+  { time: '14:10:18', type: '开始充电', badge: 'badge-start', desc: 'FAST_02 → user_007' },
+  { time: '14:08:05', type: '新请求', badge: 'badge-request', desc: 'user_009 提交快充请求 30kWh' },
+  { time: '14:05:42', type: '充电完成', badge: 'badge-complete', desc: 'SLOW_02 user_006 充电完成' },
+  { time: '14:03:15', type: '确认到场', badge: 'badge-confirm', desc: 'user_004 已确认到场' },
+  { time: '14:01:08', type: '叫号', badge: 'badge-call', desc: 'user_004 等待确认' },
+  { time: '13:58:22', type: '新请求', badge: 'badge-request', desc: 'user_011 慢充 15kWh' },
+  { time: '13:55:30', type: '开始充电', badge: 'badge-start', desc: 'SLOW_02 → user_006' },
+];
+
+const logEl = document.getElementById('eventLog');
+function renderEvents() {
+  logEl.innerHTML = '';
+  eventData.forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'event-item';
+    div.innerHTML = `<span class="event-time">${e.time}</span><span class="event-badge ${e.badge}">${e.type}</span><span class="event-desc">${e.desc}</span>`;
+    logEl.appendChild(div);
+  });
+}
+renderEvents();
+
+// Auto-add events
+const autoEvents = [
+  { type: '新请求', badge: 'badge-request', desc: 'user_015 快充请求 22kWh' },
+  { type: '确认到场', badge: 'badge-confirm', desc: 'user_005 已确认到场' },
+  { type: '充电完成', badge: 'badge-complete', desc: 'SLOW_01 user_001 充电完成' },
+  { type: '叫号', badge: 'badge-call', desc: 'user_008 已被叫号' },
+  { type: '开始充电', badge: 'badge-start', desc: 'FAST_01 → user_005' },
+];
+let autoIdx = 0;
+setInterval(() => {
+  const now = new Date();
+  const t = now.toTimeString().slice(0, 8);
+  const e = autoEvents[autoIdx % autoEvents.length];
+  eventData.unshift({ time: t, type: e.type, badge: e.badge, desc: e.desc });
+  if (eventData.length > 20) eventData.pop();
+  renderEvents();
+  autoIdx++;
+}, 5000);
+
+// Bar chart animation
+setTimeout(() => {
+  document.querySelectorAll('.bar-fill').forEach(el => {
+    el.style.width = el.dataset.width;
+  });
+}, 300);
+
+// Count-up animation
+function countUp(el, target, suffix, decimals) {
+  let current = 0;
+  const step = target / 40;
+  const interval = setInterval(() => {
+    current += step;
+    if (current >= target) { current = target; clearInterval(interval); }
+    el.textContent = (decimals ? current.toFixed(1) : Math.round(current)) + (suffix || '');
+  }, 30);
+}
+
+document.querySelectorAll('.kpi-value[data-count]').forEach(el => {
+  const target = parseFloat(el.dataset.count);
+  const text = el.textContent;
+  const suffix = text.replace(/[0-9.]/g, '') || '';
+  countUp(el, target, suffix === '' ? '%' : suffix, false);
+});
+
+document.querySelectorAll('.metric-val[data-count]').forEach(el => {
+  const target = parseFloat(el.dataset.count);
+  const hasDecimal = String(target).includes('.');
+  countUp(el, target, '', hasDecimal);
+});
+</script>
+</body>
+</html>

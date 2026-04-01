@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 管理端</title>
+<style>
+/* ========== CSS Custom Properties ========== */
+:root {
+  --bg-deepest: #0a0e17;
+  --bg-deep: #0d1220;
+  --bg-panel: #111827;
+  --bg-card: #1a1f2e;
+  --bg-card-hover: #1f2638;
+  --bg-sidebar: #0d1117;
+  --bg-table-row-hover: #1e2535;
+  --border-color: #1e293b;
+  --border-accent: #2a3548;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-cyan: #00d4aa;
+  --accent-cyan-dim: rgba(0, 212, 170, 0.15);
+  --accent-blue: #0ea5e9;
+  --accent-blue-dim: rgba(14, 165, 233, 0.12);
+  --accent-amber: #f59e0b;
+  --accent-amber-dim: rgba(245, 158, 11, 0.12);
+  --accent-red: #ef4444;
+  --accent-red-dim: rgba(239, 68, 68, 0.12);
+  --accent-green: #22c55e;
+  --accent-green-dim: rgba(34, 197, 94, 0.12);
+  --accent-purple: #8b5cf6;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--border-color);
+  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-cyan);
+  --radius: 6px;
+  --sidebar-width: 220px;
+  --topbar-height: 48px;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--bg-deepest);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ========== Top Bar ========== */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--topbar-height);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-color);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px 0 0;
+  z-index: 100;
+}
+.topbar-left {
+  display: flex; align-items: center; gap: 12px;
+  width: var(--sidebar-width);
+  padding: 0 16px;
+  height: 100%;
+  border-right: 1px solid var(--border-color);
+}
+.topbar-logo {
+  width: 28px; height: 28px;
+  background: var(--accent-cyan);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: var(--bg-deepest);
+  flex-shrink: 0;
+}
+.topbar-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.topbar-center {
+  flex: 1;
+  display: flex; align-items: center;
+  padding-left: 20px;
+}
+.topbar-breadcrumb {
+  font-size: 12px; color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.topbar-breadcrumb span { color: var(--accent-cyan); }
+.topbar-right {
+  display: flex; align-items: center; gap: 16px;
+}
+.topbar-clock {
+  font-family: var(--font-mono);
+  font-size: 13px; color: var(--accent-cyan);
+  letter-spacing: 1px;
+  background: var(--accent-cyan-dim);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,212,170,0.2);
+}
+.topbar-notification {
+  position: relative; cursor: pointer;
+  font-size: 18px; color: var(--text-secondary);
+  transition: color 0.2s;
+}
+.topbar-notification:hover { color: var(--text-primary); }
+.notif-badge {
+  position: absolute; top: -6px; right: -8px;
+  background: var(--accent-red);
+  color: #fff; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+}
+.topbar-admin {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  cursor: pointer; transition: all 0.2s;
+}
+.topbar-admin:hover { border-color: var(--accent-cyan); color: var(--text-primary); }
+.admin-avatar {
+  width: 24px; height: 24px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--bg-deepest);
+}
+.topbar-status-dot {
+  width: 7px; height: 7px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--accent-green);
+}
+
+/* ========== Sidebar ========== */
+.sidebar {
+  position: fixed; top: var(--topbar-height); left: 0; bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  display: flex; flex-direction: column;
+  z-index: 90;
+  overflow-y: auto;
+}
+.sidebar-section-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 20px 16px 8px;
+}
+.sidebar-nav { flex: 1; padding: 4px 8px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+  margin-bottom: 2px;
+  position: relative;
+}
+.nav-item:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  border-left-color: var(--accent-cyan);
+  font-weight: 600;
+}
+.nav-item .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-item .nav-badge {
+  margin-left: auto;
+  background: var(--accent-red);
+  color: #fff; font-size: 10px;
+  padding: 1px 6px; border-radius: 8px;
+  font-family: var(--font-mono);
+}
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-mono);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-footer .sys-status {
+  display: flex; align-items: center; gap: 5px;
+}
+.sidebar-footer .sys-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 4px var(--accent-green);
+  animation: pulse-dot 2s infinite;
+}
+
+/* ========== Main Layout ========== */
+.main {
+  margin-left: var(--sidebar-width);
+  margin-top: var(--topbar-height);
+  height: calc(100vh - var(--topbar-height));
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  background: var(--bg-deepest);
+}
+
+/* ========== KPI Cards ========== */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.kpi-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  cursor: default;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: fadeInUp 0.4s forwards;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent-cyan);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.kpi-card:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(0,212,170,0.3);
+}
+.kpi-card:hover::before { opacity: 1; }
+.kpi-card:nth-child(1) { animation-delay: 0.05s; }
+.kpi-card:nth-child(2) { animation-delay: 0.1s; }
+.kpi-card:nth-child(3) { animation-delay: 0.15s; }
+.kpi-card:nth-child(4) { animation-delay: 0.2s; }
+.kpi-card:nth-child(5) { animation-delay: 0.25s; }
+.kpi-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.kpi-icon {
+  width: 32px; height: 32px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.kpi-icon.cyan { background: var(--accent-cyan-dim); }
+.kpi-icon.green { background: var(--accent-green-dim); }
+.kpi-icon.blue { background: var(--accent-blue-dim); }
+.kpi-icon.amber { background: var(--accent-amber-dim); }
+.kpi-icon.red { background: var(--accent-red-dim); }
+.kpi-value {
+  font-size: 28px; font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.kpi-value .kpi-unit {
+  font-size: 13px; font-weight: 400;
+  color: var(--text-muted); margin-left: 2px;
+}
+.kpi-footer {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 8px;
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.kpi-trend { font-weight: 600; }
+.kpi-trend.up { color: var(--accent-green); }
+.kpi-trend.down { color: var(--accent-red); }
+.kpi-trend.neutral { color: var(--accent-amber); }
+.kpi-sparkline {
+  display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-left: auto;
+}
+.kpi-sparkline .bar {
+  width: 3px; border-radius: 1px;
+  background: var(--accent-cyan);
+  opacity: 0.5;
+}
+
+/* ========== Section Panels ========== */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: fadeInUp 0.4s forwards;
+}
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+.panel-title {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-title .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+}
+.panel-actions {
+  display: flex; gap: 6px;
+}
+.panel-btn {
+  background: var(--bg-deepest);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px; padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all 0.15s;
+}
+.panel-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+.panel-body { padding: 0; }
+
+/* ========== Middle Row ========== */
+.middle-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* ========== Table ========== */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th {
+  padding: 10px 14px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table tbody tr:hover { background: var(--bg-table-row-hover); }
+.data-table td {
+  padding: 10px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.pile-id { color: var(--accent-blue); font-weight: 600; }
+.pile-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pile-type.fast { background: var(--accent-amber-dim); color: var(--accent-amber); }
+.pile-type.slow { background: var(--accent-blue-dim); color: var(--accent-blue); }
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px; font-weight: 600;
+}
+.status-badge .status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.status-badge.charging {
+  background: var(--accent-green-dim); color: var(--accent-green);
+}
+.status-badge.charging .status-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 4px var(--accent-green);
+  animation: pulse-dot 1.5s infinite;
+}
+.status-badge.idle {
+  background: rgba(100,116,139,0.15); color: var(--text-muted);
+}
+.status-badge.idle .status-dot { background: var(--text-muted); }
+.status-badge.waiting {
+  background: var(--accent-amber-dim); color: var(--accent-amber);
+}
+.status-badge.waiting .status-dot {
+  background: var(--accent-amber);
+  animation: pulse-dot 2s infinite;
+}
+.status-badge.fault {
+  background: var(--accent-red-dim); color: var(--accent-red);
+}
+.status-badge.fault .status-dot {
+  background: var(--accent-red);
+  box-shadow: 0 0 4px var(--accent-red);
+  animation: pulse-dot 1s infinite;
+}
+
+/* Progress bar */
+.progress-cell { min-width: 120px; }
+.progress-bar-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+.progress-track {
+  flex: 1; height: 6px;
+  background: var(--bg-deepest);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-cyan);
+  position: relative;
+  transition: width 0.5s;
+}
+.progress-fill.animated {
+  box-shadow: 0 0 8px var(--accent-cyan);
+  animation: progress-glow 2s infinite;
+}
+.progress-fill.full { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+.progress-pct { font-size: 11px; color: var(--text-secondary); min-width: 30px; text-align: right; }
+.user-link { color: var(--accent-cyan); }
+.text-muted { color: var(--text-muted); }
+
+/* ========== Queue Panel ========== */
+.queue-section { padding: 14px 16px; }
+.queue-section + .queue-section { border-top: 1px solid var(--border-color); }
+.queue-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.queue-type-label {
+  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.queue-type-label .type-dot {
+  width: 8px; height: 8px; border-radius: 2px;
+}
+.queue-type-label .type-dot.fast { background: var(--accent-amber); }
+.queue-type-label .type-dot.slow { background: var(--accent-blue); }
+.queue-count {
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.queue-list { display: flex; flex-direction: column; gap: 6px; }
+.queue-item {
+  display: grid;
+  grid-template-columns: 80px 70px 70px 50px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  transition: border-color 0.15s;
+}
+.queue-item:hover { border-color: var(--accent-cyan); }
+.queue-item .q-user { color: var(--accent-cyan); font-weight: 600; }
+.queue-item .q-kwh { color: var(--text-secondary); }
+.queue-item .q-wait { color: var(--accent-amber); }
+.queue-item .q-priority {
+  text-align: right;
+  font-weight: 600;
+}
+.queue-item .q-priority.high { color: var(--accent-red); }
+.queue-item .q-priority.medium { color: var(--accent-amber); }
+.queue-item .q-priority.low { color: var(--text-muted); }
+.queue-col-header {
+  display: grid;
+  grid-template-columns: 80px 70px 70px 50px;
+  gap: 8px;
+  padding: 0 10px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--font-mono);
+}
+
+/* ========== Bottom Row ========== */
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ========== CSS Bar Chart ========== */
+.bar-chart { padding: 16px; }
+.bar-item {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.bar-item:last-child { margin-bottom: 0; }
+.bar-label {
+  width: 80px; font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+  flex-shrink: 0;
+}
+.bar-track {
+  flex: 1; height: 22px;
+  background: var(--bg-deepest);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  display: flex; align-items: center;
+  padding-left: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--bg-deepest);
+  transition: width 1s ease;
+}
+.bar-fill.cyan { background: var(--accent-cyan); }
+.bar-fill.amber { background: var(--accent-amber); }
+.bar-fill.red { background: var(--accent-red); }
+.bar-fill.blue { background: var(--accent-blue); }
+.bar-fill.purple { background: var(--accent-purple); }
+.bar-value {
+  width: 40px; text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+/* ========== Event Log ========== */
+.event-log {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.event-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(30,41,59,0.5);
+  transition: background 0.15s;
+  animation: eventFadeIn 0.4s ease;
+}
+.event-item:hover { background: var(--bg-table-row-hover); }
+.event-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 62px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.event-type {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+}
+.event-type.call { background: var(--accent-blue-dim); color: var(--accent-blue); }
+.event-type.done { background: var(--accent-green-dim); color: var(--accent-green); }
+.event-type.fault { background: var(--accent-red-dim); color: var(--accent-red); }
+.event-type.new { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
+.event-type.cancel { background: var(--accent-amber-dim); color: var(--accent-amber); }
+.event-type.timeout { background: rgba(139,92,246,0.12); color: var(--accent-purple); }
+.event-type.system { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+.event-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.event-desc .hl { color: var(--accent-cyan); font-weight: 600; }
+
+/* ========== Footer ========== */
+.footer {
+  padding: 14px 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  margin-top: 16px;
+}
+
+/* ========== Animations ========== */
+@keyframes fadeInUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes progress-glow {
+  0%, 100% { box-shadow: 0 0 4px var(--accent-cyan); }
+  50% { box-shadow: 0 0 12px var(--accent-cyan); }
+}
+@keyframes eventFadeIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 1440px) {
+  .kpi-row { grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .kpi-value { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== TOP BAR ==================== -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">CP</div>
+    <div class="topbar-title">充电桩调度</div>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-breadcrumb">系统概览 <span>/</span> 实时监控面板</div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-status-dot" title="系统在线"></div>
+    <div class="topbar-clock" id="liveClock">--:--:--</div>
+    <div class="topbar-notification" title="通知">
+      &#x1F514;
+      <span class="notif-badge">3</span>
+    </div>
+    <div class="topbar-admin">
+      <div class="admin-avatar">张</div>
+      管理员: 张三
+    </div>
+  </div>
+</header>
+
+<!-- ==================== SIDEBAR ==================== -->
+<aside class="sidebar">
+  <div class="sidebar-section-label">主导航</div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active">
+      <span class="nav-icon">&#x1F4CA;</span> 系统概览
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x26A1;</span> 充电桩监控
+      <span class="nav-badge">1</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F4CB;</span> 请求管理
+      <span class="nav-badge">7</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F465;</span> 用户管理
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x2699;&#xFE0F;</span> 参数配置
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F4C5;</span> 事件日志
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F4C8;</span> 统计分析
+    </div>
+  </nav>
+  <div class="sidebar-section-label">系统</div>
+  <nav class="sidebar-nav">
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F6E0;&#xFE0F;</span> 系统设置
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">&#x1F4E4;</span> 数据导出
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <span>v1.0.0</span>
+    <span class="sys-status"><span class="sys-dot"></span>运行中</span>
+  </div>
+</aside>
+
+<!-- ==================== MAIN CONTENT ==================== -->
+<main class="main">
+
+  <!-- KPI Cards -->
+  <section class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-label">充电桩总数</span>
+        <div class="kpi-icon cyan">&#x26FD;</div>
+      </div>
+      <div class="kpi-value">5</div>
+      <div class="kpi-footer">
+        <span class="kpi-trend neutral">&#x2014; 0%</span>
+        <span>较昨日</span>
+        <div class="kpi-sparkline">
+          <div class="bar" style="height:60%"></div><div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:60%"></div><div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:60%"></div><div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:60%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-label">在线桩数</span>
+        <div class="kpi-icon green">&#x2705;</div>
+      </div>
+      <div class="kpi-value">4</div>
+      <div class="kpi-footer">
+        <span class="kpi-trend down">&#x2193; 20%</span>
+        <span>较昨日</span>
+        <div class="kpi-sparkline">
+          <div class="bar" style="height:100%"></div><div class="bar" style="height:100%"></div>
+          <div class="bar" style="height:100%"></div><div class="bar" style="height:80%"></div>
+          <div class="bar" style="height:100%"></div><div class="bar" style="height:80%"></div>
+          <div class="bar" style="height:80%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-label">当前充电中</span>
+        <div class="kpi-icon blue">&#x1F50C;</div>
+      </div>
+      <div class="kpi-value">3</div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up">&#x2191; 50%</span>
+        <span>较昨日同期</span>
+        <div class="kpi-sparkline">
+          <div class="bar" style="height:40%"></div><div class="bar" style="height:50%"></div>
+          <div class="bar" style="height:30%"></div><div class="bar" style="height:70%"></div>
+          <div class="bar" style="height:60%"></div><div class="bar" style="height:80%"></div>
+          <div class="bar" style="height:100%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-label">等待队列</span>
+        <div class="kpi-icon amber">&#x23F3;</div>
+      </div>
+      <div class="kpi-value">7</div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up">&#x2191; 40%</span>
+        <span>较昨日同期</span>
+        <div class="kpi-sparkline">
+          <div class="bar" style="height:30%"></div><div class="bar" style="height:50%"></div>
+          <div class="bar" style="height:45%"></div><div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:70%"></div><div class="bar" style="height:85%"></div>
+          <div class="bar" style="height:100%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-label">平均等待时间</span>
+        <div class="kpi-icon red">&#x23F1;&#xFE0F;</div>
+      </div>
+      <div class="kpi-value">12<span class="kpi-unit">分32秒</span></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up">&#x2191; 18%</span>
+        <span>较昨日</span>
+        <div class="kpi-sparkline">
+          <div class="bar" style="height:40%"></div><div class="bar" style="height:55%"></div>
+          <div class="bar" style="height:50%"></div><div class="bar" style="height:65%"></div>
+          <div class="bar" style="height:70%"></div><div class="bar" style="height:90%"></div>
+          <div class="bar" style="height:95%"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Middle Row -->
+  <section class="middle-row">
+    <!-- Charging Pile Status -->
+    <div class="panel" style="animation-delay: 0.3s;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="dot"></span>充电桩实时状态</div>
+        <div class="panel-actions">
+          <button class="panel-btn">刷新</button>
+          <button class="panel-btn">导出</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>桩编号</th>
+              <th>类型</th>
+              <th>功率</th>
+              <th>状态</th>
+              <th>当前用户</th>
+              <th>充电进度</th>
+              <th>预计完成</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="pile-id">FAST_01</td>
+              <td><span class="pile-type fast">快充</span></td>
+              <td>30kW</td>
+              <td><span class="status-badge charging"><span class="status-dot"></span>充电中</span></td>
+              <td class="user-link">user_003</td>
+              <td class="progress-cell">
+                <div class="progress-bar-wrap">
+                  <div class="progress-track"><div class="progress-fill animated" style="width:78%"></div></div>
+                  <span class="progress-pct">78%</span>
+                </div>
+              </td>
+              <td>14:32</td>
+            </tr>
+            <tr>
+              <td class="pile-id">FAST_02</td>
+              <td><span class="pile-type fast">快充</span></td>
+              <td>30kW</td>
+              <td><span class="status-badge waiting"><span class="status-dot"></span>等待离场</span></td>
+              <td class="user-link">user_007</td>
+              <td class="progress-cell">
+                <div class="progress-bar-wrap">
+                  <div class="progress-track"><div class="progress-fill full" style="width:100%"></div></div>
+                  <span class="progress-pct">100%</span>
+                </div>
+              </td>
+              <td class="text-muted">-</td>
+            </tr>
+            <tr>
+              <td class="pile-id">SLOW_01</td>
+              <td><span class="pile-type slow">慢充</span></td>
+              <td>7kW</td>
+              <td><span class="status-badge charging"><span class="status-dot"></span>充电中</span></td>
+              <td class="user-link">user_001</td>
+              <td class="progress-cell">
+                <div class="progress-bar-wrap">
+                  <div class="progress-track"><div class="progress-fill animated" style="width:45%"></div></div>
+                  <span class="progress-pct">45%</span>
+                </div>
+              </td>
+              <td>16:20</td>
+            </tr>
+            <tr>
+              <td class="pile-id">SLOW_02</td>
+              <td><span class="pile-type slow">慢充</span></td>
+              <td>7kW</td>
+              <td><span class="status-badge idle"><span class="status-dot"></span>空闲</span></td>
+              <td class="text-muted">-</td>
+              <td class="progress-cell">
+                <div class="progress-bar-wrap">
+                  <div class="progress-track"><div class="progress-fill" style="width:0%"></div></div>
+                  <span class="progress-pct text-muted">-</span>
+                </div>
+              </td>
+              <td class="text-muted">-</td>
+            </tr>
+            <tr>
+              <td class="pile-id">SLOW_03</td>
+              <td><span class="pile-type slow">慢充</span></td>
+              <td>7kW</td>
+              <td><span class="status-badge fault"><span class="status-dot"></span>故障</span></td>
+              <td class="text-muted">-</td>
+              <td class="progress-cell">
+                <div class="progress-bar-wrap">
+                  <div class="progress-track"><div class="progress-fill" style="width:0%"></div></div>
+                  <span class="progress-pct text-muted">-</span>
+                </div>
+              </td>
+              <td class="text-muted">-</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Queue Overview -->
+    <div class="panel" style="animation-delay: 0.35s;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="dot" style="background:var(--accent-amber);box-shadow:0 0 6px var(--accent-amber)"></span>等待队列概览</div>
+        <div class="panel-actions">
+          <button class="panel-btn">全部 (7)</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <!-- Fast Queue -->
+        <div class="queue-section">
+          <div class="queue-header">
+            <span class="queue-type-label"><span class="type-dot fast"></span>快充队列</span>
+            <span class="queue-count">3 人等待</span>
+          </div>
+          <div class="queue-col-header">
+            <span>用户</span><span>请求电量</span><span>已等待</span><span>优先级</span>
+          </div>
+          <div class="queue-list">
+            <div class="queue-item">
+              <span class="q-user">user_005</span>
+              <span class="q-kwh">30 kWh</span>
+              <span class="q-wait">18m22s</span>
+              <span class="q-priority high">92.5</span>
+            </div>
+            <div class="queue-item">
+              <span class="q-user">user_012</span>
+              <span class="q-kwh">25 kWh</span>
+              <span class="q-wait">8m45s</span>
+              <span class="q-priority medium">67.3</span>
+            </div>
+            <div class="queue-item">
+              <span class="q-user">user_018</span>
+              <span class="q-kwh">35 kWh</span>
+              <span class="q-wait">3m10s</span>
+              <span class="q-priority low">41.2</span>
+            </div>
+          </div>
+        </div>
+        <!-- Slow Queue -->
+        <div class="queue-section">
+          <div class="queue-header">
+            <span class="queue-type-label"><span class="type-dot slow"></span>慢充队列</span>
+            <span class="queue-count">4 人等待</span>
+          </div>
+          <div class="queue-col-header">
+            <span>用户</span><span>请求电量</span><span>已等待</span><span>优先级</span>
+          </div>
+          <div class="queue-list">
+            <div class="queue-item">
+              <span class="q-user">user_008</span>
+              <span class="q-kwh">20 kWh</span>
+              <span class="q-wait">25m08s</span>
+              <span class="q-priority high">88.1</span>
+            </div>
+            <div class="queue-item">
+              <span class="q-user">user_009</span>
+              <span class="q-kwh">15 kWh</span>
+              <span class="q-wait">20m33s</span>
+              <span class="q-priority medium">75.6</span>
+            </div>
+            <div class="queue-item">
+              <span class="q-user">user_014</span>
+              <span class="q-kwh">22 kWh</span>
+              <span class="q-wait">12m17s</span>
+              <span class="q-priority medium">58.4</span>
+            </div>
+            <div class="queue-item">
+              <span class="q-user">user_020</span>
+              <span class="q-kwh">18 kWh</span>
+              <span class="q-wait">5m42s</span>
+              <span class="q-priority low">33.9</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bottom Row -->
+  <section class="bottom-row">
+    <!-- Operations Data -->
+    <div class="panel" style="animation-delay: 0.4s;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="dot" style="background:var(--accent-blue);box-shadow:0 0 6px var(--accent-blue)"></span>今日运营数据</div>
+        <div class="panel-actions">
+          <button class="panel-btn">今日</button>
+        </div>
+      </div>
+      <div class="panel-body bar-chart">
+        <div class="bar-item">
+          <span class="bar-label">完成充电</span>
+          <div class="bar-track"><div class="bar-fill cyan" style="width:92%">23</div></div>
+          <span class="bar-value">23次</span>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">取消排队</span>
+          <div class="bar-track"><div class="bar-fill amber" style="width:16%">4</div></div>
+          <span class="bar-value">4次</span>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">超时未到</span>
+          <div class="bar-track"><div class="bar-fill red" style="width:8%"></div></div>
+          <span class="bar-value">2次</span>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">中断充电</span>
+          <div class="bar-track"><div class="bar-fill blue" style="width:4%"></div></div>
+          <span class="bar-value">1次</span>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">故障处理</span>
+          <div class="bar-track"><div class="bar-fill purple" style="width:4%"></div></div>
+          <span class="bar-value">1次</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="panel" style="animation-delay: 0.45s;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="dot" style="background:var(--accent-green);box-shadow:0 0 6px var(--accent-green)"></span>最近事件</div>
+        <div class="panel-actions">
+          <button class="panel-btn">全部日志</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="event-log" id="eventLog">
+          <div class="event-item">
+            <span class="event-time">14:23:15</span>
+            <span class="event-type call">叫号</span>
+            <span class="event-desc"><span class="hl">user_005</span> 已被叫号，等待确认到场</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:21:08</span>
+            <span class="event-type done">完成</span>
+            <span class="event-desc"><span class="hl">FAST_01</span> <span class="hl">user_003</span> 充电完成，累计 28.5kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:18:45</span>
+            <span class="event-type fault">故障</span>
+            <span class="event-desc"><span class="hl">SLOW_03</span> 报告通信故障，已自动停机</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:15:22</span>
+            <span class="event-type new">新请求</span>
+            <span class="event-desc"><span class="hl">user_012</span> 提交快充请求 25kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:12:37</span>
+            <span class="event-type cancel">取消</span>
+            <span class="event-desc"><span class="hl">user_011</span> 取消排队（等待超时）</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:10:05</span>
+            <span class="event-type done">完成</span>
+            <span class="event-desc"><span class="hl">SLOW_02</span> <span class="hl">user_006</span> 充电完成，累计 18.2kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:08:19</span>
+            <span class="event-type call">叫号</span>
+            <span class="event-desc"><span class="hl">user_009</span> 已被叫号至 <span class="hl">SLOW_01</span></span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:05:44</span>
+            <span class="event-type new">新请求</span>
+            <span class="event-desc"><span class="hl">user_018</span> 提交快充请求 35kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">14:02:11</span>
+            <span class="event-type timeout">超时</span>
+            <span class="event-desc"><span class="hl">user_010</span> 叫号后未到场，已重新排队</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">13:58:30</span>
+            <span class="event-type system">系统</span>
+            <span class="event-desc">调度器执行周期性排队优先级重算</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">13:55:12</span>
+            <span class="event-type new">新请求</span>
+            <span class="event-desc"><span class="hl">user_020</span> 提交慢充请求 18kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">13:50:08</span>
+            <span class="event-type done">完成</span>
+            <span class="event-desc"><span class="hl">FAST_02</span> <span class="hl">user_002</span> 充电完成，累计 32.1kWh</span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">13:47:33</span>
+            <span class="event-type call">叫号</span>
+            <span class="event-desc"><span class="hl">user_007</span> 已被叫号至 <span class="hl">FAST_02</span></span>
+          </div>
+          <div class="event-item">
+            <span class="event-time">13:42:15</span>
+            <span class="event-type system">系统</span>
+            <span class="event-desc">峰谷电价切换: 峰时段 0.80元/度</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    &copy; 2026 G7 Group &mdash; 智能充电桩调度计费系统 管理端 &nbsp;|&nbsp; 系统运行时间: <span id="uptime">12h 34m</span>
+  </footer>
+
+</main>
+
+<!-- ==================== JAVASCRIPT ==================== -->
+<script>
+(function() {
+  'use strict';
+
+  // ===== Live Clock =====
+  var clockEl = document.getElementById('liveClock');
+  function updateClock() {
+    var now = new Date();
+    var h = String(now.getHours()).padStart(2, '0');
+    var m = String(now.getMinutes()).padStart(2, '0');
+    var s = String(now.getSeconds()).padStart(2, '0');
+    clockEl.textContent = h + ':' + m + ':' + s;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ===== Event Log Auto-Insert =====
+  var eventLog = document.getElementById('eventLog');
+  var sampleEvents = [
+    { type: 'new', cls: 'new', desc: '<span class="hl">user_022</span> 提交慢充请求 20kWh' },
+    { type: '叫号', cls: 'call', desc: '<span class="hl">user_014</span> 已被叫号至 <span class="hl">SLOW_02</span>' },
+    { type: '完成', cls: 'done', desc: '<span class="hl">FAST_01</span> <span class="hl">user_003</span> 充电完成，累计 31.2kWh' },
+    { type: '新请求', cls: 'new', desc: '<span class="hl">user_025</span> 提交快充请求 28kWh' },
+    { type: '取消', cls: 'cancel', desc: '<span class="hl">user_019</span> 主动取消排队' },
+    { type: '系统', cls: 'system', desc: '调度器重新分配队列优先级' },
+    { type: '叫号', cls: 'call', desc: '<span class="hl">user_008</span> 已被叫号，等待确认到场' },
+    { type: '故障', cls: 'fault', desc: '<span class="hl">SLOW_03</span> 故障恢复尝试失败' },
+    { type: '完成', cls: 'done', desc: '<span class="hl">SLOW_01</span> <span class="hl">user_001</span> 充电完成，累计 14.8kWh' },
+    { type: '超时', cls: 'timeout', desc: '<span class="hl">user_016</span> 叫号超时，自动移出队列' },
+  ];
+  var eventIdx = 0;
+
+  function addEvent() {
+    var evt = sampleEvents[eventIdx % sampleEvents.length];
+    eventIdx++;
+    var now = new Date();
+    var ts = String(now.getHours()).padStart(2, '0') + ':' +
+             String(now.getMinutes()).padStart(2, '0') + ':' +
+             String(now.getSeconds()).padStart(2, '0');
+
+    var div = document.createElement('div');
+    div.className = 'event-item';
+    div.innerHTML =
+      '<span class="event-time">' + ts + '</span>' +
+      '<span class="event-type ' + evt.cls + '">' + evt.type + '</span>' +
+      '<span class="event-desc">' + evt.desc + '</span>';
+
+    eventLog.insertBefore(div, eventLog.firstChild);
+
+    // Keep log manageable
+    while (eventLog.children.length > 30) {
+      eventLog.removeChild(eventLog.lastChild);
+    }
+  }
+  setInterval(addEvent, 5000);
+
+  // ===== Sidebar Navigation =====
+  var navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(function(item) {
+    item.addEventListener('click', function() {
+      navItems.forEach(function(n) { n.classList.remove('active'); });
+      item.classList.add('active');
+    });
+  });
+
+  // ===== Simulate Progress Bar Animation =====
+  var progressBars = document.querySelectorAll('.progress-fill.animated');
+  function animateProgress() {
+    progressBars.forEach(function(bar) {
+      var current = parseFloat(bar.style.width);
+      if (current < 99) {
+        var next = Math.min(current + (Math.random() * 0.3), 100);
+        bar.style.width = next + '%';
+        var pctEl = bar.closest('.progress-bar-wrap').querySelector('.progress-pct');
+        if (pctEl) pctEl.textContent = Math.round(next) + '%';
+      }
+    });
+  }
+  setInterval(animateProgress, 3000);
+
+  // ===== Uptime Counter =====
+  var uptimeEl = document.getElementById('uptime');
+  var uptimeMinutes = 12 * 60 + 34;
+  function updateUptime() {
+    uptimeMinutes++;
+    var h = Math.floor(uptimeMinutes / 60);
+    var m = uptimeMinutes % 60;
+    uptimeEl.textContent = h + 'h ' + String(m).padStart(2, '0') + 'm';
+  }
+  setInterval(updateUptime, 60000);
+
+})();
+</script>
+</body>
+</html>

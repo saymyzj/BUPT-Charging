@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 登录</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #faf8f5;
+  --bg-darker: #f3efe9;
+  --card: #ffffff;
+  --card-shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --primary: #2d6a4f;
+  --secondary: #c45d3e;
+  --accent: #d4a853;
+  --text: #2c2c2c;
+  --text-secondary: #7a7a7a;
+  --error: #c0392b;
+  --border: #ddd;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: Georgia, serif; }
+
+.page {
+  width: 100%; height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== TOP SECTION ===== */
+.top-section {
+  height: 40vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transform: translateY(-100%);
+  animation: slideDown 0.7s ease 0.1s forwards;
+}
+
+@keyframes slideDown {
+  to { transform: translateY(0); }
+}
+
+/* Decorative elements */
+.top-section::before {
+  content: '';
+  position: absolute;
+  width: 300px; height: 300px;
+  border: 2px solid rgba(45,106,79,0.05);
+  border-radius: 50%;
+  top: -80px; right: 10%;
+}
+
+.top-section::after {
+  content: '';
+  position: absolute;
+  width: 200px; height: 200px;
+  border: 2px solid rgba(212,168,83,0.08);
+  border-radius: 50%;
+  bottom: -40px; left: 8%;
+}
+
+.hero-title-line1 {
+  font-family: Georgia, serif;
+  font-size: 68px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 8px;
+  line-height: 1.1;
+  opacity: 0;
+  animation: fadeIn 0.6s ease 0.5s forwards;
+}
+
+.hero-title-line2 {
+  font-family: Georgia, serif;
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 6px;
+  margin-top: 4px;
+  opacity: 0;
+  animation: fadeIn 0.6s ease 0.7s forwards;
+}
+
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+
+.hero-tagline {
+  font-size: 16px;
+  color: var(--secondary);
+  letter-spacing: 6px;
+  margin-top: 16px;
+  font-weight: 500;
+  opacity: 0;
+  animation: fadeIn 0.6s ease 0.9s forwards;
+}
+
+/* Stats row */
+.stats-row {
+  display: flex;
+  gap: 48px;
+  margin-top: 32px;
+  opacity: 0;
+  animation: fadeIn 0.6s ease 1s forwards;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-number {
+  font-family: Georgia, serif;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.stat-number .unit {
+  font-size: 16px;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 48px;
+  background: #e0dcd6;
+  align-self: center;
+}
+
+/* ===== BOTTOM SECTION ===== */
+.bottom-section {
+  height: 60vh;
+  background: var(--bg-darker);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 48px;
+  position: relative;
+  transform: translateY(100%);
+  animation: slideUp 0.7s ease 0.2s forwards;
+}
+
+@keyframes slideUp {
+  to { transform: translateY(0); }
+}
+
+.cards-wrapper {
+  display: flex;
+  gap: 32px;
+  max-width: 920px;
+  width: 100%;
+  padding: 0 24px;
+}
+
+/* ===== AUTH CARDS ===== */
+.auth-card {
+  flex: 1;
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+  padding: 36px 36px 32px;
+  border-top: 3px solid transparent;
+  transition: opacity 0.4s, border-color 0.4s, box-shadow 0.4s;
+  cursor: pointer;
+  position: relative;
+}
+
+.auth-card.active {
+  border-top-color: var(--accent);
+  box-shadow: 0 8px 28px rgba(120,80,40,0.12);
+  opacity: 1;
+}
+
+.auth-card:not(.active) {
+  opacity: 0.55;
+}
+
+.auth-card:not(.active):hover {
+  opacity: 0.75;
+}
+
+.card-title {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.card-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.input-wrap {
+  position: relative;
+}
+
+.input-wrap input, .input-wrap select {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  font-family: inherit;
+}
+
+.input-wrap input:focus, .input-wrap select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(45,106,79,0.08);
+}
+
+.input-wrap input.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(192,57,43,0.08);
+}
+
+.error-msg {
+  display: none;
+  font-size: 12px;
+  color: var(--error);
+  margin-top: 4px;
+}
+
+input.error ~ .error-msg { display: block; }
+
+.toggle-pwd {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 4px;
+}
+
+.toggle-pwd:hover { color: var(--primary); }
+
+.input-wrap select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 36px;
+}
+
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '\25BC';
+  position: absolute;
+  right: 14px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Remember me */
+.form-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.remember-me {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.15s;
+  font-family: inherit;
+  letter-spacing: 1px;
+}
+
+.btn:hover { filter: brightness(0.92); }
+.btn:active { transform: scale(0.98); }
+
+.btn-login { background: var(--primary); color: #fff; }
+.btn-register { background: var(--secondary); color: #fff; }
+
+/* Inactive overlay */
+.card-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.auth-card:not(.active) .card-overlay {
+  display: block;
+}
+
+/* Footer */
+.footer {
+  position: absolute;
+  bottom: 16px;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- TOP -->
+  <div class="top-section">
+    <div class="hero-title-line1">智能充电桩</div>
+    <div class="hero-title-line2">调度计费系统</div>
+    <div class="hero-tagline">智能调度 &middot; 高效充电 &middot; 透明计费</div>
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-number"><span class="counter" data-target="5">0</span><span class="unit"> 台</span></div>
+        <div class="stat-label">充电桩</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-number"><span class="counter" data-target="2">0</span><span class="unit"> 台</span></div>
+        <div class="stat-label">快充桩</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-number"><span class="counter" data-target="3">0</span><span class="unit"> 台</span></div>
+        <div class="stat-label">慢充桩</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-number"><span class="counter" data-target="24">0</span><span class="unit">h</span></div>
+        <div class="stat-label">全天运行</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom-section">
+    <div class="cards-wrapper">
+      <!-- LOGIN CARD -->
+      <div class="auth-card active" id="loginCard" onclick="activateCard('login')">
+        <div class="card-overlay"></div>
+        <div class="card-title">用户登录</div>
+        <div class="card-subtitle">登录您的账号以管理充电服务</div>
+        <form id="loginForm" onsubmit="return handleLogin(event)">
+          <div class="form-group">
+            <label>用户名</label>
+            <div class="input-wrap">
+              <input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username">
+              <span class="error-msg">请输入用户名</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <div class="input-wrap">
+              <input type="password" id="loginPwd" placeholder="请输入密码" autocomplete="current-password">
+              <button type="button" class="toggle-pwd" onclick="togglePwd('loginPwd', this)">显示</button>
+              <span class="error-msg">请输入密码</span>
+            </div>
+          </div>
+          <div class="form-options">
+            <label class="remember-me">
+              <input type="checkbox"> 记住我
+            </label>
+          </div>
+          <button type="submit" class="btn btn-login">登 录</button>
+        </form>
+      </div>
+
+      <!-- REGISTER CARD -->
+      <div class="auth-card" id="registerCard" onclick="activateCard('register')">
+        <div class="card-overlay"></div>
+        <div class="card-title">用户注册</div>
+        <div class="card-subtitle">创建新账号开始使用智能充电服务</div>
+        <form id="registerForm" onsubmit="return handleRegister(event)">
+          <div class="form-group">
+            <label>用户名</label>
+            <div class="input-wrap">
+              <input type="text" id="regUser" placeholder="请输入用户名" autocomplete="username">
+              <span class="error-msg">请输入用户名</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <div class="input-wrap">
+              <input type="password" id="regPwd" placeholder="请输入密码" autocomplete="new-password">
+              <button type="button" class="toggle-pwd" onclick="togglePwd('regPwd', this)">显示</button>
+              <span class="error-msg">请输入密码</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>确认密码</label>
+            <div class="input-wrap">
+              <input type="password" id="regPwdConfirm" placeholder="请再次输入密码" autocomplete="new-password">
+              <button type="button" class="toggle-pwd" onclick="togglePwd('regPwdConfirm', this)">显示</button>
+              <span class="error-msg">请确认密码</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>角色</label>
+            <div class="input-wrap select-wrap">
+              <select id="regRole">
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-register">注 册</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="footer">&copy; 2026 G7 Group</div>
+  </div>
+</div>
+
+<script>
+// Count-up animation
+function animateCounters() {
+  const counters = document.querySelectorAll('.counter');
+  counters.forEach(counter => {
+    const target = parseInt(counter.dataset.target);
+    const duration = 1500;
+    const startTime = performance.now();
+    const startDelay = 1200; // wait for slide animations
+
+    setTimeout(() => {
+      function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // ease out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        counter.textContent = Math.round(eased * target);
+        if (progress < 1) requestAnimationFrame(update);
+      }
+      requestAnimationFrame(update);
+    }, startDelay);
+  });
+}
+
+animateCounters();
+
+// Card switching
+function activateCard(type) {
+  const loginCard = document.getElementById('loginCard');
+  const registerCard = document.getElementById('registerCard');
+
+  if (type === 'login') {
+    loginCard.classList.add('active');
+    registerCard.classList.remove('active');
+  } else {
+    registerCard.classList.add('active');
+    loginCard.classList.remove('active');
+  }
+  clearErrors();
+}
+
+function togglePwd(id, btn) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隐藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '显示';
+  }
+}
+
+function validate(fields) {
+  let valid = true;
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el.value.trim()) {
+      el.classList.add('error');
+      valid = false;
+    } else {
+      el.classList.remove('error');
+    }
+  });
+  return valid;
+}
+
+function clearErrors() {
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+}
+
+function handleLogin(e) {
+  e.preventDefault();
+  if (validate(['loginUser', 'loginPwd'])) {
+    alert('登录成功!');
+  }
+  return false;
+}
+
+function handleRegister(e) {
+  e.preventDefault();
+  const pwd = document.getElementById('regPwd');
+  const confirm = document.getElementById('regPwdConfirm');
+
+  if (!validate(['regUser', 'regPwd', 'regPwdConfirm'])) return false;
+
+  if (pwd.value !== confirm.value) {
+    confirm.classList.add('error');
+    const msg = confirm.parentElement.querySelector('.error-msg');
+    msg.textContent = '两次密码不一致';
+    msg.style.display = 'block';
+    return false;
+  }
+  alert('注册成功!');
+  return false;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 登录</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #faf8f5;
+  --card: #ffffff;
+  --card-shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --primary: #2d6a4f;
+  --secondary: #c45d3e;
+  --accent: #d4a853;
+  --text: #2c2c2c;
+  --text-secondary: #7a7a7a;
+  --error: #c0392b;
+  --border: #ddd;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: Georgia, serif; }
+
+.page {
+  width: 100%; height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ===== MAIN CARD ===== */
+.auth-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(120,80,40,0.10);
+  padding: 44px 44px 36px;
+  opacity: 0;
+  transform: translateY(-40px);
+  animation: dropIn 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s forwards;
+}
+
+@keyframes dropIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Logo area */
+.logo-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.logo-circle {
+  width: 64px; height: 64px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(212,168,83,0.25);
+}
+
+.logo-name {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.logo-tagline {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  letter-spacing: 3px;
+}
+
+/* ===== PILL TABS ===== */
+.pill-tabs {
+  display: flex;
+  background: #f2efeb;
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 32px;
+}
+
+.pill-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: inherit;
+}
+
+.pill-btn.active {
+  background: var(--card);
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* ===== FORMS ===== */
+.form-container {
+  position: relative;
+  min-height: 320px;
+}
+
+.auth-form {
+  position: absolute;
+  top: 0; left: 0; width: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: translateY(10px);
+}
+
+.auth-form.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  position: relative;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: staggerIn 0.4s ease forwards;
+}
+
+.auth-form.active .form-group:nth-child(1) { animation-delay: 0.15s; }
+.auth-form.active .form-group:nth-child(2) { animation-delay: 0.25s; }
+.auth-form.active .form-group:nth-child(3) { animation-delay: 0.35s; }
+.auth-form.active .form-group:nth-child(4) { animation-delay: 0.45s; }
+.auth-form.active .form-group:nth-child(5) { animation-delay: 0.55s; }
+
+@keyframes staggerIn {
+  to { opacity: 1; }
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.input-wrap {
+  position: relative;
+}
+
+.input-wrap input, .input-wrap select {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  font-family: inherit;
+}
+
+.input-wrap input:focus, .input-wrap select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(45,106,79,0.08);
+}
+
+.input-wrap input.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(192,57,43,0.08);
+}
+
+.error-msg {
+  display: none;
+  font-size: 12px;
+  color: var(--error);
+  margin-top: 4px;
+}
+
+.input-wrap input.error ~ .error-msg { display: block; }
+
+.toggle-pwd {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 4px;
+}
+
+.toggle-pwd:hover { color: var(--primary); }
+
+.input-wrap select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 36px;
+}
+
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '\25BC';
+  position: absolute;
+  right: 14px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Remember me row */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.remember-me {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.15s;
+  font-family: inherit;
+  letter-spacing: 1px;
+}
+
+.btn:hover { filter: brightness(0.92); }
+.btn:active { transform: scale(0.98); }
+
+.btn-login { background: var(--primary); color: #fff; }
+.btn-register { background: var(--secondary); color: #fff; }
+
+.switch-text {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.switch-text a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.switch-text a:hover { text-decoration: underline; }
+
+/* ===== FEATURE BADGES ===== */
+.feature-badges {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #eee;
+}
+
+.badge {
+  padding: 6px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+/* ===== BOTTOM STATS ===== */
+.bottom-stats {
+  display: flex;
+  gap: 20px;
+  margin-top: 40px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.8s forwards;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stat-card {
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+  padding: 18px 28px;
+  text-align: center;
+  min-width: 140px;
+}
+
+.stat-card .stat-value {
+  font-family: Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.stat-card .stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Footer */
+.footer {
+  position: absolute;
+  bottom: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ===== Decorative dots ===== */
+.decor-dot {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.08;
+}
+
+.dot-1 {
+  width: 200px; height: 200px;
+  background: var(--primary);
+  top: -60px; right: -40px;
+}
+
+.dot-2 {
+  width: 120px; height: 120px;
+  background: var(--accent);
+  bottom: 60px; left: -30px;
+}
+
+.dot-3 {
+  width: 80px; height: 80px;
+  background: var(--secondary);
+  top: 40%; right: 5%;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="decor-dot dot-1"></div>
+  <div class="decor-dot dot-2"></div>
+  <div class="decor-dot dot-3"></div>
+
+  <div class="auth-card">
+    <!-- Logo -->
+    <div class="logo-area">
+      <div class="logo-circle">&#9889;</div>
+      <div class="logo-name">智能充电桩调度计费系统</div>
+      <div class="logo-tagline">智能调度 &middot; 高效充电 &middot; 透明计费</div>
+    </div>
+
+    <!-- Pill Tabs -->
+    <div class="pill-tabs">
+      <button class="pill-btn active" data-tab="login" onclick="switchTab('login')">登录</button>
+      <button class="pill-btn" data-tab="register" onclick="switchTab('register')">注册</button>
+    </div>
+
+    <!-- Forms -->
+    <div class="form-container">
+      <!-- LOGIN -->
+      <form class="auth-form active" id="loginForm" onsubmit="return handleLogin(event)">
+        <div class="form-group">
+          <label>用户名</label>
+          <div class="input-wrap">
+            <input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username">
+            <span class="error-msg">请输入用户名</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <div class="input-wrap">
+            <input type="password" id="loginPwd" placeholder="请输入密码" autocomplete="current-password">
+            <button type="button" class="toggle-pwd" onclick="togglePwd('loginPwd', this)">显示</button>
+            <span class="error-msg">请输入密码</span>
+          </div>
+        </div>
+        <div class="form-options">
+          <label class="remember-me">
+            <input type="checkbox"> 记住我
+          </label>
+        </div>
+        <button type="submit" class="btn btn-login">登 录</button>
+        <div class="switch-text">还没有账号? <a onclick="switchTab('register')">立即注册</a></div>
+      </form>
+
+      <!-- REGISTER -->
+      <form class="auth-form" id="registerForm" onsubmit="return handleRegister(event)">
+        <div class="form-group">
+          <label>用户名</label>
+          <div class="input-wrap">
+            <input type="text" id="regUser" placeholder="请输入用户名" autocomplete="username">
+            <span class="error-msg">请输入用户名</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <div class="input-wrap">
+            <input type="password" id="regPwd" placeholder="请输入密码" autocomplete="new-password">
+            <button type="button" class="toggle-pwd" onclick="togglePwd('regPwd', this)">显示</button>
+            <span class="error-msg">请输入密码</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>确认密码</label>
+          <div class="input-wrap">
+            <input type="password" id="regPwdConfirm" placeholder="请再次输入密码" autocomplete="new-password">
+            <button type="button" class="toggle-pwd" onclick="togglePwd('regPwdConfirm', this)">显示</button>
+            <span class="error-msg">请确认密码</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>角色</label>
+          <div class="input-wrap select-wrap">
+            <select id="regRole">
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-register">注 册</button>
+        <div class="switch-text">已有账号? <a onclick="switchTab('login')">返回登录</a></div>
+      </form>
+    </div>
+
+    <!-- Feature Badges -->
+    <div class="feature-badges">
+      <span class="badge">智能调度</span>
+      <span class="badge">实时监控</span>
+      <span class="badge">透明计费</span>
+    </div>
+  </div>
+
+  <!-- Bottom Stats -->
+  <div class="bottom-stats">
+    <div class="stat-card">
+      <div class="stat-value">5 台</div>
+      <div class="stat-label">充电桩</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">24/7</div>
+      <div class="stat-label">全天运行</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">30kW</div>
+      <div class="stat-label">快充功率</div>
+    </div>
+  </div>
+
+  <div class="footer">&copy; 2026 G7 Group</div>
+</div>
+
+<script>
+function switchTab(tab) {
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const btns = document.querySelectorAll('.pill-btn');
+
+  btns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+
+  if (tab === 'login') {
+    loginForm.classList.add('active');
+    registerForm.classList.remove('active');
+  } else {
+    registerForm.classList.add('active');
+    loginForm.classList.remove('active');
+  }
+  clearErrors();
+  // Re-trigger stagger animation
+  const activeForm = document.querySelector('.auth-form.active');
+  activeForm.querySelectorAll('.form-group').forEach(g => {
+    g.style.animation = 'none';
+    g.offsetHeight; // reflow
+    g.style.animation = '';
+  });
+}
+
+function togglePwd(id, btn) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隐藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '显示';
+  }
+}
+
+function validate(fields) {
+  let valid = true;
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el.value.trim()) {
+      el.classList.add('error');
+      valid = false;
+    } else {
+      el.classList.remove('error');
+    }
+  });
+  return valid;
+}
+
+function clearErrors() {
+  document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+}
+
+function handleLogin(e) {
+  e.preventDefault();
+  if (validate(['loginUser', 'loginPwd'])) {
+    alert('登录成功!');
+  }
+  return false;
+}
+
+function handleRegister(e) {
+  e.preventDefault();
+  const pwd = document.getElementById('regPwd');
+  const confirm = document.getElementById('regPwdConfirm');
+
+  if (!validate(['regUser', 'regPwd', 'regPwdConfirm'])) return false;
+
+  if (pwd.value !== confirm.value) {
+    confirm.classList.add('error');
+    const msg = confirm.parentElement.querySelector('.error-msg');
+    msg.textContent = '两次密码不一致';
+    msg.style.display = 'block';
+    return false;
+  }
+  alert('注册成功!');
+  return false;
+}
+</script>
+</body>
+</html>

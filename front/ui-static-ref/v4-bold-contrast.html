@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - Admin Dashboard</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #ffffff;
+  --primary: #000000;
+  --accent: #0055ff;
+  --red: #e63312;
+  --success: #00875a;
+  --warning: #f59e0b;
+  --gray-light: #f8f8f8;
+  --gray-mid: #999999;
+  --gray-text: #666666;
+  --border: 2px solid #000000;
+  --border-thick: 3px solid #000000;
+  --mono: "SF Mono", "Consolas", "Liberation Mono", "Courier New", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === HEADER === */
+.header {
+  background: var(--primary);
+  color: #fff;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+.header-right span { white-space: nowrap; }
+.notif-count {
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 7px;
+  font-weight: 700;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* === NAV === */
+.nav {
+  background: var(--bg);
+  border-bottom: var(--border-thick);
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  gap: 0;
+  position: sticky;
+  top: 56px;
+  z-index: 99;
+}
+.nav-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid var(--primary);
+  border-bottom: none;
+  background: var(--bg);
+  color: var(--primary);
+  margin-bottom: -3px;
+  user-select: none;
+  transition: none;
+}
+.nav-tab:first-child { margin-left: 0; }
+.nav-tab.active {
+  background: var(--primary);
+  color: #fff;
+}
+.nav-tab:hover:not(.active) {
+  background: var(--gray-light);
+}
+
+/* === MAIN === */
+.main {
+  flex: 1;
+  padding: 0;
+}
+
+/* === METRICS BAR === */
+.metrics-bar {
+  display: flex;
+  border-bottom: var(--border-thick);
+  border-top: var(--border-thick);
+}
+.metric-cell {
+  flex: 1;
+  text-align: center;
+  padding: 18px 12px 14px;
+  border-right: var(--border);
+  cursor: default;
+  transition: none;
+}
+.metric-cell:last-child { border-right: none; }
+.metric-cell:hover {
+  background: var(--primary);
+  color: #fff;
+}
+.metric-cell:hover .metric-label { color: #ccc; }
+.metric-cell:hover .metric-trend { color: #fff; }
+.metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--gray-mid);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.metric-value {
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+  font-family: var(--sans);
+}
+.metric-trend {
+  font-size: 14px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.trend-up { color: var(--accent); }
+.trend-down { color: var(--red); }
+
+/* === GRID === */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  padding: 0;
+}
+
+/* === CARDS === */
+.card {
+  border: var(--border);
+  border-top: none;
+  opacity: 0;
+  transform: translateY(20px);
+}
+.card.visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.15s linear, transform 0.15s linear;
+}
+.card-header {
+  padding: 14px 20px 10px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header-line {
+  width: 40px;
+  height: 3px;
+  background: var(--accent);
+  margin-top: 4px;
+}
+
+/* === TABLE === */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table thead th {
+  background: var(--primary);
+  color: #fff;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.data-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  cursor: default;
+}
+.data-table tbody tr:nth-child(even) { background: var(--gray-light); }
+.data-table tbody tr:hover {
+  border-left: 4px solid var(--accent);
+}
+.data-table td {
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-charging { color: var(--accent); font-weight: 700; }
+.status-idle { color: var(--gray-mid); }
+.status-fault { color: var(--red); font-weight: 900; }
+.status-leaving { color: var(--warning); font-weight: 700; }
+
+/* Progress bar */
+.progress-track {
+  width: 100%;
+  height: 4px;
+  background: #e0e0e0;
+  position: relative;
+  min-width: 80px;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0;
+  transition: width 1.2s linear;
+}
+
+/* === QUEUE === */
+.queue-section {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #e0e0e0;
+}
+.queue-header {
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+.queue-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.queue-col-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e0e0e0;
+}
+.queue-item {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 0;
+  color: var(--gray-text);
+}
+.queue-item span { color: var(--primary); font-weight: 600; }
+
+/* === EVENTS === */
+.events-card {
+  border-left: none;
+}
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--red);
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.live-badge {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--red);
+  letter-spacing: 1px;
+}
+
+.event-log {
+  padding: 8px 16px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.9;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.event-line {
+  white-space: nowrap;
+  overflow: hidden;
+}
+.event-line.typing {
+  animation: typeIn 0.3s linear forwards;
+}
+@keyframes typeIn {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 600px; opacity: 1; }
+}
+.event-time { color: var(--gray-mid); }
+.event-type-call { color: var(--accent); font-weight: 700; }
+.event-type-done { color: var(--success); font-weight: 700; }
+.event-type-fault { color: var(--red); font-weight: 700; }
+.event-type-req { color: var(--primary); font-weight: 700; }
+.event-type-leave { color: var(--warning); font-weight: 700; }
+.event-type-charge { color: var(--accent); font-weight: 700; }
+.event-type-confirm { color: var(--success); font-weight: 700; }
+
+/* === BOTTOM STRIP === */
+.bottom-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: var(--border-thick);
+}
+.bottom-card {
+  padding: 16px 24px 20px;
+  border: var(--border);
+  border-top: none;
+}
+.bottom-card:first-child { border-right: none; }
+.bottom-card-title {
+  font-weight: 900;
+  font-size: 14px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+/* Horizontal bars */
+.bar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.bar-label {
+  width: 36px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.bar-count {
+  width: 28px;
+  text-align: right;
+  font-weight: 900;
+  font-family: var(--mono);
+  margin-right: 8px;
+}
+.bar-track {
+  flex: 1;
+  height: 6px;
+  background: #eee;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0;
+  transition: width 0.8s linear;
+}
+
+/* Key metrics grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border: var(--border);
+}
+.kpi-cell {
+  padding: 12px 16px;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  cursor: default;
+  transition: none;
+}
+.kpi-cell:nth-child(3n) { border-right: none; }
+.kpi-cell:nth-child(n+4) { border-bottom: none; }
+.kpi-cell:hover {
+  background: var(--primary);
+  color: #fff;
+}
+.kpi-cell:hover .kpi-label { color: #ccc; }
+.kpi-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--gray-mid);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: 900;
+  font-family: var(--mono);
+}
+
+/* === FOOTER === */
+.footer {
+  border-top: 1px solid var(--primary);
+  text-align: center;
+  padding: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--gray-mid);
+}
+
+/* scrollbar */
+.event-log::-webkit-scrollbar { width: 4px; }
+.event-log::-webkit-scrollbar-track { background: #eee; }
+.event-log::-webkit-scrollbar-thumb { background: #000; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-title">智能充电桩调度计费系统</div>
+  <div class="header-right">
+    <span>ADMIN 张三</span>
+    <span id="live-time">--:--:--</span>
+    <span>通知 <span class="notif-count">3</span></span>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-tab active" data-tab="0">&#9632; 系统概览</div>
+  <div class="nav-tab" data-tab="1">充电桩监控</div>
+  <div class="nav-tab" data-tab="2">请求管理</div>
+  <div class="nav-tab" data-tab="3">用户管理</div>
+  <div class="nav-tab" data-tab="4">系统配置</div>
+  <div class="nav-tab" data-tab="5">事件日志</div>
+  <div class="nav-tab" data-tab="6">统计报表</div>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- METRICS BAR -->
+  <div class="metrics-bar">
+    <div class="metric-cell">
+      <div class="metric-label">充电桩总数</div>
+      <div><span class="metric-value" data-target="5">0</span></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">在线运行</div>
+      <div><span class="metric-value" data-target="4">0</span><span class="metric-trend trend-up">&#9650;</span></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">当前充电</div>
+      <div><span class="metric-value" data-target="3">0</span></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">等待队列</div>
+      <div><span class="metric-value" data-target="7">0</span><span class="metric-trend trend-down">&#9660;</span></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric-label">平均等待</div>
+      <div><span class="metric-value" data-target-text="12:32">--:--</span><span class="metric-trend trend-down">&#9660;</span></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD GRID -->
+  <div class="dashboard-grid">
+
+    <!-- LEFT: CHARGING STATUS -->
+    <div class="card" id="card-status">
+      <div class="card-header">
+        <div>
+          充电桩实时状态
+          <div class="card-header-line"></div>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>桩编号</th>
+            <th>类型</th>
+            <th>功率</th>
+            <th>状态</th>
+            <th>当前用户</th>
+            <th>进度</th>
+            <th>预计完成</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FAST_01</td>
+            <td>快充</td>
+            <td>120kW</td>
+            <td class="status-charging">充电中</td>
+            <td>user_003</td>
+            <td><div class="progress-track"><div class="progress-fill" data-width="72"></div></div></td>
+            <td>14:35</td>
+          </tr>
+          <tr>
+            <td>FAST_02</td>
+            <td>快充</td>
+            <td>120kW</td>
+            <td class="status-leaving">等待离场</td>
+            <td>user_007</td>
+            <td><div class="progress-track"><div class="progress-fill" data-width="100"></div></div></td>
+            <td>--</td>
+          </tr>
+          <tr>
+            <td>SLOW_01</td>
+            <td>慢充</td>
+            <td>7kW</td>
+            <td class="status-charging">充电中</td>
+            <td>user_001</td>
+            <td><div class="progress-track"><div class="progress-fill" data-width="45"></div></div></td>
+            <td>16:20</td>
+          </tr>
+          <tr>
+            <td>SLOW_02</td>
+            <td>慢充</td>
+            <td>7kW</td>
+            <td class="status-charging">充电中</td>
+            <td>user_006</td>
+            <td><div class="progress-track"><div class="progress-fill" data-width="88"></div></div></td>
+            <td>14:50</td>
+          </tr>
+          <tr>
+            <td>SLOW_03</td>
+            <td>慢充</td>
+            <td>7kW</td>
+            <td class="status-fault">故障</td>
+            <td>--</td>
+            <td><div class="progress-track"><div class="progress-fill" data-width="0"></div></div></td>
+            <td>--</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Queue -->
+      <div class="queue-section">
+        <div class="queue-header">队列统计</div>
+        <div class="queue-grid">
+          <div>
+            <div class="queue-col-title">快充队列: 3人</div>
+            <div class="queue-item"><span>user_005</span> &middot; 25kWh &middot; 等待 08:12</div>
+            <div class="queue-item"><span>user_012</span> &middot; 25kWh &middot; 等待 03:45</div>
+            <div class="queue-item"><span>user_009</span> &middot; 30kWh &middot; 等待 06:18</div>
+          </div>
+          <div>
+            <div class="queue-col-title">慢充队列: 4人</div>
+            <div class="queue-item"><span>user_004</span> &middot; 20kWh &middot; 等待 12:32</div>
+            <div class="queue-item"><span>user_008</span> &middot; 15kWh &middot; 等待 10:05</div>
+            <div class="queue-item"><span>user_011</span> &middot; 15kWh &middot; 等待 05:42</div>
+            <div class="queue-item"><span>user_010</span> &middot; 10kWh &middot; 等待 02:18</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: EVENTS -->
+    <div class="card events-card" id="card-events">
+      <div class="card-header">
+        <div>
+          实时事件
+          <div class="card-header-line" style="background:var(--red)"></div>
+        </div>
+        <div><span class="live-dot"></span><span class="live-badge">LIVE</span></div>
+      </div>
+      <div class="event-log" id="event-log">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM STRIP -->
+  <div class="bottom-strip">
+    <div class="bottom-card">
+      <div class="bottom-card-title">今日数据</div>
+      <div class="bar-row">
+        <span class="bar-label">完成</span>
+        <span class="bar-count">23</span>
+        <div class="bar-track"><div class="bar-fill" data-width="92"></div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">取消</span>
+        <span class="bar-count">4</span>
+        <div class="bar-track"><div class="bar-fill" data-width="16"></div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">超时</span>
+        <span class="bar-count">2</span>
+        <div class="bar-track"><div class="bar-fill" data-width="8"></div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">中断</span>
+        <span class="bar-count">1</span>
+        <div class="bar-track"><div class="bar-fill" data-width="4"></div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">故障</span>
+        <span class="bar-count">1</span>
+        <div class="bar-track"><div class="bar-fill" data-width="4"></div></div>
+      </div>
+    </div>
+    <div class="bottom-card">
+      <div class="bottom-card-title">关键指标</div>
+      <div class="kpi-grid">
+        <div class="kpi-cell">
+          <div class="kpi-label">桩利用率</div>
+          <div class="kpi-value">76.4%</div>
+        </div>
+        <div class="kpi-cell">
+          <div class="kpi-label">平均等待</div>
+          <div class="kpi-value">12:32</div>
+        </div>
+        <div class="kpi-cell">
+          <div class="kpi-label">最长等待</div>
+          <div class="kpi-value">22:05</div>
+        </div>
+        <div class="kpi-cell">
+          <div class="kpi-label">平均完成</div>
+          <div class="kpi-value">45:18</div>
+        </div>
+        <div class="kpi-cell">
+          <div class="kpi-label">今日吞吐</div>
+          <div class="kpi-value">4.6/h</div>
+        </div>
+        <div class="kpi-cell">
+          <div class="kpi-label">今日收入</div>
+          <div class="kpi-value">&yen;1,247</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- FOOTER -->
+<footer class="footer">&copy; 2026 G7 GROUP</footer>
+
+<script>
+(function() {
+  // === LIVE CLOCK ===
+  function updateClock() {
+    var d = new Date();
+    var h = String(d.getHours()).padStart(2, '0');
+    var m = String(d.getMinutes()).padStart(2, '0');
+    var s = String(d.getSeconds()).padStart(2, '0');
+    document.getElementById('live-time').textContent = h + ':' + m + ':' + s;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // === TAB SWITCHING ===
+  var tabs = document.querySelectorAll('.nav-tab');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+    });
+  });
+
+  // === COUNTER ANIMATION ===
+  var metricEls = document.querySelectorAll('.metric-value');
+  metricEls.forEach(function(el) {
+    var target = el.getAttribute('data-target');
+    var targetText = el.getAttribute('data-target-text');
+    if (target) {
+      var end = parseInt(target, 10);
+      var current = 0;
+      var step = Math.max(1, Math.floor(end / 15));
+      var iv = setInterval(function() {
+        current += step;
+        if (current >= end) { current = end; clearInterval(iv); }
+        el.textContent = current;
+      }, 60);
+    } else if (targetText) {
+      // Typewriter for time value
+      var chars = targetText.split('');
+      var idx = 0;
+      el.textContent = '';
+      var iv2 = setInterval(function() {
+        el.textContent += chars[idx];
+        idx++;
+        if (idx >= chars.length) clearInterval(iv2);
+      }, 80);
+    }
+  });
+
+  // === PROGRESS BARS ===
+  setTimeout(function() {
+    document.querySelectorAll('.progress-fill').forEach(function(bar) {
+      bar.style.width = bar.getAttribute('data-width') + '%';
+    });
+  }, 300);
+
+  // === HORIZONTAL BARS ===
+  setTimeout(function() {
+    document.querySelectorAll('.bar-fill').forEach(function(bar) {
+      bar.style.width = bar.getAttribute('data-width') + '%';
+    });
+  }, 500);
+
+  // === CARD SLIDE-UP ===
+  setTimeout(function() {
+    document.querySelectorAll('.card').forEach(function(card, i) {
+      setTimeout(function() { card.classList.add('visible'); }, i * 100);
+    });
+  }, 100);
+
+  // === EVENTS ===
+  var events = [
+    { time: '14:23:15', type: 'call',    cls: 'event-type-call',    label: '叫号', detail: 'user_005 等待确认' },
+    { time: '14:21:08', type: 'done',    cls: 'event-type-done',    label: '完成', detail: 'FAST_01 user_003' },
+    { time: '14:18:45', type: 'fault',   cls: 'event-type-fault',   label: '故障', detail: 'SLOW_03 已暂停' },
+    { time: '14:15:22', type: 'req',     cls: 'event-type-req',     label: '请求', detail: 'user_012 快充25kWh' },
+    { time: '14:12:33', type: 'leave',   cls: 'event-type-leave',   label: '离场', detail: 'FAST_02 user_007' },
+    { time: '14:10:18', type: 'charge',  cls: 'event-type-charge',  label: '充电', detail: 'FAST_02 \u2192 user_007' },
+    { time: '14:08:05', type: 'req',     cls: 'event-type-req',     label: '请求', detail: 'user_009 快充30kWh' },
+    { time: '14:05:42', type: 'done',    cls: 'event-type-done',    label: '完成', detail: 'SLOW_02 user_006' },
+    { time: '14:03:15', type: 'confirm', cls: 'event-type-confirm', label: '确认', detail: 'user_004 已到场' },
+    { time: '14:01:08', type: 'call',    cls: 'event-type-call',    label: '叫号', detail: 'user_004 等待确认' },
+    { time: '13:58:22', type: 'req',     cls: 'event-type-req',     label: '请求', detail: 'user_011 慢充15kWh' },
+    { time: '13:55:30', type: 'charge',  cls: 'event-type-charge',  label: '充电', detail: 'SLOW_02 \u2192 user_006' }
+  ];
+
+  var logEl = document.getElementById('event-log');
+
+  // Render initial events
+  events.forEach(function(ev) {
+    var line = document.createElement('div');
+    line.className = 'event-line';
+    line.innerHTML = '<span class="event-time">' + ev.time + '</span> ' +
+      '<span class="' + ev.cls + '">' + ev.label + '</span>   ' +
+      ev.detail;
+    logEl.appendChild(line);
+  });
+
+  // Cycle new events (terminal effect)
+  var cycleIdx = 0;
+  var newEvents = [
+    { time: null, type: 'req',     cls: 'event-type-req',     label: '请求', detail: 'user_013 慢充20kWh' },
+    { time: null, type: 'done',    cls: 'event-type-done',    label: '完成', detail: 'SLOW_01 user_001' },
+    { time: null, type: 'charge',  cls: 'event-type-charge',  label: '充电', detail: 'SLOW_01 \u2192 user_004' },
+    { time: null, type: 'call',    cls: 'event-type-call',    label: '叫号', detail: 'user_008 等待确认' },
+    { time: null, type: 'confirm', cls: 'event-type-confirm', label: '确认', detail: 'user_005 已到场' },
+    { time: null, type: 'leave',   cls: 'event-type-leave',   label: '离场', detail: 'FAST_01 user_003' }
+  ];
+
+  setInterval(function() {
+    var ev = newEvents[cycleIdx % newEvents.length];
+    var now = new Date();
+    var ts = String(now.getHours()).padStart(2,'0') + ':' +
+             String(now.getMinutes()).padStart(2,'0') + ':' +
+             String(now.getSeconds()).padStart(2,'0');
+    var line = document.createElement('div');
+    line.className = 'event-line typing';
+    line.innerHTML = '<span class="event-time">' + ts + '</span> ' +
+      '<span class="' + ev.cls + '">' + ev.label + '</span>   ' +
+      ev.detail;
+    logEl.insertBefore(line, logEl.firstChild);
+    // Remove old lines to keep it manageable
+    while (logEl.children.length > 20) {
+      logEl.removeChild(logEl.lastChild);
+    }
+    cycleIdx++;
+  }, 4000);
+
+})();
+</script>
+
+</body>
+</html>

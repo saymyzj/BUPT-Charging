@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>记录中心 - 智能充电桩调度计费系统 (Tabbed View)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#faf8f5;--card:#ffffff;--shadow:0 4px 12px rgba(120,80,40,0.08);
+  --primary:#2d6a4f;--secondary:#c45d3e;--accent:#d4a853;
+  --text:#2c2c2c;--text2:#7a7a7a;--border:#e8e2d9;
+  --nav-bg:#f5f0e8;--row-alt:#faf8f5;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+h1,h2,h3,h4{font-family:Georgia,serif;}
+
+/* NAV */
+.top-nav{background:var(--nav-bg);border-bottom:3px solid var(--accent);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;position:sticky;top:0;z-index:100;}
+.nav-brand{font-family:Georgia,serif;font-size:16px;font-weight:700;color:var(--primary);white-space:nowrap;}
+.nav-tabs{display:flex;gap:4px;}
+.nav-tab{padding:8px 18px;border-radius:8px 8px 0 0;cursor:pointer;font-size:14px;color:var(--text2);transition:all .2s;border:none;background:transparent;}
+.nav-tab:hover{color:var(--text);background:rgba(45,106,79,0.06);}
+.nav-tab.active{color:var(--primary);background:var(--card);font-weight:600;box-shadow:0 -2px 0 var(--primary) inset;}
+.nav-right{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--text2);}
+.nav-alert{position:relative;cursor:pointer;padding:4px 10px;border-radius:6px;background:rgba(196,93,62,0.1);color:var(--secondary);font-weight:600;}
+
+/* STATS STRIP */
+.stats-strip{display:flex;gap:16px;padding:20px 24px;background:var(--card);border-bottom:1px solid var(--border);}
+.stat-item{flex:1;display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;background:var(--bg);}
+.stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.stat-icon.req{background:rgba(45,106,79,0.1);color:var(--primary);}
+.stat-icon.done{background:rgba(45,106,79,0.15);color:var(--primary);}
+.stat-icon.err{background:rgba(196,93,62,0.1);color:var(--secondary);}
+.stat-icon.rev{background:rgba(212,168,83,0.15);color:#b8942e;}
+.stat-icon.time{background:rgba(45,106,79,0.08);color:var(--primary);}
+.stat-val{font-size:20px;font-weight:700;font-family:Georgia,serif;}
+.stat-label{font-size:12px;color:var(--text2);}
+.stat-sub{font-size:11px;color:var(--text2);}
+
+/* CONTENT TABS */
+.content-wrap{padding:0 24px 24px;}
+.tab-bar{display:flex;gap:0;margin-top:20px;border-bottom:2px solid var(--border);}
+.tab-btn{padding:12px 28px;font-size:15px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text2);position:relative;transition:color .2s;}
+.tab-btn.active{color:var(--primary);}
+.tab-btn.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:3px;background:var(--primary);border-radius:2px 2px 0 0;}
+.tab-btn:hover{color:var(--primary);}
+
+.tab-panel{display:none;animation:fadeSlide .3s ease;}
+.tab-panel.active{display:block;}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* FILTER BAR */
+.filter-bar{display:flex;align-items:center;gap:12px;padding:16px 0;flex-wrap:wrap;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+.filter-label{font-size:13px;color:var(--text2);white-space:nowrap;}
+.pill{padding:5px 14px;border-radius:16px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text2);transition:all .2s;}
+.pill.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.pill:hover:not(.active){border-color:var(--accent);color:var(--text);}
+.filter-select{padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--card);color:var(--text);cursor:pointer;}
+.filter-search{padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;width:200px;background:var(--card);}
+.filter-search:focus{outline:none;border-color:var(--primary);}
+
+/* TABLE */
+.data-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);margin-top:8px;}
+.data-table th{background:var(--bg);padding:12px 14px;font-size:13px;font-weight:600;color:var(--text2);text-align:left;border-bottom:2px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;}
+.data-table th:hover{color:var(--primary);}
+.data-table th .sort-icon{font-size:10px;margin-left:4px;opacity:0.4;}
+.data-table th.sorted .sort-icon{opacity:1;color:var(--primary);}
+.data-table td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.data-table tr:nth-child(even) td{background:var(--row-alt);}
+.data-table tr{transition:background .15s;}
+.data-table tbody tr:hover td{background:rgba(45,106,79,0.04);}
+.data-table tr.fade-in{animation:rowFade .3s ease backwards;}
+@keyframes rowFade{from{opacity:0;transform:translateX(-10px);}to{opacity:1;transform:translateX(0);}}
+
+/* STATUS BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;}
+.badge-waiting{background:rgba(120,120,120,0.1);color:#888;}
+.badge-called{background:rgba(212,168,83,0.15);color:#b8942e;}
+.badge-charging{background:rgba(45,106,79,0.12);color:var(--primary);}
+.badge-leaving{background:rgba(212,168,83,0.15);color:#b8942e;}
+.badge-done{background:rgba(45,106,79,0.12);color:var(--primary);}
+.badge-paid{background:rgba(45,106,79,0.15);color:var(--primary);}
+.badge-cancelled{background:rgba(196,93,62,0.1);color:var(--secondary);}
+.badge-interrupted{background:rgba(196,93,62,0.1);color:var(--secondary);}
+.badge-noshow{background:rgba(196,93,62,0.1);color:var(--secondary);}
+
+.charging-dot{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+.mode-badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;}
+.mode-fast{background:rgba(196,93,62,0.1);color:var(--secondary);}
+.mode-slow{background:rgba(45,106,79,0.1);color:var(--primary);}
+
+.btn-view{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);font-size:12px;cursor:pointer;color:var(--primary);font-weight:500;transition:all .2s;}
+.btn-view:hover{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+/* PAGINATION */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:14px 0;font-size:13px;color:var(--text2);}
+.page-btns{display:flex;gap:4px;}
+.page-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.page-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.page-btn:hover:not(.active){border-color:var(--accent);}
+.page-nav{padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;transition:all .15s;}
+.page-nav:hover{border-color:var(--primary);color:var(--primary);}
+
+/* EVENT LOG TAB */
+.event-filter{display:flex;gap:8px;padding:16px 0;flex-wrap:wrap;}
+.ev-check{display:flex;align-items:center;gap:4px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;cursor:pointer;transition:all .2s;background:var(--card);}
+.ev-check.active{border-color:var(--primary);background:rgba(45,106,79,0.06);}
+.ev-check input{display:none;}
+
+.event-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);}
+.event-table th{background:var(--bg);padding:10px 14px;font-size:13px;font-weight:600;color:var(--text2);text-align:left;border-bottom:2px solid var(--border);}
+.event-table td{padding:9px 14px;font-size:13px;border-bottom:1px solid var(--border);}
+.event-table tr:nth-child(even) td{background:var(--row-alt);}
+.event-table tbody tr:hover td{background:rgba(45,106,79,0.04);}
+
+.ev-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;min-width:56px;text-align:center;}
+.ev-SCHEDULE{background:rgba(45,106,79,0.12);color:var(--primary);}
+.ev-CHARGE{background:rgba(45,106,79,0.12);color:var(--primary);}
+.ev-REQUEST{background:rgba(45,106,79,0.18);color:#1b4332;}
+.ev-FAULT{background:rgba(196,93,62,0.12);color:var(--secondary);}
+.ev-CANCEL{background:rgba(196,93,62,0.12);color:var(--secondary);}
+.ev-NO_SHOW{background:rgba(196,93,62,0.12);color:var(--secondary);}
+.ev-CONFIRM{background:rgba(212,168,83,0.18);color:#9e8530;}
+.ev-SESSION{background:rgba(212,168,83,0.15);color:#9e8530;}
+.ev-BILLING{background:rgba(212,168,83,0.15);color:#9e8530;}
+.ev-PAYMENT{background:rgba(45,106,79,0.12);color:var(--primary);}
+.ev-INTERRUPT{background:rgba(196,93,62,0.12);color:var(--secondary);}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);z-index:200;justify-content:flex-end;animation:fadeIn .2s;}
+.modal-overlay.show{display:flex;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.modal-panel{width:580px;height:100%;background:var(--card);box-shadow:-8px 0 30px rgba(0,0,0,0.12);overflow-y:auto;animation:slideIn .3s ease;}
+@keyframes slideIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1;}
+.modal-header h3{font-size:18px;color:var(--primary);}
+.modal-close{width:36px;height:36px;border-radius:10px;border:none;background:var(--bg);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .2s;}
+.modal-close:hover{background:rgba(196,93,62,0.1);color:var(--secondary);}
+.modal-body{padding:24px;}
+.detail-section{margin-bottom:20px;}
+.detail-section h4{font-size:14px;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.detail-item{display:flex;flex-direction:column;padding:8px 12px;background:var(--bg);border-radius:8px;}
+.detail-item .label{font-size:11px;color:var(--text2);}
+.detail-item .value{font-size:14px;font-weight:600;margin-top:2px;}
+.detail-item.full{grid-column:1/-1;}
+
+.timeline-bar{display:flex;align-items:center;gap:0;margin:16px 0;position:relative;}
+.tl-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;z-index:1;}
+.tl-dot{width:20px;height:20px;border-radius:50%;border:3px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:9px;}
+.tl-dot.done{background:var(--primary);border-color:var(--primary);color:#fff;}
+.tl-dot.current{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tl-dot.err{background:var(--secondary);border-color:var(--secondary);color:#fff;}
+.tl-label{font-size:10px;color:var(--text2);margin-top:4px;text-align:center;}
+.tl-line{position:absolute;top:10px;left:0;right:0;height:2px;background:var(--border);z-index:0;}
+
+.bill-table{width:100%;border-collapse:collapse;font-size:13px;}
+.bill-table th{text-align:left;padding:8px 10px;background:var(--bg);font-weight:600;color:var(--text2);font-size:12px;}
+.bill-table td{padding:8px 10px;border-bottom:1px solid var(--border);}
+.bill-table .total td{font-weight:700;font-size:15px;border-top:2px solid var(--primary);color:var(--primary);}
+
+.payment-status{display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:10px;margin-top:12px;}
+.payment-status.paid{background:rgba(45,106,79,0.08);}
+.payment-status.unpaid{background:rgba(212,168,83,0.1);}
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统 &middot; 管理端</div>
+  <div class="nav-tabs">
+    <div class="nav-tab">运营总览</div>
+    <div class="nav-tab active">记录中心</div>
+    <div class="nav-tab">系统配置</div>
+    <div class="nav-tab">统计分析</div>
+    <div class="nav-tab">用户管理</div>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">&#128276; 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="liveClock">--:--:--</span>
+  </div>
+</nav>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-item"><div class="stat-icon req">&#128203;</div><div><div class="stat-val">31<span style="font-size:13px;font-weight:400;color:var(--text2)">笔</span></div><div class="stat-label">今日请求</div></div></div>
+  <div class="stat-item"><div class="stat-icon done">&#10003;</div><div><div class="stat-val">23<span style="font-size:13px;font-weight:400;color:var(--text2)">笔</span></div><div class="stat-label">已完成</div><div class="stat-sub">74.2%</div></div></div>
+  <div class="stat-item"><div class="stat-icon err">&#9888;</div><div><div class="stat-val">8<span style="font-size:13px;font-weight:400;color:var(--text2)">笔</span></div><div class="stat-label">异常</div><div class="stat-sub">25.8%</div></div></div>
+  <div class="stat-item"><div class="stat-icon rev">&#65509;</div><div><div class="stat-val">1,247.50</div><div class="stat-label">今日收入(元)</div></div></div>
+  <div class="stat-item"><div class="stat-icon time">&#9202;</div><div><div class="stat-val">45<span style="font-size:13px;font-weight:400;color:var(--text2)">分</span>18<span style="font-size:13px;font-weight:400;color:var(--text2)">秒</span></div><div class="stat-label">平均处理时间</div></div></div>
+</div>
+
+<!-- CONTENT -->
+<div class="content-wrap">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('requests')">请求记录</button>
+    <button class="tab-btn" onclick="switchTab('events')">事件日志</button>
+  </div>
+
+  <!-- TAB 1: REQUESTS -->
+  <div id="tab-requests" class="tab-panel active">
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">时间范围:</span>
+        <span class="pill active" onclick="togglePill(this,'time')">今天</span>
+        <span class="pill" onclick="togglePill(this,'time')">近7天</span>
+        <span class="pill" onclick="togglePill(this,'time')">近30天</span>
+        <span class="pill" onclick="togglePill(this,'time')">自定义</span>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">充电模式:</span>
+        <span class="pill active" onclick="togglePill(this,'mode')">全部</span>
+        <span class="pill" onclick="togglePill(this,'mode')">快充</span>
+        <span class="pill" onclick="togglePill(this,'mode')">慢充</span>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">状态:</span>
+        <select class="filter-select"><option>全部</option><option>进行中</option><option>已完成</option><option>异常</option></select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">充电桩:</span>
+        <select class="filter-select"><option>全部</option><option>FAST_01</option><option>FAST_02</option><option>SLOW_01</option><option>SLOW_02</option><option>SLOW_03</option></select>
+      </div>
+      <input class="filter-search" type="text" placeholder="&#128269; 搜索用户/请求编号">
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th onclick="sortCol(this,0)">请求编号 <span class="sort-icon">&#9650;&#9660;</span></th>
+          <th onclick="sortCol(this,1)">用户 <span class="sort-icon">&#9650;&#9660;</span></th>
+          <th>充电模式</th>
+          <th onclick="sortCol(this,3)">需求电量 <span class="sort-icon">&#9650;&#9660;</span></th>
+          <th>实际电量</th>
+          <th onclick="sortCol(this,5)">请求时间 <span class="sort-icon">&#9650;&#9660;</span></th>
+          <th>状态</th>
+          <th>充电桩</th>
+          <th onclick="sortCol(this,8)">费用 <span class="sort-icon">&#9650;&#9660;</span></th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="reqTableBody"></tbody>
+    </table>
+
+    <div class="pagination">
+      <span>显示 1-15 共 31 条</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="page-nav">上一页</button>
+        <div class="page-btns">
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+        </div>
+        <button class="page-nav">下一页</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: EVENTS -->
+  <div id="tab-events" class="tab-panel">
+    <div class="event-filter" id="evFilterBar"></div>
+    <table class="event-table">
+      <thead><tr><th style="width:100px">时间</th><th style="width:90px">类型</th><th>描述</th><th style="width:100px">关联请求</th><th style="width:90px">关联充电桩</th></tr></thead>
+      <tbody id="evTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3 id="modalTitle">请求详情</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// Live clock
+function updateClock(){
+  const now=new Date();
+  document.getElementById('liveClock').textContent=now.toLocaleTimeString('zh-CN',{hour12:false});
+}
+setInterval(updateClock,1000);updateClock();
+
+// Tab switch
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{b.classList.toggle('active',i===(tab==='requests'?0:1));});
+  document.getElementById('tab-requests').classList.toggle('active',tab==='requests');
+  document.getElementById('tab-events').classList.toggle('active',tab==='events');
+}
+
+// Pill toggle
+function togglePill(el,group){
+  el.parentElement.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Sort visual
+function sortCol(th,col){
+  document.querySelectorAll('.data-table th').forEach(t=>t.classList.remove('sorted'));
+  th.classList.add('sorted');
+}
+
+// Request data
+const requests=[
+  {id:'REQ-0031',user:'user_012',mode:'快充',need:'25kWh',actual:'-',time:'14:15',status:'等待中',pile:'-',fee:'-'},
+  {id:'REQ-0030',user:'user_009',mode:'快充',need:'30kWh',actual:'-',time:'14:08',status:'等待中',pile:'-',fee:'-'},
+  {id:'REQ-0029',user:'user_005',mode:'快充',need:'25kWh',actual:'-',time:'13:55',status:'已叫号',pile:'FAST_01',fee:'-'},
+  {id:'REQ-0028',user:'user_003',mode:'快充',need:'30kWh',actual:'23.4kWh',time:'13:20',status:'充电中',pile:'FAST_01',fee:'¥35.10'},
+  {id:'REQ-0027',user:'user_007',mode:'快充',need:'30kWh',actual:'30kWh',time:'12:45',status:'等待离场',pile:'FAST_02',fee:'¥45.00'},
+  {id:'REQ-0026',user:'user_001',mode:'慢充',need:'15kWh',actual:'6.75kWh',time:'12:30',status:'充电中',pile:'SLOW_01',fee:'¥10.13'},
+  {id:'REQ-0025',user:'user_006',mode:'慢充',need:'20kWh',actual:'20kWh',time:'11:00',status:'已完成',pile:'SLOW_02',fee:'¥30.00'},
+  {id:'REQ-0024',user:'user_004',mode:'快充',need:'25kWh',actual:'25kWh',time:'10:30',status:'已完成',pile:'FAST_01',fee:'¥37.50'},
+  {id:'REQ-0023',user:'user_002',mode:'慢充',need:'10kWh',actual:'10kWh',time:'10:00',status:'已支付',pile:'SLOW_01',fee:'¥15.00'},
+  {id:'REQ-0022',user:'user_011',mode:'慢充',need:'15kWh',actual:'-',time:'09:45',status:'已取消',pile:'-',fee:'-'},
+  {id:'REQ-0021',user:'user_008',mode:'快充',need:'30kWh',actual:'18.5kWh',time:'09:30',status:'已中断',pile:'FAST_02',fee:'¥27.75'},
+  {id:'REQ-0020',user:'user_010',mode:'慢充',need:'20kWh',actual:'-',time:'09:15',status:'未到场',pile:'SLOW_03',fee:'-'},
+  {id:'REQ-0019',user:'user_014',mode:'快充',need:'25kWh',actual:'25kWh',time:'08:45',status:'已支付',pile:'FAST_01',fee:'¥37.50'},
+  {id:'REQ-0018',user:'user_015',mode:'慢充',need:'12kWh',actual:'12kWh',time:'08:20',status:'已支付',pile:'SLOW_02',fee:'¥18.00'},
+  {id:'REQ-0017',user:'user_016',mode:'快充',need:'20kWh',actual:'20kWh',time:'08:00',status:'已支付',pile:'FAST_02',fee:'¥30.00'},
+];
+
+const statusMap={
+  '等待中':'waiting','已叫号':'called','充电中':'charging','等待离场':'leaving',
+  '已完成':'done','已支付':'paid','已取消':'cancelled','已中断':'interrupted','未到场':'noshow'
+};
+
+function statusBadge(s){
+  const cls=statusMap[s]||'waiting';
+  let dot=s==='充电中'?'<span class="charging-dot"></span>':'';
+  let check=s==='已支付'?'&#10003; ':'';
+  return `<span class="badge badge-${cls}">${dot}${check}${s}</span>`;
+}
+function modeBadge(m){
+  return `<span class="mode-badge ${m==='快充'?'mode-fast':'mode-slow'}">${m}</span>`;
+}
+
+function renderTable(){
+  const tbody=document.getElementById('reqTableBody');
+  tbody.innerHTML=requests.map((r,i)=>`<tr class="fade-in" style="animation-delay:${i*30}ms">
+    <td style="font-weight:600;color:var(--primary)">${r.id}</td>
+    <td>${r.user}</td>
+    <td>${modeBadge(r.mode)}</td>
+    <td>${r.need}</td>
+    <td>${r.actual}</td>
+    <td>${r.time}</td>
+    <td>${statusBadge(r.status)}</td>
+    <td style="font-family:monospace;font-size:12px">${r.pile}</td>
+    <td style="font-weight:${r.fee!=='-'?600:400}">${r.fee}</td>
+    <td><button class="btn-view" onclick="openModal('${r.id}')">查看</button></td>
+  </tr>`).join('');
+}
+renderTable();
+
+// Events data
+const events=[
+  {time:'14:23:15',type:'SCHEDULE',desc:'调度引擎: 叫号 user_005 → FAST_01',req:'REQ-0029',pile:'FAST_01'},
+  {time:'14:21:08',type:'CHARGE',desc:'FAST_01 充电完成: user_003, 实际28.5kWh',req:'REQ-0028',pile:'FAST_01'},
+  {time:'14:18:45',type:'FAULT',desc:'SLOW_03 故障触发: 通信超时, 影响用户: 无',req:'-',pile:'SLOW_03'},
+  {time:'14:15:22',type:'REQUEST',desc:'新请求: user_012, 快充 25kWh',req:'REQ-0031',pile:'-'},
+  {time:'14:12:33',type:'SESSION',desc:'FAST_02 充电完成, user_007进入等待离场',req:'REQ-0027',pile:'FAST_02'},
+  {time:'14:10:18',type:'SCHEDULE',desc:'调度引擎: 分配 user_007 → FAST_02',req:'REQ-0027',pile:'FAST_02'},
+  {time:'14:08:05',type:'REQUEST',desc:'新请求: user_009, 快充 30kWh',req:'REQ-0030',pile:'-'},
+  {time:'14:05:42',type:'CHARGE',desc:'SLOW_02 充电完成: user_006, 实际20kWh',req:'REQ-0025',pile:'SLOW_02'},
+  {time:'14:03:15',type:'CONFIRM',desc:'user_004 确认到场, 等待充电',req:'REQ-0024',pile:'FAST_01'},
+  {time:'14:01:08',type:'SCHEDULE',desc:'调度引擎: 叫号 user_004 → FAST_01',req:'REQ-0024',pile:'FAST_01'},
+  {time:'13:58:22',type:'REQUEST',desc:'新请求: user_011, 慢充 15kWh',req:'REQ-0022',pile:'-'},
+  {time:'13:55:30',type:'SESSION',desc:'SLOW_02 开始充电: user_006',req:'REQ-0026',pile:'SLOW_02'},
+  {time:'13:52:18',type:'CANCEL',desc:'user_006_b 取消排队',req:'-',pile:'-'},
+  {time:'13:50:05',type:'REQUEST',desc:'新请求: user_008, 慢充 15kWh',req:'-',pile:'-'},
+  {time:'13:45:20',type:'BILLING',desc:'生成账单: REQ-0023, ¥15.00',req:'REQ-0023',pile:'SLOW_01'},
+  {time:'13:42:15',type:'PAYMENT',desc:'user_002 完成支付 REQ-0023',req:'REQ-0023',pile:'-'},
+  {time:'13:40:00',type:'CHARGE',desc:'SLOW_01 充电完成: user_002, 实际10kWh',req:'REQ-0023',pile:'SLOW_01'},
+  {time:'13:35:30',type:'NO_SHOW',desc:'user_010 叫号超时, 标记未到场',req:'REQ-0020',pile:'SLOW_03'},
+  {time:'13:32:00',type:'SCHEDULE',desc:'调度引擎: 叫号 user_010 → SLOW_03',req:'REQ-0020',pile:'SLOW_03'},
+  {time:'13:30:00',type:'INTERRUPT',desc:'user_008_b 中断充电 FAST_02, 实际18.5kWh',req:'REQ-0021',pile:'FAST_02'},
+];
+
+const evTypes=['全选','SCHEDULE','CHARGE','REQUEST','FAULT','CANCEL','CONFIRM','SESSION','BILLING','PAYMENT','NO_SHOW','INTERRUPT'];
+const evTypeLabels={'全选':'全选','SCHEDULE':'调度','CHARGE':'充电','REQUEST':'请求','FAULT':'故障','CANCEL':'取消','CONFIRM':'确认','SESSION':'会话','BILLING':'计费','PAYMENT':'支付','NO_SHOW':'未到场','INTERRUPT':'中断'};
+let activeEvTypes=new Set(evTypes);
+
+function renderEvFilters(){
+  const bar=document.getElementById('evFilterBar');
+  bar.innerHTML=evTypes.map(t=>`<label class="ev-check active" onclick="toggleEvType('${t}',this)"><input type="checkbox" checked>${evTypeLabels[t]}</label>`).join('');
+}
+function toggleEvType(t,el){
+  if(t==='全选'){
+    const all=el.classList.contains('active');
+    document.querySelectorAll('.ev-check').forEach(c=>c.classList.toggle('active',!all));
+    if(all)activeEvTypes.clear();else activeEvTypes=new Set(evTypes);
+  }else{
+    el.classList.toggle('active');
+    if(activeEvTypes.has(t))activeEvTypes.delete(t);else activeEvTypes.add(t);
+  }
+  renderEvTable();
+}
+function renderEvTable(){
+  const tbody=document.getElementById('evTableBody');
+  const filtered=events.filter(e=>activeEvTypes.has(e.type));
+  tbody.innerHTML=filtered.map((e,i)=>`<tr class="fade-in" style="animation-delay:${i*20}ms">
+    <td style="font-family:monospace;font-size:12px;color:var(--text2)">${e.time}</td>
+    <td><span class="ev-badge ev-${e.type}">${e.type}</span></td>
+    <td>${e.desc}</td>
+    <td style="font-size:12px;color:var(--primary)">${e.req}</td>
+    <td style="font-family:monospace;font-size:12px">${e.pile}</td>
+  </tr>`).join('');
+}
+renderEvFilters();
+renderEvTable();
+
+// Modal
+function openModal(reqId){
+  const r=requests.find(x=>x.id===reqId);
+  if(!r)return;
+  document.getElementById('modalTitle').textContent=`请求详情 - ${r.id}`;
+  const steps=['提交','排队','叫号','确认','充电','完成'];
+  const statusStepMap={'等待中':1,'已叫号':2,'充电中':4,'等待离场':5,'已完成':5,'已支付':5,'已取消':1,'已中断':4,'未到场':2};
+  const step=statusStepMap[r.status]||0;
+  const isErr=['已取消','已中断','未到场'].includes(r.status);
+
+  let tlHtml='<div class="timeline-bar"><div class="tl-line"></div>';
+  steps.forEach((s,i)=>{
+    let cls='';
+    if(i<step)cls='done';
+    else if(i===step)cls=isErr?'err':'current';
+    tlHtml+=`<div class="tl-step"><div class="tl-dot ${cls}">${i<step?'&#10003;':i===step&&isErr?'&#10007;':''}</div><div class="tl-label">${s}</div></div>`;
+  });
+  tlHtml+='</div>';
+
+  let billHtml='';
+  if(r.fee!=='-'){
+    const feeNum=parseFloat(r.fee.replace('¥',''));
+    const svcFee=(feeNum*0.05).toFixed(2);
+    const elecFee=(feeNum-parseFloat(svcFee)).toFixed(2);
+    billHtml=`<div class="detail-section"><h4>费用明细</h4>
+      <table class="bill-table"><thead><tr><th>项目</th><th>数量</th><th>单价</th><th>金额</th></tr></thead><tbody>
+      <tr><td>充电电费</td><td>${r.actual}</td><td>${r.mode==='快充'?'¥1.50/kWh':'¥1.50/kWh'}</td><td>¥${elecFee}</td></tr>
+      <tr><td>服务费</td><td>1</td><td>-</td><td>¥${svcFee}</td></tr>
+      <tr class="total"><td colspan="3">合计</td><td>${r.fee}</td></tr>
+      </tbody></table>
+      <div class="payment-status ${r.status==='已支付'?'paid':'unpaid'}">
+        <span style="font-size:16px">${r.status==='已支付'?'&#10003;':'&#9202;'}</span>
+        <span style="font-weight:600">${r.status==='已支付'?'已支付':r.status==='充电中'?'充电中':'待支付'}</span>
+        ${r.status==='已支付'?'<span style="color:var(--text2);font-size:12px;margin-left:auto">支付时间: 今日</span>':''}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('modalBody').innerHTML=`
+    ${tlHtml}
+    <div class="detail-section"><h4>基本信息</h4>
+      <div class="detail-grid">
+        <div class="detail-item"><span class="label">请求编号</span><span class="value">${r.id}</span></div>
+        <div class="detail-item"><span class="label">用户</span><span class="value">${r.user}</span></div>
+        <div class="detail-item"><span class="label">充电模式</span><span class="value">${r.mode}</span></div>
+        <div class="detail-item"><span class="label">请求时间</span><span class="value">今日 ${r.time}</span></div>
+        <div class="detail-item"><span class="label">需求电量</span><span class="value">${r.need}</span></div>
+        <div class="detail-item"><span class="label">实际电量</span><span class="value">${r.actual}</span></div>
+        <div class="detail-item"><span class="label">分配充电桩</span><span class="value">${r.pile}</span></div>
+        <div class="detail-item"><span class="label">当前状态</span><span class="value">${statusBadge(r.status)}</span></div>
+      </div>
+    </div>
+    ${billHtml}
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+</script>
+</body>
+</html>

@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 管理后台</title>
+<style>
+:root {
+  --primary: #1677ff;
+  --primary-light: #e6f4ff;
+  --primary-bg: #f0f5ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --error: #ff4d4f;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --bg-page: #f5f6fa;
+  --bg-white: #ffffff;
+  --border-color: #e8e8e8;
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-hover: 0 4px 16px rgba(0,0,0,0.12);
+  --radius: 8px;
+  --sidebar-width: 240px;
+  --header-height: 56px;
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-stack);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ===== HEADER ===== */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--header-height);
+  background: var(--bg-white);
+  border-bottom: 1px solid var(--border-color);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+}
+
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-logo {
+  width: 32px; height: 32px; background: var(--primary); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 16px;
+}
+.header-title { font-size: 16px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+
+.header-breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+.header-breadcrumb span { cursor: pointer; transition: color 0.2s; }
+.header-breadcrumb span:hover { color: var(--primary); text-decoration: underline; }
+.header-breadcrumb .sep { color: var(--text-muted); cursor: default; }
+.header-breadcrumb .sep:hover { text-decoration: none; color: var(--text-muted); }
+.header-breadcrumb .current { color: var(--text-primary); font-weight: 500; }
+
+.header-right { display: flex; align-items: center; gap: 20px; }
+.header-search {
+  width: 200px; height: 32px; border: 1px solid var(--border-color); border-radius: 6px;
+  padding: 0 12px 0 32px; font-size: 13px; outline: none; background: #fafafa;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+.header-search:focus { border-color: var(--primary); background: #fff; }
+.search-wrap { position: relative; }
+.search-wrap::before {
+  content: ""; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; border: 2px solid #bbb; border-radius: 50%; z-index: 1;
+}
+.search-wrap::after {
+  content: ""; position: absolute; left: 22px; top: 60%; width: 2px; height: 6px;
+  background: #bbb; transform: rotate(-45deg); z-index: 1;
+}
+
+.header-clock { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 60px; }
+
+.notification {
+  position: relative; cursor: pointer; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; transition: background 0.2s;
+}
+.notification:hover { background: #f5f5f5; }
+.notification .bell { font-size: 18px; }
+.notification .dot {
+  position: absolute; top: 4px; right: 4px; width: 8px; height: 8px;
+  background: var(--error); border-radius: 50%; border: 2px solid #fff;
+}
+
+.header-user { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: background 0.2s; }
+.header-user:hover { background: #f5f5f5; }
+.avatar {
+  width: 32px; height: 32px; background: var(--primary); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px; font-weight: 600;
+}
+.user-name { font-size: 13px; color: var(--text-primary); }
+.user-role { font-size: 11px; color: var(--text-secondary); }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  position: fixed; top: var(--header-height); left: 0; bottom: 0;
+  width: var(--sidebar-width); background: var(--bg-white);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto; z-index: 90; padding: 8px 0;
+}
+
+.menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; cursor: pointer; font-size: 14px;
+  color: var(--text-secondary); transition: all 0.2s;
+  border-left: 3px solid transparent; position: relative;
+}
+.menu-item:hover { background: var(--primary-light); color: var(--primary); }
+.menu-item.active {
+  background: var(--primary-light); color: var(--primary);
+  border-left-color: var(--primary); font-weight: 600;
+}
+.menu-icon {
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.menu-arrow {
+  margin-left: auto; font-size: 10px; transition: transform 0.2s;
+  color: var(--text-muted);
+}
+.menu-arrow.expanded { transform: rotate(90deg); }
+
+.submenu { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+.submenu.open { max-height: 200px; }
+.submenu .menu-item { padding-left: 52px; font-size: 13px; border-left: none; }
+
+.menu-section {
+  padding: 16px 20px 6px; font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+}
+
+/* ===== MAIN CONTENT ===== */
+.main {
+  margin-left: var(--sidebar-width); margin-top: var(--header-height);
+  padding: 20px 24px; min-height: calc(100vh - var(--header-height));
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+.card {
+  background: var(--bg-white); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); padding: 20px;
+  opacity: 0; transform: translateY(12px);
+  animation: fadeInUp 0.5s ease forwards;
+}
+@keyframes fadeInUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card-title {
+  font-size: 15px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+.card-title .icon { font-size: 16px; }
+.card-extra { margin-left: auto; font-size: 13px; color: var(--primary); cursor: pointer; }
+.card-extra:hover { text-decoration: underline; }
+
+/* ===== WELCOME BANNER ===== */
+.welcome-banner {
+  background: var(--primary-bg); border: 1px solid #d6e4ff;
+  padding: 24px 28px; display: flex; align-items: center; justify-content: space-between;
+  animation-delay: 0.05s;
+}
+.welcome-text h2 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.welcome-text p { font-size: 14px; color: var(--text-secondary); }
+.welcome-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.btn {
+  padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  border: none; font-weight: 500; transition: all 0.2s; font-family: inherit;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #4096ff; box-shadow: 0 2px 6px rgba(22,119,255,0.3); }
+.btn-outline { background: #fff; color: var(--text-primary); border: 1px solid var(--border-color); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-warn { background: #fff7e6; color: #d48806; border: 1px solid #ffe58f; }
+.btn-warn:hover { background: #fff1cc; }
+
+/* ===== KPI CARDS ===== */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kpi-card {
+  padding: 20px; border-top: 3px solid; position: relative;
+  animation-delay: calc(0.1s + var(--i) * 0.08s);
+  transition: box-shadow 0.2s, transform 0.2s; cursor: default;
+}
+.kpi-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+.kpi-card.blue { border-top-color: var(--primary); }
+.kpi-card.green { border-top-color: var(--success); }
+.kpi-card.orange { border-top-color: var(--warning); }
+.kpi-card.red { border-top-color: var(--error); }
+.kpi-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.kpi-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.kpi-sub { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.kpi-sub.up { color: var(--success); }
+.kpi-sub.down { color: var(--success); }
+.kpi-sub.neutral { color: var(--text-muted); }
+
+/* ===== TABLE ===== */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table thead th {
+  background: #fafafa; padding: 10px 12px; text-align: left;
+  font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);
+  font-size: 12px; white-space: nowrap;
+}
+.data-table tbody td {
+  padding: 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle;
+}
+.data-table tbody tr { transition: background 0.15s; }
+.data-table tbody tr:hover { background: var(--primary-light); }
+
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
+  white-space: nowrap;
+}
+.status-badge.charging { background: #f6ffed; color: #389e0d; }
+.status-badge.waiting { background: #fffbe6; color: #d48806; }
+.status-badge.idle { background: #f5f5f5; color: #8c8c8c; }
+.status-badge.fault { background: #fff2f0; color: #cf1322; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.status-dot.green { background: var(--success); }
+.status-dot.yellow { background: var(--warning); }
+.status-dot.gray { background: #bfbfbf; }
+.status-dot.red { background: var(--error); }
+
+.progress-bar-wrap {
+  width: 100%; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden;
+  min-width: 80px;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 4px; transition: width 1s ease;
+  width: 0;
+}
+.progress-bar-fill.blue { background: var(--primary); }
+.progress-bar-fill.green { background: var(--success); }
+.progress-text { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ===== TWO COLUMN ===== */
+.two-col { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+.two-col-equal { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ===== QUEUE ===== */
+.queue-section { margin-bottom: 16px; }
+.queue-section:last-child { margin-bottom: 0; }
+.queue-header {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+.queue-count {
+  background: var(--primary-light); color: var(--primary);
+  padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.queue-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid #f0f0f0; border-radius: 6px;
+  margin-bottom: 8px; font-size: 13px; transition: border-color 0.2s;
+}
+.queue-item:hover { border-color: var(--primary); }
+.queue-num {
+  width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.queue-num.fast { background: var(--primary-light); color: var(--primary); }
+.queue-num.slow { background: #f6ffed; color: var(--success); }
+.queue-info { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.queue-tag {
+  padding: 1px 6px; border-radius: 4px; font-size: 11px;
+  background: #f5f5f5; color: var(--text-secondary);
+}
+.queue-priority { margin-left: auto; font-size: 12px; color: var(--warning); font-weight: 600; white-space: nowrap; }
+
+/* ===== BAR CHART ===== */
+.bar-chart { display: flex; flex-direction: column; gap: 14px; }
+.bar-row { display: flex; align-items: center; gap: 12px; }
+.bar-label { width: 80px; font-size: 13px; color: var(--text-secondary); text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 22px; background: #f5f5f5; border-radius: 4px; overflow: hidden; position: relative; }
+.bar-fill {
+  height: 100%; background: var(--primary); border-radius: 4px;
+  transition: width 1s ease; width: 0; display: flex; align-items: center;
+  justify-content: flex-end; padding-right: 8px;
+}
+.bar-val { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; }
+.bar-val-outside { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-left: 8px; }
+
+/* ===== TIMELINE ===== */
+.timeline-wrap {
+  max-height: 400px; overflow-y: auto; padding-right: 4px;
+  scrollbar-width: thin; scrollbar-color: #d9d9d9 transparent;
+}
+.timeline-wrap::-webkit-scrollbar { width: 4px; }
+.timeline-wrap::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 2px; }
+
+.timeline-item {
+  display: flex; gap: 12px; padding: 10px 0; position: relative;
+  font-size: 13px; border-bottom: 1px solid #f8f8f8;
+}
+.timeline-dot-wrap {
+  display: flex; flex-direction: column; align-items: center; flex-shrink: 0;
+  padding-top: 2px;
+}
+.timeline-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.timeline-dot.blue { background: var(--primary); }
+.timeline-dot.green { background: var(--success); }
+.timeline-dot.red { background: var(--error); }
+.timeline-dot.yellow { background: var(--warning); }
+.timeline-time { font-size: 12px; color: var(--text-muted); white-space: nowrap; min-width: 62px; flex-shrink: 0; }
+.timeline-desc { color: var(--text-primary); line-height: 1.5; }
+
+.timeline-item.new-entry {
+  animation: slideInFade 0.4s ease;
+}
+@keyframes slideInFade {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== FOOTER ===== */
+.footer {
+  text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;
+  margin-top: auto;
+}
+
+/* ===== STAGGER DELAYS ===== */
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.2s; }
+.delay-5 { animation-delay: 0.25s; }
+.delay-6 { animation-delay: 0.3s; }
+.delay-7 { animation-delay: 0.35s; }
+.delay-8 { animation-delay: 0.4s; }
+.delay-9 { animation-delay: 0.45s; }
+
+/* ===== SCROLLBAR FOR SIDEBAR ===== */
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo">E</div>
+    <span class="header-title">智能充电桩调度计费系统</span>
+  </div>
+  <div class="header-breadcrumb">
+    <span>系统管理</span>
+    <span class="sep">/</span>
+    <span class="current">系统概览</span>
+  </div>
+  <div class="header-right">
+    <div class="search-wrap">
+      <input class="header-search" type="text" placeholder="搜索功能...">
+    </div>
+    <span class="header-clock" id="liveClock">--:--:--</span>
+    <div class="notification">
+      <span class="bell">&#128276;</span>
+      <span class="dot"></span>
+    </div>
+    <div class="header-user">
+      <div class="avatar">张</div>
+      <div>
+        <div class="user-name">张三</div>
+        <div class="user-role">管理员</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="menu-section">导航菜单</div>
+  <div class="menu-item active">
+    <span class="menu-icon">&#9632;</span>
+    <span>系统概览</span>
+  </div>
+  <div class="menu-item">
+    <span class="menu-icon">&#9881;</span>
+    <span>充电桩监控</span>
+  </div>
+  <div class="menu-item">
+    <span class="menu-icon">&#9993;</span>
+    <span>请求管理</span>
+  </div>
+  <div class="menu-item">
+    <span class="menu-icon">&#9787;</span>
+    <span>用户管理</span>
+  </div>
+  <div class="menu-item" id="configMenu" onclick="toggleSubmenu()">
+    <span class="menu-icon">&#9874;</span>
+    <span>系统配置</span>
+    <span class="menu-arrow" id="configArrow">&#9654;</span>
+  </div>
+  <div class="submenu" id="configSubmenu">
+    <div class="menu-item">调度参数</div>
+    <div class="menu-item">计费规则</div>
+  </div>
+  <div class="menu-item">
+    <span class="menu-icon">&#9776;</span>
+    <span>事件日志</span>
+  </div>
+  <div class="menu-item">
+    <span class="menu-icon">&#9733;</span>
+    <span>统计报表</span>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+  <!-- Welcome Banner -->
+  <div class="card welcome-banner delay-1">
+    <div class="welcome-text">
+      <h2>欢迎回来，张三管理员</h2>
+      <p>今日系统运行正常，共处理 23 笔充电请求</p>
+    </div>
+    <div class="welcome-actions">
+      <button class="btn btn-warn">查看告警(2)</button>
+      <button class="btn btn-outline">导出报表</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="card kpi-card blue delay-2" style="--i:0">
+      <div class="kpi-label">充电桩在线率</div>
+      <div class="kpi-value">80%</div>
+      <div class="kpi-sub up">&#8593; 较昨日+5%</div>
+    </div>
+    <div class="card kpi-card green delay-3" style="--i:1">
+      <div class="kpi-label">今日完成充电</div>
+      <div class="kpi-value">23笔</div>
+      <div class="kpi-sub up">&#8593; 较昨日+3</div>
+    </div>
+    <div class="card kpi-card orange delay-4" style="--i:2">
+      <div class="kpi-label">当前等待人数</div>
+      <div class="kpi-value">7人</div>
+      <div class="kpi-sub neutral">快充3 / 慢充4</div>
+    </div>
+    <div class="card kpi-card red delay-5" style="--i:3">
+      <div class="kpi-label">平均等待时间</div>
+      <div class="kpi-value">12分32秒</div>
+      <div class="kpi-sub down">&#8595; 较昨日-2分</div>
+    </div>
+  </div>
+
+  <!-- Two Column: Table + Queue -->
+  <div class="two-col">
+    <!-- Charging Pile Status Table -->
+    <div class="card delay-6">
+      <div class="card-title">
+        <span class="icon">&#9889;</span>
+        充电桩运行状态
+        <span class="card-extra">查看全部</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>编号</th>
+            <th>类型</th>
+            <th>功率(kW)</th>
+            <th>运行状态</th>
+            <th>当前任务</th>
+            <th>进度</th>
+            <th>预计完成</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600;">FAST_01</td>
+            <td>快充</td>
+            <td>30</td>
+            <td><span class="status-badge charging"><span class="status-dot green"></span>充电中</span></td>
+            <td>REQ-003</td>
+            <td>
+              <div class="progress-bar-wrap"><div class="progress-bar-fill blue" data-width="78"></div></div>
+              <div class="progress-text">78%</div>
+            </td>
+            <td>14:32</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">FAST_02</td>
+            <td>快充</td>
+            <td>30</td>
+            <td><span class="status-badge waiting"><span class="status-dot yellow"></span>等待离场</span></td>
+            <td>REQ-007</td>
+            <td>
+              <div class="progress-bar-wrap"><div class="progress-bar-fill green" data-width="100"></div></div>
+              <div class="progress-text">100%</div>
+            </td>
+            <td>--</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">SLOW_01</td>
+            <td>慢充</td>
+            <td>7</td>
+            <td><span class="status-badge charging"><span class="status-dot green"></span>充电中</span></td>
+            <td>REQ-001</td>
+            <td>
+              <div class="progress-bar-wrap"><div class="progress-bar-fill blue" data-width="45"></div></div>
+              <div class="progress-text">45%</div>
+            </td>
+            <td>16:20</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">SLOW_02</td>
+            <td>慢充</td>
+            <td>7</td>
+            <td><span class="status-badge idle"><span class="status-dot gray"></span>空闲</span></td>
+            <td>--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">SLOW_03</td>
+            <td>慢充</td>
+            <td>7</td>
+            <td><span class="status-badge fault"><span class="status-dot red"></span>故障</span></td>
+            <td>--</td>
+            <td>--</td>
+            <td>--</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Queue Info -->
+    <div class="card delay-7">
+      <div class="card-title">
+        <span class="icon">&#128101;</span>
+        排队信息
+        <span class="card-extra">刷新</span>
+      </div>
+
+      <div class="queue-section">
+        <div class="queue-header">快充等待队列 <span class="queue-count">3人</span></div>
+        <div class="queue-item">
+          <span class="queue-num fast">1</span>
+          <div class="queue-info">
+            <strong>user_005</strong>
+            <span class="queue-tag">快充 25kWh</span>
+            <span class="queue-tag">等待 8分12秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 2.35</span>
+        </div>
+        <div class="queue-item">
+          <span class="queue-num fast">2</span>
+          <div class="queue-info">
+            <strong>user_009</strong>
+            <span class="queue-tag">快充 30kWh</span>
+            <span class="queue-tag">等待 5分45秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 1.82</span>
+        </div>
+        <div class="queue-item">
+          <span class="queue-num fast">3</span>
+          <div class="queue-info">
+            <strong>user_012</strong>
+            <span class="queue-tag">快充 20kWh</span>
+            <span class="queue-tag">等待 2分10秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 1.15</span>
+        </div>
+      </div>
+
+      <div class="queue-section">
+        <div class="queue-header">慢充等待队列 <span class="queue-count" style="background:#f6ffed;color:#389e0d;">4人</span></div>
+        <div class="queue-item">
+          <span class="queue-num slow">1</span>
+          <div class="queue-info">
+            <strong>user_003</strong>
+            <span class="queue-tag">慢充 15kWh</span>
+            <span class="queue-tag">等待 12分05秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 2.88</span>
+        </div>
+        <div class="queue-item">
+          <span class="queue-num slow">2</span>
+          <div class="queue-info">
+            <strong>user_008</strong>
+            <span class="queue-tag">慢充 20kWh</span>
+            <span class="queue-tag">等待 9分30秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 2.10</span>
+        </div>
+        <div class="queue-item">
+          <span class="queue-num slow">3</span>
+          <div class="queue-info">
+            <strong>user_011</strong>
+            <span class="queue-tag">慢充 10kWh</span>
+            <span class="queue-tag">等待 6分18秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 1.56</span>
+        </div>
+        <div class="queue-item">
+          <span class="queue-num slow">4</span>
+          <div class="queue-info">
+            <strong>user_015</strong>
+            <span class="queue-tag">慢充 18kWh</span>
+            <span class="queue-tag">等待 1分42秒</span>
+          </div>
+          <span class="queue-priority">&#9733; 0.95</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Row -->
+  <div class="two-col-equal">
+    <!-- Bar Chart -->
+    <div class="card delay-8">
+      <div class="card-title">
+        <span class="icon">&#9636;</span>
+        今日运营统计
+      </div>
+      <div class="bar-chart">
+        <div class="bar-row">
+          <span class="bar-label">完成充电</span>
+          <div class="bar-track"><div class="bar-fill" data-width="92" style="background:var(--primary);"><span class="bar-val">23</span></div></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">取消排队</span>
+          <div class="bar-track"><div class="bar-fill" data-width="16" style="background:#69b1ff;"></div></div>
+          <span class="bar-val-outside">4</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">超时未到</span>
+          <div class="bar-track"><div class="bar-fill" data-width="8" style="background:#91caff;"></div></div>
+          <span class="bar-val-outside">2</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">中断充电</span>
+          <div class="bar-track"><div class="bar-fill" data-width="4" style="background:#bae0ff;"></div></div>
+          <span class="bar-val-outside">1</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">故障处理</span>
+          <div class="bar-track"><div class="bar-fill" data-width="4" style="background:#bae0ff;"></div></div>
+          <span class="bar-val-outside">1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card delay-9">
+      <div class="card-title">
+        <span class="icon">&#9201;</span>
+        实时动态
+        <span class="card-extra">查看全部</span>
+      </div>
+      <div class="timeline-wrap" id="timeline">
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot blue"></div></div>
+          <span class="timeline-time">14:23:15</span>
+          <span class="timeline-desc">user_005 已被叫号，等待到场确认（限时3分钟）</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot green"></div></div>
+          <span class="timeline-time">14:21:08</span>
+          <span class="timeline-desc">FAST_01 充电完成，user_003 需尽快离场</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot red"></div></div>
+          <span class="timeline-time">14:18:45</span>
+          <span class="timeline-desc">SLOW_03 设备故障，已暂停服务</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot blue"></div></div>
+          <span class="timeline-time">14:15:22</span>
+          <span class="timeline-desc">user_012 提交快充请求，需求电量 25kWh</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot yellow"></div></div>
+          <span class="timeline-time">14:12:33</span>
+          <span class="timeline-desc">user_007 充电完成，进入等待离场状态</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot green"></div></div>
+          <span class="timeline-time">14:10:18</span>
+          <span class="timeline-desc">FAST_02 开始为 user_007 充电</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot blue"></div></div>
+          <span class="timeline-time">14:08:05</span>
+          <span class="timeline-desc">user_009 提交快充请求，需求电量 30kWh</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot green"></div></div>
+          <span class="timeline-time">14:05:40</span>
+          <span class="timeline-desc">SLOW_01 开始为 user_001 慢充，预计3小时</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot blue"></div></div>
+          <span class="timeline-time">14:02:17</span>
+          <span class="timeline-desc">user_011 提交慢充请求，需求电量 10kWh</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot yellow"></div></div>
+          <span class="timeline-time">13:58:50</span>
+          <span class="timeline-desc">user_002 排队超时，已自动取消请求</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot green"></div></div>
+          <span class="timeline-time">13:55:32</span>
+          <span class="timeline-desc">FAST_01 开始为 user_003 快充，预计45分钟</span>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot-wrap"><div class="timeline-dot blue"></div></div>
+          <span class="timeline-time">13:52:14</span>
+          <span class="timeline-desc">user_015 提交慢充请求，需求电量 18kWh</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    智能充电桩调度计费系统 &copy; 2026 G7 Group
+  </footer>
+
+</main>
+
+<script>
+// Live clock
+function updateClock() {
+  var now = new Date();
+  var h = String(now.getHours()).padStart(2, '0');
+  var m = String(now.getMinutes()).padStart(2, '0');
+  var s = String(now.getSeconds()).padStart(2, '0');
+  document.getElementById('liveClock').textContent = h + ':' + m + ':' + s;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// Sidebar submenu toggle
+function toggleSubmenu() {
+  var sub = document.getElementById('configSubmenu');
+  var arrow = document.getElementById('configArrow');
+  sub.classList.toggle('open');
+  arrow.classList.toggle('expanded');
+}
+
+// Animate progress bars on load
+window.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    document.querySelectorAll('.progress-bar-fill[data-width]').forEach(function(bar, i) {
+      setTimeout(function() {
+        bar.style.width = bar.getAttribute('data-width') + '%';
+      }, i * 200);
+    });
+    document.querySelectorAll('.bar-fill[data-width]').forEach(function(bar, i) {
+      setTimeout(function() {
+        bar.style.width = bar.getAttribute('data-width') + '%';
+      }, 300 + i * 150);
+    });
+  }, 400);
+});
+
+// Simulated new timeline entries
+var newEvents = [
+  { color: 'green', desc: 'SLOW_02 开始为 user_003 慢充，预计2.5小时' },
+  { color: 'blue', desc: 'user_018 提交快充请求，需求电量 22kWh' },
+  { color: 'yellow', desc: 'user_005 到场确认成功，正在分配充电桩' },
+  { color: 'green', desc: 'FAST_01 充电进度更新：user_003 已充至 85%' },
+  { color: 'red', desc: 'SLOW_03 故障恢复中，预计10分钟后上线' },
+  { color: 'blue', desc: 'user_020 提交慢充请求，需求电量 12kWh' },
+  { color: 'green', desc: 'FAST_02 user_007 已离场，充电桩恢复空闲' },
+  { color: 'yellow', desc: 'user_009 叫号中，请尽快前往 FAST_02' },
+];
+
+var eventIndex = 0;
+setInterval(function() {
+  var timeline = document.getElementById('timeline');
+  if (!timeline) return;
+
+  var evt = newEvents[eventIndex % newEvents.length];
+  var now = new Date();
+  var timeStr = String(now.getHours()).padStart(2, '0') + ':' +
+                String(now.getMinutes()).padStart(2, '0') + ':' +
+                String(now.getSeconds()).padStart(2, '0');
+
+  var item = document.createElement('div');
+  item.className = 'timeline-item new-entry';
+  item.innerHTML =
+    '<div class="timeline-dot-wrap"><div class="timeline-dot ' + evt.color + '"></div></div>' +
+    '<span class="timeline-time">' + timeStr + '</span>' +
+    '<span class="timeline-desc">' + evt.desc + '</span>';
+
+  timeline.insertBefore(item, timeline.firstChild);
+
+  // Remove old entries to keep list manageable
+  while (timeline.children.length > 20) {
+    timeline.removeChild(timeline.lastChild);
+  }
+
+  eventIndex++;
+}, 6000);
+
+// Sidebar active state
+document.querySelectorAll('.sidebar .menu-item').forEach(function(item) {
+  item.addEventListener('click', function(e) {
+    if (this.id === 'configMenu') return;
+    document.querySelectorAll('.sidebar .menu-item').forEach(function(el) {
+      el.classList.remove('active');
+    });
+    this.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
