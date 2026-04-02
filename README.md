@@ -1,385 +1,245 @@
-# 智能充电桩调度计费系统 - 项目状态
+# 智能充电桩调度计费系统
 
-**更新日期**：2026-04-01  
-**版本**：v0.1.1-alpha  
-**团队**：G7 小组  
-
----
-
-## 零、本次修正内容（2026-04-01）
-
-根据组长审查反馈（`b6bb27c527a04c808493f6a1d9002438.md`），本次提交修复了以下问题：
-
-### 0.1 状态口径统一（问题 2.1）
-- [x] 修复 `create_request` 与 `get_status` 状态不一致问题
-- [x] 数据库插入时状态直接设为 `WAITING`（不再使用 `PENDING`）
-- [x] 同时写入预测字段，确保数据库、create 接口、status 接口三者一致
-
-### 0.2 文档修正（问题 2.3）
-- [x] 修正 `docs-B/冻结接口文档_服务端实现版.md` 中接口数量矛盾（7个→9个）
-- [x] 移除 request_status 枚举中错误的 `WAITING_TO_LEAVE` 状态
-- [x] 添加 `/health` 响应格式说明
-
-### 0.3 项目规范（问题 2.4 / 2.5 / 3.1 / 3.2）
-- [x] 将 `charging_system.db` 加入 `.gitignore`
-- [x] 更新根目录 `README.md`，明确当前完成度和待对接内容
-- [x] 补全 `backend/README.md` 接口清单
-- [x] 添加 `MIXED` 计费模式枚举，与冻结文档保持一致
-
-### 0.4 待组长确认事项
-- [ ] `/health` 接口响应格式：建议统一使用 `{code, message, data}`，需组长更新主冻结文档
+**文档版本**: V1.0  
+**编写日期**: 2026-04-02  
+**编写人**: 成员 B（服务端负责人/场景适配负责人）  
+**审核状态**: 待审核
 
 ---
 
-## 一、已实现部分
+## 一、已完成的部分
 
-### 1.1 后端核心框架（成员 B 主责）
+### 周期 1：数据库与基础架构修正（Day 1-2）
 
-- [x] Flask 应用骨架搭建
-- [x] 数据库初始化脚本（8 张表）
-- [x] 统一响应格式工具（`success_response` / `error_response`）
-- [x] 参数校验工具（6 个校验函数）
-- [x] 枚举定义（6 个枚举类）
-- [x] 配置文件管理
+#### 1.1 数据库 Schema V2 升级
 
-### 1.2 核心接口（9/10 - 成员 B 主责）
+| 模块 | 完成内容 | 文件位置 |
+|------|----------|----------|
+| 场景配置表 | 新增 `system_scenario_config` 表，支持动态场景配置 | `migrations/init_schema_v2.sql` |
+| 充电桩表增强 | 新增 `initial_queue_length`, `initial_status` 等字段 | `migrations/init_schema_v2.sql` |
+| 充电请求表 | 新增 `estimated_service_seconds`, `scenario_id` 等字段 | `migrations/init_schema_v2.sql` |
+| 数据迁移工具 | 实现 V1 到 V2 的数据迁移脚本 | `migrations/migrate_data.py` |
 
-**⚠️ 重要说明**：以下接口已实现框架和基础逻辑，但尚未接入调度模块（由成员 A 负责）。当前使用的是临时模拟数据，真实调度逻辑待对接。
+#### 1.2 枚举值更新
 
-| 序号 | 接口名称 | 路径 | 状态 | 备注 |
-|------|----------|------|------|------|
-| 1 | 提交充电请求 | `POST /api/request/create` | ✅ 框架完成 | 状态已统一为 WAITING，预测数据为临时模拟值 |
-| 2 | 查询请求状态 | `GET /api/request/status/{id}` | ✅ 框架完成 | |
-| 3 | 取消排队 | `POST /api/request/cancel_queue` | ✅ 框架完成 | 含状态校验，待接入等待池移除逻辑 |
-| 4 | 确认到场 | `POST /api/request/confirm_arrival` | ✅ 框架完成 | 含超时校验 |
-| 5 | 中断充电 | `POST /api/request/interrupt_charge` | ✅ 框架完成 | 计算实际充电量，待接入重调度触发 |
-| 6 | 确认挪车 | `POST /api/request/confirm_leave` | ✅ 框架完成 | 检查桩状态，待接入重调度触发 |
-| 7 | 获取详单与账单 | `GET /api/request/result/{id}` | ✅ 框架完成 | 详单 18 字段 + 账单 9 字段 |
-| 8 | 支付确认 | `POST /api/request/pay` | ✅ 框架完成 | 含金额校验 |
-| 9 | 健康检查 | `GET /api/health` | ✅ 已完成 | 联合验收接口 |
+- `WaitingPoolType`: 支持 `FAST_POOL`, `SLOW_POOL`
+- `StationQueueMode`: 支持 `UNIFORM_CAPACITY`, `STATION_SNAPSHOT`
+- `ChargeMode`: 快充 30kW，慢充 7kW
+- `RequestStatus`: `PENDING`, `WAITING`, `CALLED`, `CHARGING`, `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `COMPLETED_EARLY`
+- `StationStatus`: `IDLE`, `OCCUPIED`, `WAITING_TO_LEAVE`, `OFFLINE`
 
-### 1.3 业务服务层（成员 B 主责）
+#### 1.3 核心模块实现
 
-- [x] 详单生成服务（`generate_detail`）
-  - 实现 18 个字段完整记录
-  - 支持 6 种终态场景（正常完成、提前充满、取消、过号、中断、故障重排）
-- [x] 账单生成服务（`generate_bill`）
-  - 实现 9 个字段费用计算
-  - 支持三种计费模式：ENERGY、TIME、MIXED
-  - 占位费计算逻辑
-- [x] 支付处理服务（`process_payment`）
-  - 金额校验
-  - 支付状态更新
-
-### 1.4 数据库表结构（成员 B 主责）
-
-- [x] `user` - 用户表
-- [x] `charging_station` - 充电桩表（5 个桩初始数据）
-- [x] `charge_request` - 充电请求表（含 8 个调度字段）
-- [x] `charging_session` - 充电会话表
-- [x] `billing_record` - 计费记录表
-- [x] `scheduler_event_log` - 调度事件日志表
-- [x] `notification` - 通知表
-- [x] `scheduler_config` - 调度配置表
-
-### 1.5 合规性修复（成员 B 主责）
-
-- [x] 修正 `RequestStatus` 枚举（移除错误的 `WAITING_TO_LEAVE`）
-- [x] 补充 `charge_request` 表缺失字段（`remaining_energy`、`priority_score`、`retry_count`、`no_show_count` 等）
-- [x] 修正 `confirm_leave` 接口状态校验逻辑（检查请求完成状态 + 桩等待挪车状态）
-- [x] 所有接口路径符合冻结文档（`/api/request/*` 前缀）
+| 模块 | 功能描述 | 状态 |
+|------|----------|------|
+| `config_manager.py` | 场景配置的 CRUD 管理 | ✅ 完成 |
+| `waiting_pool.py` | 双等待池管理（FAST/SLOW），共享容量控制 | ✅ 完成 |
+| `helpers.py` | 工具函数，解决循环导入问题 | ✅ 完成 |
 
 ---
 
-## 二、未实现部分
+### 周期 2：场景适配层实现（Day 3-4）
 
-### 2.1 调度模块（成员 A 主责 - 核心待开发）
+#### 2.1 场景适配器核心
 
-- [ ] 中央等待池数据结构与算法
-- [ ] 优先级计算引擎
-  - 公式：`priority(u) = a * wait_time(u) + b * retry_bonus(u) + c * fault_bonus(u) - d * service_time(u) - e * no_show_penalty(u)`
-  - 参数可配置化
-- [ ] 动态分配算法
-  - 快充/慢充桩匹配
-  - 桩可用性判断
-- [ ] 事件驱动重调度机制
-  - 11 种触发事件处理
-  - 重调度时机控制
-- [ ] 预测模型
-  - 预计等待时间计算
-  - 预计开始/结束时间计算
+| 组件 | 功能描述 | 状态 |
+|------|----------|------|
+| `ScenarioAdapter` 类 | 适配器模式，统一处理两种输入格式 | ✅ 完成 |
+| `adapt_uniform_capacity()` | 统一容量模式适配 | ✅ 完成 |
+| `adapt_station_snapshot()` | 桩级快照模式适配 | ✅ 完成 |
+| `initialize_waiting_pools()` | 初始化等待池 | ✅ 完成 |
+| `reset_scenario()` | 场景重置 | ✅ 完成 |
 
-### 2.2 管理端接口（成员 B 主责 - 8/10 未完成）
+#### 2.2 场景参数解析器
 
-| 序号 | 接口名称 | 路径 | 状态 |
-|------|----------|------|------|
-| 1 | 查看全场状态 | `GET /api/admin/overview` | ❌ 未实现 |
-| 2 | 充电桩管理 | `GET/PUT /api/admin/station/{id}` | ❌ 未实现 |
-| 3 | 调度策略配置 | `GET/PUT /api/admin/scheduler/config` | ❌ 未实现 |
-| 4 | 计费规则配置 | `GET/PUT /api/admin/billing/config` | ❌ 未实现 |
-| 5 | 查看详单账单 | `GET /api/admin/billing/{request_id}` | ❌ 未实现 |
-| 6 | 手动干预调度 | `POST /api/admin/scheduler/override` | ❌ 未实现 |
-| 7 | 查看调度日志 | `GET /api/admin/scheduler/logs` | ❌ 未实现 |
-| 8 | 批量模拟入口 | `POST /api/admin/simulate/batch` | ❌ 未实现 |
-
-### 2.3 批量模拟接口（成员 B 主责）
-
-- [ ] `POST /api/admin/simulate/batch`
-  - 批量用户请求模拟
-  - 并发场景测试
-  - 结果统计输出
-
-### 2.4 用户端与管理端页面（成员 C 主责 - 全部未完成）
-
-- [ ] 用户端（14 个功能页面）
-  - [ ] 登录/注册页
-  - [ ] 提交充电请求页
-  - [ ] 预计等待时间展示页
-  - [ ] 排队状态页
-  - [ ] 临近确认页/弹窗
-  - [ ] 充电监控页
-  - [ ] 详单账单页
-  - [ ] 历史记录页
-  - [ ] 通知中心页
-  - [ ] 余额与支付页
-- [ ] 管理端（10 个功能页面）
-  - [ ] 全场状态总览页
-  - [ ] 统计分析图表页
-  - [ ] 用户管理页
-  - [ ] 设备管理页
-  - [ ] 报表导出页
-
-### 2.5 测试体系（成员 C 主责）
-
-- [ ] 接口单元测试（覆盖率 > 80%）
-- [ ] 业务流程集成测试
-- [ ] 压力测试脚本
-- [ ] 兼容性验证（Mac/Windows 交叉访问）
-
-### 2.6 API 文档（成员 B 主责）
-
-- [ ] Swagger/OpenAPI 文档
-- [ ] Postman 集合导出
+| 组件 | 功能描述 | 状态 |
+|------|----------|------|
+| `scenario_parser.py` | 解析批量模拟中的场景参数 | ✅ 完成 |
+| `user_behavior_parser.py` | 解析用户行为时间线和事件序列 | ✅ 完成 |
+| `UserBehaviorConfig` 类 | 定义单个用户完整行为配置 | ✅ 完成 |
 
 ---
 
-## 三、待与 A 对接部分（组长 A - 算法负责人）
+### 周期 3：现有接口适配与批量模拟基础（Day 5-6）
 
-### 3.1 调度模块接口对接（FZ-03 冻结产物）
+#### 3.1 请求接口适配
 
-| 对接项 | 说明 | 状态 | 依赖 |
-|--------|------|------|------|
-| 调度引擎输入接口 | 服务端调用调度器的最小接口 | ⏳ 待对接 | A 提供接口定义 |
-| 优先级计算结果 | 获取当前等待池中用户的优先级排序 | ⏳ 待对接 | A 实现算法 |
-| 桩分配建议 | 获取最优桩分配方案 | ⏳ 待对接 | A 实现算法 |
-| 预计时间预测 | 获取 `estimated_wait_seconds`、`estimated_start_time`、`estimated_finish_time` | ⏳ 待对接 | A 实现预测模型 |
-
-### 3.2 状态机与规则对齐（FZ-01 冻结产物）
-
-- [ ] 确认 11 种请求状态转换规则
-- [ ] 确认 5 种充电桩状态转换规则
-- [ ] 确认 11 种调度触发事件的处理流程
-- [ ] 确认异常场景处理规则（过号、故障、中断等）
-
-### 3.3 评测指标对齐（FZ-05 冻结产物）
-
-| 指标 | 含义 | 计算公式 | 状态 |
+| 接口 | 路径 | 适配内容 | 状态 |
 |------|------|----------|------|
-| `avg_wait_seconds` | 平均等待时长 | 所有用户从提交到开始充电的平均时长 | ⏳ 待确认 |
-| `avg_finish_seconds` | 平均完成时长 | 所有用户从提交到充电完成的平均时长 | ⏳ 待确认 |
-| `station_utilization` | 桩利用率 | 充电时长 / 总时长的比例 | ⏳ 待确认 |
+| 创建请求 | `POST /api/request/create` | 容量检查、池类型记录、临时预测值计算 | ✅ 完成 |
+| 查询状态 | `GET /api/request/status/{id}` | 返回池类型和队列位置 | ✅ 完成 |
+| 取消排队 | `POST /api/request/cancel_queue` | 从等待池移除 | ✅ 完成 |
+| 确认到场 | `POST /api/request/confirm_arrival` | 状态流转 | ✅ 完成 |
+| 中断充电 | `POST /api/request/interrupt_charge` | 记录中断原因 | ✅ 完成 |
+| 确认挪车 | `POST /api/request/confirm_leave` | 超时检测 | ✅ 完成 |
+| 查询结果 | `GET /api/request/result/{id}` | 详单/账单生成 | ✅ 完成 |
+| 支付账单 | `POST /api/request/pay` | 支付状态更新 | ✅ 完成 |
 
-### 3.4 联合验收对外口径（成员 A 主责）
+#### 3.2 新增接口
 
-- [ ] 统一与其他组的接口规范
-- [ ] 统一详单、账单、summary 输出格式
-- [ ] 统一错误码定义
-- [ ] 统一批量模拟 JSON 结构
+| 接口 | 路径 | 功能描述 | 状态 |
+|------|------|----------|------|
+| 健康检查 | `GET /health` | 系统状态检查 | ✅ 完成 |
+| 充电桩总览 | `GET /api/stations/overview` | 返回所有充电桩状态和等待队列 | ✅ 完成 |
+| 批量模拟 | `POST /api/batch/simulate` | 批量模拟框架（V3.0） | ✅ 框架完成 |
 
-### 3.5 需要 A 提供的资源
+#### 3.3 预测值计算逻辑
 
-- [ ] 调度算法最终版本文档
-- [ ] 状态机定义表
-- [ ] 调度事件流说明
-- [ ] 调度模块输入输出接口定义
-- [ ] 评测指标计算逻辑说明
+创建请求时的预测值计算：
 
----
-
-## 四、待与 C 对接部分（成员 C - 前端负责人）
-
-### 4.1 接口联调（成员 B 提供接口，成员 C 调用）
-
-| 接口 | 前端依赖页面 | 对接状态 | 备注 |
-|------|--------------|----------|------|
-| `POST /api/request/create` | 用户端 - 提交充电需求页 | ⏳ 待联调 | 需确认时间格式 |
-| `GET /api/request/status/{id}` | 用户端 - 排队进度展示页 | ⏳ 待联调 | |
-| `POST /api/request/cancel_queue` | 用户端 - 取消按钮交互 | ⏳ 待联调 | |
-| `POST /api/request/confirm_arrival` | 用户端 - 确认到场弹窗 | ⏳ 待联调 | 需定义超时提示文案 |
-| `POST /api/request/interrupt_charge` | 用户端 - 中断充电按钮 | ⏳ 待联调 | |
-| `POST /api/request/confirm_leave` | 用户端 - 确认挪车按钮 | ⏳ 待联调 | |
-| `GET /api/request/result/{id}` | 用户端 - 详单账单详情页 | ⏳ 待联调 | 详单字段对齐 |
-| `POST /api/request/pay` | 用户端 - 支付按钮交互 | ⏳ 待联调 | 需对接模拟支付逻辑 |
-| `GET /api/admin/overview` | 管理端 - 全场状态总览页 | ⏳ 待联调 | 待 B 实现 |
-| `GET /api/admin/billing/{request_id}` | 管理端 - 历史记录查询页 | ⏳ 待联调 | 待 B 实现 |
-
-### 4.2 数据格式对齐（成员 B 提供规范，成员 C 遵循）
-
-- [ ] 时间格式统一为 ISO 8601（`YYYY-MM-DDTHH:mm:ss`）
-- [ ] 电量单位统一为 kWh（保留 2 位小数）
-- [ ] 金额单位统一为元（保留 2 位小数）
-- [ ] 状态码枚举值完全一致
-- [ ] 统一响应结构：`{"code": 0, "message": "success", "data": {}}`
-- [ ] 统一错误码：1001-1007, 1099
-
-### 4.3 联调测试场景（成员 C 主责，成员 B 配合）
-
-- [ ] 正常充电流程端到端测试
-- [ ] 取消排队流程测试
-- [ ] 过号重入队流程测试
-- [ ] 中断充电流程测试
-- [ ] 异常场景测试（网络超时、重复提交等）
-- [ ] 跨设备兼容性测试（Mac 访问 Windows 服务端、反之亦然）
-
-### 4.4 页面原型与 UI 评审（成员 A 提供原型，成员 C 实现）
-
-- [ ] 接收成员 A 提供的静态原型/Canva 图
-- [ ] 确认页面清单与交互说明
-- [ ] 对齐成员 A 的 UI 评审意见
-- [ ] 完成页面适配和视觉优化
-
-### 4.5 需要 C 提供的资源
-
-- [ ] 前端技术栈确认（Vue/React/纯 HTML）
-- [ ] 前端页面部署地址
-- [ ] 接口联调用例清单
-- [ ] 页面级测试清单
-- [ ] Bug 清单与回归验证记录
-- [ ] 兼容性测试报告（Mac/Windows）
-
----
-
-## 五、当前完成度详细说明
-
-### 5.1 已完成（可直接使用）
-
-1. **服务端框架**：Flask 应用可正常启动，数据库可初始化
-2. **接口骨架**：9 个核心接口的请求/响应结构已定义，参数校验已实现
-3. **详单账单**：18 字段详单 + 9 字段账单的生成逻辑已完成，符合冻结文档
-4. **状态管理**：请求状态机、充电桩状态枚举已定义，状态转换校验已实现
-5. **健康检查**：`/health` 接口可用于跨设备连通性验证
-
-### 5.2 已完成框架但待集成（需与成员 A 对接）
-
-| 功能点 | 当前状态 | 待对接内容 |
-|--------|----------|------------|
-| 创建请求后的预测数据 | 临时模拟值 | 接入调度模块的真实预测结果 |
-| 取消排队后的等待池移除 | 预留 TODO 注释 | 调用调度模块的移除接口 |
-| 中断充电后的重调度 | 预留 TODO 注释 | 触发调度模块的重调度事件 |
-| 确认挪车后的重调度 | 预留 TODO 注释 | 触发调度模块的重调度事件 |
-| 预计等待时间计算 | 固定返回值 | 接入调度模块的预测算法 |
-
-### 5.3 尚未启动
-
-1. **调度模块**：由成员 A 负责，待提供接口定义
-2. **前端页面**：由成员 C 负责，待启动开发
-3. **批量模拟接口**：待调度模块完成后实现
-4. **管理端接口**：待前端需求明确后实现
-
-### 5.4 如何验证当前成果
-
-```bash
-# 1. 启动服务端
-cd backend
-python run.py
-
-# 2. 测试健康检查
-curl http://localhost:8080/health
-
-# 3. 测试创建请求（状态应为 WAITING）
-curl -X POST http://localhost:8080/api/request/create \
-  -H "Content-Type: application/json" \
-  -d '{"request_time":"2026-04-01T10:00:00","charge_mode":"FAST","request_energy":20}'
-
-# 4. 测试查询状态（应与创建时状态一致）
-curl http://localhost:8080/api/request/status/REQ001
+```
+预计等待时间 = 队列中人数 × 5分钟（300秒）
+预计开始时间 = 当前时间 + 等待时间
+预计服务时长 = 电量 / 功率 × 60分钟
+预计完成时间 = 开始时间 + 服务时长
 ```
 
----
+- 快充功率：30kW
+- 慢充功率：7kW
 
-## 提供给成员C的 AI Prompt
+#### 3.4 状态一致性保证
 
-下面这段 prompt 可以直接发给自己的 AI，有助于你的开发：
-
-```text
-你正在参与一个北京邮电大学软件工程课程项目：智能充电桩调度计费系统。
-
-请严格基于以下仓库文档进行分析和指导，不要脱离现有设计另起炉灶：
-
-1. docs/小组分工指南.md
-2. docs/冻结接口文档.md
-3. docs/功能设计.md
-4. docs/架构设计.md
-5. docs/调度算法.md
-6. docs/联合验收统一接口与数据结构规范说明V2.md
-
-我的身份是“成员C”，我的固定职责是：
-- 前端负责人
-- 管理端负责人
-- 展示实现负责人
-- 测试负责人
-- 兼容性负责人
-
-我的工作边界是：
-- 主要负责 Vue 前端、用户端页面、管理端页面、图表与展示、通知与结果展示
-- 负责测试、回归测试、兼容性验证、Mac/Windows 运行验证
-- 不主导调度算法规则
-- 不主导服务端核心接口语义
-
-请你输出一份非常详细的工作指导，必须包含以下内容：
-
-1. 先根据现有文档，完整解释“成员C到底负责什么，不负责什么”
-2. 梳理成员C需要实现的页面、管理端功能、测试内容、兼容性内容
-3. 给出成员C的“总体 TODO LIST”，要求按：
-   - 立即做
-   - 中期验收前做
-   - 联合验收前做
-   三个阶段拆开，并尽量细化
-4. 告诉我如何正式启动开发：
-   - 先看哪些文档
-   - Vue 项目骨架怎么搭
-   - 页面目录怎么组织
-   - 哪些页面应该优先做
-   - 哪些接口字段应该先对接
-5. 告诉我当务之急是什么，哪些事情现在绝对不能拖
-6. 对每个核心页面给出建议：
-   - 页面需要展示哪些字段
-   - 状态如何呈现
-   - 交互流程如何组织
-   - 哪些地方最容易和服务端对接出错
-7. 结合联合验收要求，详细说明：
-   - 用户端全流程该如何展示
-   - 管理端哪些页面是中期前必须可演示的
-   - 详单账单如何展示才清楚
-   - 批量模拟结果 summary 如何展示
-8. 作为测试负责人，请详细说明：
-   - 单次模拟测试怎么测
-   - 批量模拟测试怎么测
-   - 如何维护 bug 清单
-   - 如何做回归测试
-9. 作为兼容性负责人，请详细说明：
-   - Mac 本地运行验证怎么做
-   - Windows 本地运行验证怎么做
-   - Mac 访问 Windows 服务端怎么验证
-   - Windows 访问 Mac 服务端怎么验证
-   - 最终展示推荐在哪台电脑运行，以及如何提前验证
-10. 结合 Git 规范，告诉我：
-   - 我应该切哪个分支
-   - 每天开发前后怎么操作
-   - 什么时候合并到 develop
-11. 请尽量给出按步骤执行的清单，而不是泛泛建议
-
-输出要尽量详细，适合我直接照着执行。
-```
+| 位置 | 状态值 | 说明 |
+|------|--------|------|
+| 数据库 `charge_request.status` | `WAITING` | 创建时直接写入 |
+| `create` 接口响应 | `WAITING` | 与数据库一致 |
+| `status` 接口响应 | 从数据库读取 | 实时反映当前状态 |
 
 ---
+
+## 二、未完成的部分
+
+### 2.1 调度模块对接（依赖成员 A）
+
+| 功能 | 说明 | 依赖方 |
+|------|------|--------|
+| 真实预测时间计算 | 调用调度模块获取准确的预计等待时间 | 成员 A |
+| 重调度触发 | 充电完成后触发调度算法重新分配 | 成员 A |
+| 批量模拟执行引擎 | 时间序列模拟和状态推进 | 成员 A |
+
+### 2.2 状态机确认（需与成员 A 确认）
+
+- `PENDING` 状态是否必要？当前创建请求后直接为 `WAITING`
+- 状态流转规则的最终确认
+
+### 2.3 批量模拟完整实现
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 场景参数解析 | ✅ 完成 | `scenario_parser.py` |
+| 用户行为解析 | ✅ 完成 | `user_behavior_parser.py` |
+| 模拟执行引擎 | ⏳ 待实现 | 依赖调度模块 |
+| 结果收集与返回 | ⏳ 待实现 | 依赖执行引擎 |
+
+---
+
+## 三、待与 A 对接的部分
+
+### 3.1 调度模块接口约定
+
+| 接口 | 输入 | 输出 | 用途 |
+|------|------|------|------|
+| `get_estimated_wait_time` | charge_mode, request_energy | estimated_wait_seconds | 创建请求时计算预测时间 |
+| `trigger_reschedule` | station_id | void | 充电完成后重调度 |
+| `simulate_timeline` | scenario_config, user_behaviors | simulation_result | 批量模拟执行 |
+
+### 3.2 状态机定义确认
+
+- 确认 `PENDING` 状态是否需要保留
+- 确认 `WAITING_TO_LEAVE` 状态的使用场景
+- 确认各状态之间的流转条件
+
+### 3.3 批量模拟协作
+
+- 成员 A 负责：模拟执行引擎、时间推进、状态更新
+- 成员 B 负责：场景参数解析、用户行为解析、结果格式化
+
+---
+
+## 四、待与 C 对接的部分
+
+### 4.1 前端页面接口
+
+| 页面 | 所需接口 | 状态 |
+|------|----------|------|
+| 充电桩总览页 | `GET /api/stations/overview` | ✅ 已完成 |
+| 请求创建页 | `POST /api/request/create` | ✅ 已完成 |
+| 状态查询页 | `GET /api/request/status/{id}` | ✅ 已完成 |
+| 详单/账单页 | `GET /api/request/result/{id}` | ✅ 已完成 |
+
+### 4.2 接口文档确认
+
+- 确认前端需要的字段是否完整
+- 确认错误码提示信息的展示方式
+- 确认页面跳转和状态刷新的逻辑
+
+---
+
+## 五、技术债务与优化项
+
+### 5.1 当前技术债务
+
+| 问题 | 影响 | 优先级 | 计划解决时间 |
+|------|------|--------|--------------|
+| 预测值为临时计算 | 精度不高 | 中 | 调度模块接入后 |
+| TODO 注释未处理 | 代码整洁度 | 低 | 后续迭代 |
+
+### 5.2 性能优化点
+
+- 数据库查询优化（添加索引）
+- 等待池状态缓存
+- 批量操作的事务处理
+
+---
+
+## 六、附录
+
+### 6.1 已冻结接口清单
+
+| 序号 | 接口路径 | 方法 | 功能描述 |
+|------|----------|------|----------|
+| 1 | `/health` | GET | 健康检查 |
+| 2 | `/api/request/create` | POST | 创建充电请求 |
+| 3 | `/api/request/status/{id}` | GET | 查询请求状态 |
+| 4 | `/api/request/confirm_arrival` | POST | 确认到场 |
+| 5 | `/api/request/cancel_queue` | POST | 取消排队 |
+| 6 | `/api/request/interrupt_charge` | POST | 中断充电 |
+| 7 | `/api/request/confirm_leave` | POST | 确认挪车 |
+| 8 | `/api/request/result/{id}` | GET | 查询结果/详单 |
+| 9 | `/api/request/pay` | POST | 支付账单 |
+| 10 | `/api/stations/overview` | GET | 充电桩总览 |
+| 11 | `/api/batch/simulate` | POST | 批量模拟 |
+
+### 6.2 代码文件清单
+
+**数据库与迁移**:
+- `migrations/init_schema_v2.sql`
+- `migrations/migrate_data.py`
+
+**核心服务**:
+- `app/services/config_manager.py`
+- `app/services/waiting_pool.py`
+- `app/services/scenario_adapter.py`
+- `app/services/scenario_parser.py`
+- `app/services/user_behavior_parser.py`
+- `app/services/billing_service.py`
+
+**工具模块**:
+- `app/utils/helpers.py`
+- `app/utils/response.py`
+- `app/utils/validators.py`
+- `app/utils/db.py`
+
+**路由接口**:
+- `app/routes/health.py`
+- `app/routes/request.py`
+- `app/routes/stations.py`
+- `app/routes/batch_simulate.py`
+- `app/routes/admin.py`
+
+**枚举定义**:
+- `app/enums.py`
+
+---
+
+**文档结束**
