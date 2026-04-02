@@ -199,7 +199,7 @@
                 <tr><th>请求编号</th><td>{{ reqData.request_id || '暂无' }}</td></tr>
                 <tr><th>充电模式</th><td>{{ reqData.charge_mode === 'FAST' ? '快充' : '慢充' }}</td></tr>
                 <tr><th>需求电量</th><td>{{ reqData.request_energy }} kWh</td></tr>
-                <tr><th>实际电量</th><td>{{ chargeKwh }} kWh</td></tr>
+                <tr><th>实际电量</th><td>{{ billData?.detail?.charge_energy || chargeKwh }} kWh</td></tr>
                 <tr><th>排队时间</th><td>{{ reqData.submit_time || '未知' }}</td></tr>
                 <tr><th>叫号时间</th><td>{{ reqData.last_called_time || '未知' }}</td></tr>
                 <tr><th>开始充电</th><td>{{ reqData.charge_start_time || '未知' }}</td></tr>
@@ -211,18 +211,18 @@
               <div class="card-title">费用账单</div>
               <table class="bill-table">
                 <tr><th>计费模式</th><td>按电量</td></tr>
-                <tr><th>计费电量</th><td>{{ chargeKwh }} kWh</td></tr>
-                <tr><th>电费</th><td>¥{{ chargeFee }}</td></tr>
-                <tr><th>时长费</th><td>¥0.00</td></tr>
+                <tr><th>计费电量</th><td>{{ billData?.bill?.total_energy || chargeKwh }} kWh</td></tr>
+                <tr><th>电费</th><td>¥{{ billData?.bill?.charge_fee || chargeFee }}</td></tr>
+                <tr><th>时长费</th><td>¥{{ billData?.bill?.service_fee || '0.00' }}</td></tr>
                 <tr><th>超时占位费</th><td>¥0.00</td></tr>
-                <tr class="total"><th>合计</th><td>¥{{ chargeFee }}</td></tr>
+                <tr class="total"><th>合计</th><td>¥{{ billData?.bill?.total_fee || chargeFee }}</td></tr>
                 <tr><th>支付状态</th><td style="color:var(--secondary)">待支付</td></tr>
               </table>
             </div>
           </div>
           <div class="action-bar">
-            <button class="btn btn-outline" @click="handleConfirmLeaveClick">确认离场</button>
-            <button class="btn btn-primary btn-lg" @click="handlePayClick">立即支付</button>
+            <button v-if="!billData" class="btn btn-outline" @click="handleConfirmLeaveClick">确认离场</button>
+            <button v-else class="btn btn-primary btn-lg" @click="handlePayClick">立即支付</button>
           </div>
         </div>
       </div>
@@ -262,7 +262,9 @@ import {
   cancelQueue,
   confirmArrival,
   interruptCharge,
-  confirmLeave
+  confirmLeave,
+  getResult,
+  payRequest
 } from '@/api/charging'
 
 const router = useRouter()
@@ -295,11 +297,12 @@ const syncToBackendState = () => {
 const showModal = (id) => { activeModal.value = id }
 const hideModal = () => { activeModal.value = null }
 
-// System Request Info
-const currentReqId = ref('')
-const reqData = ref({})
-
-const clearSessionTask = () => {
+  // System Request Info
+  const currentReqId = ref('')
+  const reqData = ref({})
+  const billData = ref(null)
+  
+  const clearSessionTask = () => {
   if (currentReqId.value) {
     sessionStorage.removeItem(`taskFlow_${currentReqId.value}`)
     sessionStorage.removeItem('calledAt_' + currentReqId.value)
@@ -503,32 +506,54 @@ const handleConfirmArrivalClick = async () => {
 }
 
 const handleConfirmLeaveClick = async () => {
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await confirmLeave({ request_id: currentReqId.value, leave_time: now })
+    if(res && res.code === 0) {
+      ElMessage.success('挪车离场确认成功，账单已生成')
+      // 获取账单信息
+      const resultRes = await getResult(currentReqId.value)
+      if (resultRes && resultRes.code === 0 && resultRes.data) {
+        billData.value = resultRes.data
+        reqData.value.status = 'COMPLETED'
+      }
+    } else {
+      ElMessage.warning(getApiErrorMessage(res, '确认挪车失败'))
+    }
+  } catch(err) {
+    console.error(err)
+    ElMessage.error(getApiErrorMessage(err, '请求错误'))
+  }
+}
+
+const handlePayClick = async () => {
   const advanceToFinish = () => {
     clearSessionTask()
     initNoTaskState()
     router.push('/user/workspace')
   }
+  
+  // 如果后端没有接通或获取失败，走默认成功逻辑
+  if (!billData.value?.bill) {
+    ElMessage.success('支付成功！车辆已解锁。')
+    advanceToFinish()
+    return
+  }
 
   try {
     const now = new Date().toISOString().substring(0, 19)
-    const res = await confirmLeave({ request_id: currentReqId.value, leave_time: now })
-    if(res && res.code === 0) {
-      ElMessage.success('挪车离场确认成功！感谢使用。')
+    const amount = billData.value.bill.total_fee || billData.value.bill.total_amount || 0 // 根据实际字段名兼容
+    const res = await payRequest({ request_id: currentReqId.value, pay_time: now, pay_amount: amount })
+    if (res && res.code === 0) {
+      ElMessage.success('支付成功！欢迎下次使用。')
       advanceToFinish()
     } else {
-      ElMessage.warning('后端状态未同步，已按前端模拟确认挪车')
-      advanceToFinish()
+      ElMessage.warning(getApiErrorMessage(res, '支付失败'))
     }
   } catch(err) {
     console.error(err)
-    ElMessage.warning('后端状态未同步，已按前端模拟确认挪车')
-    advanceToFinish()
+    ElMessage.error(getApiErrorMessage(err, '请求错误'))
   }
-}
-
-const handlePayClick = () => {
-  ElMessage.success('支付成功！车辆已解锁。')
-  // 为了确保逻辑顺畅，也可以在这里触发其他完成阶段的设计
 }
 
 // Data & Timer logic

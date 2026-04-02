@@ -67,7 +67,7 @@
 ```
 
 **异常处理机制：**
-拦截非 0 的 code，并在浏览器右上角自动弹出 Element Plus 的 ElMessage.error() 提示服务端回传的 message，阻止代码继续执行。
+当前 request.js 的响应拦截器只会直接返回 response.data，并将 HTTP 异常（网络错误/状态码异常）通过 Promise.reject 抛出。具体的业务 code 异常（如 code !== 0）由调用 API 的业务组件或单独接口封装包通过校验处理，全局拦截器本身并未强制拦截和弹窗。
 
 ### 2.3 枚举映射定义（已冻结）
 
@@ -88,27 +88,27 @@
 
 | 序号 | 页面模块 | 路由路径 | 状态 | 说明 |
 |------|----------|----------|------|------|
-| 1 | 登录与注册 | /login | ✅ 已实现 | 统一登录入口与UI层（区分管理员与普通用户） |
+| 1 | 登录与注册 | /login | 已实现 UI<br>待后端支持 | 统一登录入口与UI层（区分管理员与普通用户） |
 
 ### 3.2 管理端大盘 (/admin)
 
 | 序号 | 页面模块 | 路由路径 | 状态 | 说明 |
 |------|----------|----------|------|------|
-| 1 | 后台框架 | /admin/* | ✅ 已实现 | 侧边栏与顶栏 Navigation 页面布局 |
-| 2 | 概览主页 | /admin/overview | ✅ 已实现 | 充电桩全局状态监控、等候区看板 |
-| 3 | 记录中心 | /admin/records | ✅ 已实现 | 详单及系统账单记录查询视图 |
-| 4 | 系统配置 | /admin/config | ✅ 已实现 | 充电参数配置及控制台 |
-| 5 | 统计分析 | /admin/statistics | ✅ 已实现 | 运营报表及收费数据统计页面 |
-| 6 | 用户管理 | /admin/users | ✅ 已实现 | 充电站用户账户与权限管理试图 |
+| 1 | 后台框架 | /admin/* | 已实现 UI<br>待后端支持 | 侧边栏与顶栏 Navigation 页面布局 |
+| 2 | 概览主页 | /admin/overview | 已实现 UI<br>待后端支持 | 充电桩全局状态监控、等候区看板 |
+| 3 | 记录中心 | /admin/records | 已实现 UI<br>待后端支持 | 详单及系统账单记录查询视图 |
+| 4 | 系统配置 | /admin/config | 已实现 UI<br>待后端支持 | 充电参数配置及控制台 |
+| 5 | 统计分析 | /admin/statistics | 已实现 UI<br>待后端支持 | 运营报表及收费数据统计页面 |
+| 6 | 用户管理 | /admin/users | 已实现 UI<br>待后端支持 | 充电站用户账户与权限管理试图 |
 
 ### 3.3 车主移动端 (/user)
 
 | 序号 | 页面模块 | 路由路径 | 状态 | 说明 |
 |------|----------|----------|------|------|
-| 1 | 车主框架 | /user | ✅ 已实现 | 移动端 H5 视口限制与统一导航底栏 |
-| 2 | 工作台 | /user/workspace | ✅ 已实现 | 车主发起真实充电请求及桩位概览 |
-| 3 | 当前任务 | /user/task | ✅ 已实现 | 基于真实轮询的多状态时间线推进及订单结算 |
-| 4 | 账户中心 | /user/account | ✅ 已实现 | 用户历史充电统计及余额信息 |
+| 1 | 车主框架 | /user | 已实现 UI<br>待后端支持 | 移动端 H5 视口限制与统一导航底栏 |
+| 2 | 工作台 | /user/workspace | 已实现 UI<br>已封装请求<br>已真实联调 | 车主发起真实充电请求及桩位概览 |
+| 3 | 当前任务 | /user/task | 已实现 UI<br>已封装请求<br>已真实联调 | 基于真实轮询的多状态时间线推进及订单结算 |
+| 4 | 账户中心 | /user/account | 已实现 UI<br>待后端支持 | 用户历史充电统计及余额信息 |
 
 ---
 
@@ -116,13 +116,13 @@
 
 | 序号 | 服务端接口 | 方法 | 前端触发位置 / 绑定视图 | 联调状态 |
 |------|------------|------|-------------------------|----------|
-| 1 | 检测 /health | GET | 网络层基础连通性测试 | ✅ 已联调 |
-| 2 | /api/request/create | POST | /user/workspace 提交按钮 | ✅ 已联调 |
-| 3 | /api/request/status/{id} | GET | /user/task 页面的轮询 | ✅ 已联调 |
-| 4 | /api/request/cancel_queue | POST | /user/task 取消排队按钮 | ✅ 已联调 |
-| 5 | /api/request/confirm_arrival| POST | /user/task 到场确认点击 | ✅ 已联调 |
-| 6 | /api/request/interrupt_charge| POST | /user/task 中断充电弹窗 | ✅ 已联调 |
-| 7 | /api/request/confirm_leave | POST | /user/task 完成结算并挪车 | ✅ 已联调 |
+| 1 | 检测 /health | GET | 网络层基础连通性测试 | 已真实联调 |
+| 2 | /api/request/create | POST | `/user/workspace` 页面 | 已真实联调 |
+| 3 | /api/request/status/{id} | GET | `/user/task` 页面 | 已真实联调 |
+| 4 | /api/request/cancel_queue | POST | `/user/task` 取消排队按钮 | 已真实联调 |
+| 5 | /api/request/confirm_arrival| POST | `/user/task` 确认到场按钮 | 已真实联调 |
+| 6 | /api/request/interrupt_charge| POST | `/user/task` 中断充电按钮 | 已真实联调 |
+| 7 | /api/request/confirm_leave | POST | `/user/task` 确认离场按钮 | 已真实联调 |
 
 **联调前置说明：** 
 目前前端 `/user/*` 流程已全部使用真实的 Axios 请求替换 Mock 数据，并在 `Task.vue` 中实现了定时器与真实系统时间的误差修正，已对接后端逻辑。下一步需开展 `/admin/*` 管理端数据接口对接。
@@ -185,6 +185,7 @@
 | 日期 | 版本 | 变更内容 | 变更人 |
 |------|------|----------|--------|
 | 2026-04-01 | V1.0 | 初始冻结版本，完成基础路由、Axios封装与页面UI构建 | 成员C |
+| 2026-04-02 | V1.1 | 严格对齐后端接口文档，修正所有进度表与术语，前端 `/user` 端已全部真实联调，Mock 逻辑全部替换为真实 API，管理端待后端支持 | 成员C |
 
 ---
 

@@ -12,7 +12,6 @@ service.interceptors.request.use(
   (config) => {
     return config;
   },
-// ...existing code...
   (error) => {
     return Promise.reject(error);
   }
@@ -34,3 +33,5 @@ service.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export default service;
