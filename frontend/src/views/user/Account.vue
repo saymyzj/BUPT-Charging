@@ -44,8 +44,8 @@
               </div>
             </div>
             <div class="card-actions">
-              <button class="btn btn-outline">修改密码</button>
-              <button class="btn btn-outline">车辆管理</button>
+              <button class="btn btn-outline" @click="notifyUnimplemented('修改密码')">修改密码</button>
+              <button class="btn btn-outline" @click="notifyUnimplemented('车辆管理')">车辆管理</button>
             </div>
           </div>
 
@@ -68,7 +68,7 @@
             </div>
             <div class="card-actions">
               <button class="btn btn-primary" @click="handleRecharge">立即充值</button>
-              <button class="btn btn-outline">账单明细</button>
+              <button class="btn btn-outline" @click="notifyUnimplemented('账单明细')">账单明细</button>
             </div>
           </div>
         </div>
@@ -78,12 +78,12 @@
           <div class="card-header">
             <h4>历史充电详单</h4>
             <div class="header-actions">
-              <select class="filter-select">
+              <select class="filter-select" @change="notifyUnimplemented('历史记录筛选')">
                 <option>全部记录</option>
                 <option>已完成</option>
                 <option>已取消</option>
               </select>
-              <button class="btn btn-outline">导出PDF</button>
+              <button class="btn btn-outline" @click="notifyUnimplemented('导出PDF')">导出PDF</button>
             </div>
           </div>
           
@@ -126,6 +126,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const historyRecords = ref([
   { id: 'REC-23091', pile: 'A-01 (快充)', startTime: '2026-03-30 14:00', endTime: '2026-03-30 15:30', amount: '45.2', cost: '67.80', status: '已完成' },
@@ -135,7 +136,11 @@ const historyRecords = ref([
 ])
 
 function handleRecharge() {
-  alert('充值接口开发中...')
+  ElMessage.info('充值功能尚未接真实后端接口，当前仅保留页面展示')
+}
+
+function notifyUnimplemented(feature) {
+  ElMessage.info(`${feature} 功能尚未完善，当前仅保留静态展示`)
 }
 </script>
 

@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/admin/overview'
+    redirect: '/login'
   },
   {
     path: '/admin/overview',

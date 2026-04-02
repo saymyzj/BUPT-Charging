@@ -204,25 +204,25 @@
                 <tr><th>叫号时间</th><td>{{ reqData.last_called_time || '未知' }}</td></tr>
                 <tr><th>开始充电</th><td>{{ reqData.charge_start_time || '未知' }}</td></tr>
                 <tr><th>充电桩</th><td>{{ reqData.station_id || '暂无' }}</td></tr>
-                <tr><th>最终状态</th><td style="color:var(--primary);font-weight:700">已完成</td></tr>
+                <tr><th>最终状态</th><td style="color:var(--primary);font-weight:700">{{ toZhStatus(reqData.status) }}</td></tr>
               </table>
             </div>
             <div class="card">
               <div class="card-title">费用账单</div>
               <table class="bill-table">
                 <tr><th>计费模式</th><td>按电量</td></tr>
-                <tr><th>计费电量</th><td>{{ chargeKwh }} kWh</td></tr>
-                <tr><th>电费</th><td>¥{{ chargeFee }}</td></tr>
-                <tr><th>时长费</th><td>¥0.00</td></tr>
+                <tr><th>计费电量</th><td>{{ billData?.bill?.billing_energy || chargeKwh }} kWh</td></tr>
+                <tr><th>电费</th><td>¥{{ billData?.bill?.energy_fee || chargeFee }}</td></tr>
+                <tr><th>时长费</th><td>¥{{ billData?.bill?.time_fee || '0.00' }}</td></tr>
                 <tr><th>超时占位费</th><td>¥0.00</td></tr>
-                <tr class="total"><th>合计</th><td>¥{{ chargeFee }}</td></tr>
-                <tr><th>支付状态</th><td style="color:var(--secondary)">待支付</td></tr>
+                <tr class="total"><th>合计</th><td>¥{{ billData?.bill?.total_fee || chargeFee }}</td></tr>
+                <tr><th>支付状态</th><td style="color:var(--secondary)">{{ billData?.bill?.payment_status || '待支付' }}</td></tr>
               </table>
             </div>
           </div>
           <div class="action-bar">
-            <button class="btn btn-outline" @click="handleConfirmLeaveClick">确认离场</button>
-            <button class="btn btn-primary btn-lg" @click="handlePayClick">立即支付</button>
+            <button v-if="!billData" class="btn btn-outline" @click="handleConfirmLeaveClick">确认离场</button>
+            <button v-else class="btn btn-primary btn-lg" @click="handlePayClick">立即支付</button>
           </div>
         </div>
       </div>
@@ -254,27 +254,115 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  getRequestStatus,
   cancelQueue,
   confirmArrival,
+  confirmLeave,
+  getRequestStatus,
+  getResult,
   interruptCharge,
-  confirmLeave
+  payRequest
 } from '@/api/charging'
 
 const router = useRouter()
+
 const currentState = ref(0)
 const backendState = ref(0)
 const manualSelectedState = ref(null)
 const activeModal = ref(null)
 const hasActiveTask = ref(false)
+const currentReqId = ref('')
+const reqData = ref({})
+const billData = ref(null)
 
-const WAIT_SECONDS = 30
-const CALL_SECONDS = 30
-const CHARGE_SECONDS = 30
+const CONFIRM_TIMEOUT_SECONDS = 180
+const POLL_INTERVAL_MS = 3000
+
+const waitSec = ref(0)
+const callSec = ref(CONFIRM_TIMEOUT_SECONDS)
+const chargePct = ref(0)
+const chargeDurationSec = ref(0)
+
+let pollingTimer = null
+let uiTimer = null
+
+const statusTextMap = {
+  PENDING: '待调度',
+  WAITING: '排队中',
+  CALLED: '已叫号',
+  CONFIRMED: '已确认',
+  CHARGING: '充电中',
+  COMPLETED: '已完成',
+  COMPLETED_EARLY: '提前完成',
+  INTERRUPTED: '已中断',
+  CANCELLED: '已取消',
+  NO_SHOW: '已过号',
+  FAILED: '失败'
+}
+
+const backendMessageMap = {
+  'Invalid parameters': '参数不合法',
+  'Request not found': '未找到该充电请求',
+  'Current status does not allow cancel': '当前状态不允许取消排队',
+  'Request is not in CALLED status': '当前不在叫号状态，无法确认到场',
+  'Request is not in CHARGING status': '当前不在充电中状态，无法中断充电',
+  'Request is not in completed status': '当前还不能确认离场',
+  'Charging station is not in WAITING_TO_LEAVE status': '充电桩当前还不能离场'
+}
+
+const toZhStatus = (status) => statusTextMap[status] || status || '未知状态'
+const toZhBackendMessage = (message) => backendMessageMap[message] || message || ''
+
+const toZhBackendErrorDetail = (errorText) => {
+  if (!errorText) return ''
+  return errorText
+    .replace('Missing required field:', '缺少必填字段：')
+    .replace('must be ISO 8601 format', '时间格式必须为 ISO 8601')
+}
+
+const getApiErrorMessage = (err, fallbackMessage) => {
+  const backendMessage = toZhBackendMessage(err?.response?.data?.message)
+  const backendErrors = err?.response?.data?.data?.errors
+  if (Array.isArray(backendErrors) && backendErrors.length > 0) {
+    return `${backendMessage || fallbackMessage}: ${backendErrors.map(toZhBackendErrorDetail).join('; ')}`
+  }
+  return backendMessage || fallbackMessage
+}
+
+const parseDate = (value) => {
+  if (!value) return null
+  const normalized = String(value).replace('Z', '+00:00')
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const formatTime = (iso) => {
+  const date = parseDate(iso)
+  if (!date) return ''
+  return [
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    String(date.getSeconds()).padStart(2, '0')
+  ].join(':')
+}
+
+const fmtMS = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '00:00'
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+}
+
+const stageFromStatus = (status) => {
+  if (['WAITING', 'PENDING', 'FAULT_REQUEUE'].includes(status)) return 0
+  if (['CALLED', 'CONFIRMED'].includes(status)) return 1
+  if (status === 'CHARGING') return 2
+  if (['COMPLETED', 'COMPLETED_EARLY', 'INTERRUPTED'].includes(status)) return 3
+  return 0
+}
+
+const isFinalStatus = (status) => ['COMPLETED', 'COMPLETED_EARLY', 'INTERRUPTED', 'CANCELLED', 'NO_SHOW'].includes(status)
 
 const selectState = (idx) => {
   if (!hasActiveTask.value && idx > 0) {
@@ -288,22 +376,23 @@ const selectState = (idx) => {
   manualSelectedState.value = idx
   currentState.value = idx
 }
+
 const syncToBackendState = () => {
   manualSelectedState.value = null
   currentState.value = backendState.value
 }
+
 const showModal = (id) => { activeModal.value = id }
 const hideModal = () => { activeModal.value = null }
 
-// System Request Info
-const currentReqId = ref('')
-const reqData = ref({})
+const persistTaskFlow = () => {
+  if (!currentReqId.value || !hasActiveTask.value) return
+  sessionStorage.setItem(`taskFlow_${currentReqId.value}`, JSON.stringify(reqData.value))
+}
 
 const clearSessionTask = () => {
   if (currentReqId.value) {
     sessionStorage.removeItem(`taskFlow_${currentReqId.value}`)
-    sessionStorage.removeItem('calledAt_' + currentReqId.value)
-    sessionStorage.removeItem('chargeAt_' + currentReqId.value)
   }
   sessionStorage.removeItem('currentRequestID')
   localStorage.removeItem('currentRequestID')
@@ -315,270 +404,100 @@ const initNoTaskState = () => {
   currentState.value = 0
   backendState.value = 0
   manualSelectedState.value = null
+  billData.value = null
   waitSec.value = 0
-  callSec.value = CALL_SECONDS
+  callSec.value = CONFIRM_TIMEOUT_SECONDS
   chargeDurationSec.value = 0
   chargePct.value = 0
   reqData.value = {
     status: 'NO_TASK',
     estimated_wait_seconds: 0,
+    queue_position: null,
     submit_time: null,
     station_id: null,
-    request_energy: 30,
+    request_energy: 0,
     actual_energy: 0
   }
 }
 
-const initTaskFlowFromSession = () => {
-  const reqId = sessionStorage.getItem('currentRequestID') || localStorage.getItem('currentRequestID') || ''
-  if (!reqId) {
-    initNoTaskState()
-    return
-  }
-
-  currentReqId.value = reqId
+const applyBackendData = (data) => {
+  if (!data) return
   hasActiveTask.value = true
-  const rawFlow = sessionStorage.getItem(`taskFlow_${reqId}`)
-  const flow = rawFlow ? JSON.parse(rawFlow) : null
+  currentReqId.value = data.request_id || currentReqId.value
 
-  const submitTime = flow?.submit_time || new Date().toISOString()
-  const estimatedWaitSeconds = Number(flow?.estimated_wait_seconds || WAIT_SECONDS)
-
-  reqData.value = {
-    request_id: reqId,
-    status: flow?.status || 'WAITING',
-    submit_time: submitTime,
-    station_id: flow?.station_id || '预分配中',
-    request_energy: Number(flow?.request_energy || 30),
-    estimated_wait_seconds: estimatedWaitSeconds,
-    last_called_time: flow?.last_called_time || null,
-    charge_start_time: flow?.charge_start_time || null,
-    actual_energy: Number(flow?.actual_energy || 0)
+  const next = {
+    ...reqData.value,
+    ...data,
+    queue_position: data.queue_position ?? reqData.value.queue_position ?? null,
+    estimated_wait_seconds: Number(data.estimated_wait_seconds ?? reqData.value.estimated_wait_seconds ?? 0),
+    request_energy: Number(data.request_energy ?? reqData.value.request_energy ?? 0),
+    actual_energy: Number(data.actual_energy ?? reqData.value.actual_energy ?? 0)
   }
 
-  backendState.value = flow?.status === 'CHARGING' ? 2 : (flow?.status === 'WAITING_TO_LEAVE' ? 3 : (flow?.status === 'CALLED' ? 1 : 0))
-  currentState.value = backendState.value
-  waitSec.value = estimatedWaitSeconds
-  callSec.value = CALL_SECONDS
-  chargeDurationSec.value = 0
-  chargePct.value = 0
+  reqData.value = next
+  backendState.value = stageFromStatus(next.status)
+  currentState.value = manualSelectedState.value ?? backendState.value
+  persistTaskFlow()
 }
 
-const statusTextMap = {
-  PENDING: '待调度',
-  WAITING: '排队中',
-  CALLED: '已叫号',
-  CHARGING: '充电中',
-  WAITING_TO_LEAVE: '待离场',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消',
-  FAILED: '失败',
-  INTERRUPTED: '已中断'
-}
+const refreshDerivedState = () => {
+  const now = Date.now()
+  const submitAt = parseDate(reqData.value.submit_time)
+  const calledAt = parseDate(reqData.value.last_called_time)
+  const chargeStartAt = parseDate(reqData.value.charge_start_time || reqData.value.estimated_start_time)
+  const finishAt = parseDate(reqData.value.estimated_finish_time || reqData.value.charge_end_time)
 
-const backendMessageMap = {
-  'Invalid parameters': '参数不合法',
-  'Request not found': '未找到该充电请求',
-  'Current status does not allow cancel': '当前状态不允许取消排队',
-  'Request is not in CALLED status': '当前不在叫号状态，无法确认到场',
-  'Request is not in CHARGING status': '当前不在充电中状态，无法中断充电',
-  'Current status does not allow confirm leave': '当前状态不允许确认离场'
-}
-
-const toZhStatus = (status) => statusTextMap[status] || status || '未知状态'
-
-const toZhBackendMessage = (message) => {
-  if (!message) return ''
-  return backendMessageMap[message] || message
-}
-
-const toZhBackendErrorDetail = (errorText) => {
-  if (!errorText) return ''
-  return errorText
-    .replace('Missing required field:', '缺少必填字段：')
-    .replace('must be ISO 8601 format', '时间格式必须为 ISO 8601')
-}
-
-const getApiErrorMessage = (err, fallbackMessage) => {
-  const backendMessage = toZhBackendMessage(err?.response?.data?.message)
-  const backendErrors = err?.response?.data?.data?.errors
-  if (Array.isArray(backendErrors) && backendErrors.length > 0) {
-    const zhDetails = backendErrors.map(toZhBackendErrorDetail)
-    return `${backendMessage || fallbackMessage}: ${zhDetails.join('; ')}`
-  }
-  return backendMessage || fallbackMessage
-}
-
-// Action Bindings for Modals
-const confirmCancelQueue = async () => {
-  hideModal()
-  const status = reqData.value?.status
-  if (!['PENDING', 'WAITING', 'CALLED'].includes(status)) {
-    ElMessage.warning(`当前状态为 ${toZhStatus(status)}，不能取消排队`)
-    return
-  }
-  try {
-    const now = new Date().toISOString().substring(0, 19)
-    const res = await cancelQueue({ request_id: currentReqId.value, cancel_time: now })
-    if(res && res.code === 0) {
-      ElMessage.success('操作成功！')
-      clearSessionTask()
-      initNoTaskState()
+  if (backendState.value === 0) {
+    if (finishAt && submitAt) {
+      const estimateStart = parseDate(reqData.value.estimated_start_time)
+      waitSec.value = estimateStart ? Math.max(0, Math.floor((estimateStart.getTime() - now) / 1000)) : Number(reqData.value.estimated_wait_seconds || 0)
     } else {
-      ElMessage.error(`取消失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
+      waitSec.value = Number(reqData.value.estimated_wait_seconds || 0)
     }
-  } catch(err) {
-    console.error(err)
-    ElMessage.error(getApiErrorMessage(err, '取消失败'))
-  }
-}
-
-const confirmInterrupt = async () => {
-  hideModal()
-  if (currentState.value !== 2) {
-    ElMessage.warning('当前未处于充电阶段，不能中断充电')
-    return
+  } else {
+    waitSec.value = 0
   }
 
-  const advanceToInterruptedSettlement = () => {
-    reqData.value.status = 'INTERRUPTED'
-    backendState.value = 3
-    currentState.value = 3
-    sessionStorage.removeItem('chargeAt_' + currentReqId.value)
+  if (backendState.value === 1 && calledAt) {
+    callSec.value = Math.max(0, Math.floor((calledAt.getTime() + CONFIRM_TIMEOUT_SECONDS * 1000 - now) / 1000))
+  } else {
+    callSec.value = CONFIRM_TIMEOUT_SECONDS
   }
 
-  try {
-    const now = new Date().toISOString().substring(0, 19)
-    const res = await interruptCharge({ request_id: currentReqId.value, interrupt_time: now })
-    if(res && res.code === 0) {
-      ElMessage.success('已中断充电，进入结算阶段')
-      advanceToInterruptedSettlement()
-    } else {
-      ElMessage.warning('后端状态未同步，已按前端模拟中断充电并进入结算')
-      advanceToInterruptedSettlement()
-    }
-  } catch(err) {
-    console.error(err)
-    ElMessage.warning('后端状态未同步，已按前端模拟中断充电并进入结算')
-    advanceToInterruptedSettlement()
-  }
-}
-
-// Action Binding for Direct Click
-const handleConfirmArrivalClick = async () => {
-  if (currentState.value !== 1) {
-    ElMessage.warning('当前未到叫号确认阶段，暂不可确认到场')
-    return
-  }
-  if (callSec.value <= 0) {
-    ElMessage.warning('叫号确认已超时，请重新提交充电请求')
-    return
-  }
-
-  const advanceToCharging = () => {
-    reqData.value.status = 'CHARGING'
-    reqData.value.charge_start_time = new Date().toISOString()
-    backendState.value = 2
-    currentState.value = 2
+  if (backendState.value === 2 && chargeStartAt && finishAt && finishAt > chargeStartAt) {
+    const totalSeconds = Math.max(1, Math.floor((finishAt.getTime() - chargeStartAt.getTime()) / 1000))
+    const elapsedSeconds = Math.max(0, Math.floor((now - chargeStartAt.getTime()) / 1000))
+    chargeDurationSec.value = Math.min(totalSeconds, elapsedSeconds)
+    chargePct.value = Math.min(100, elapsedSeconds / totalSeconds * 100)
+  } else if (backendState.value >= 3) {
+    chargePct.value = 100
+  } else {
     chargeDurationSec.value = 0
     chargePct.value = 0
-    sessionStorage.setItem('chargeAt_' + currentReqId.value, Date.now())
   }
+}
 
+const fetchResultData = async () => {
+  if (!currentReqId.value) return
   try {
-    const now = new Date().toISOString().substring(0, 19)
-    const res = await confirmArrival({ request_id: currentReqId.value, confirm_time: now })
-    if(res && res.code === 0) {
-      ElMessage.success('到场确认成功！请前往充电')
-      advanceToCharging()
-    } else {
-      ElMessage.warning('后端状态未同步，已按前端模拟确认到场并进入充电')
-      advanceToCharging()
+    const res = await getResult(currentReqId.value)
+    if (res && res.code === 0) {
+      billData.value = res.data
     }
-  } catch(err) {
-    console.error(err)
-    ElMessage.warning('后端状态未同步，已按前端模拟确认到场并进入充电')
-    advanceToCharging()
+  } catch (err) {
+    console.warn('获取详单/账单失败', err)
   }
 }
-
-const handleConfirmLeaveClick = async () => {
-  const advanceToFinish = () => {
-    clearSessionTask()
-    initNoTaskState()
-    router.push('/user/workspace')
-  }
-
-  try {
-    const now = new Date().toISOString().substring(0, 19)
-    const res = await confirmLeave({ request_id: currentReqId.value, leave_time: now })
-    if(res && res.code === 0) {
-      ElMessage.success('挪车离场确认成功！感谢使用。')
-      advanceToFinish()
-    } else {
-      ElMessage.warning('后端状态未同步，已按前端模拟确认挪车')
-      advanceToFinish()
-    }
-  } catch(err) {
-    console.error(err)
-    ElMessage.warning('后端状态未同步，已按前端模拟确认挪车')
-    advanceToFinish()
-  }
-}
-
-const handlePayClick = () => {
-  ElMessage.success('支付成功！车辆已解锁。')
-  // 为了确保逻辑顺畅，也可以在这里触发其他完成阶段的设计
-}
-
-// Data & Timer logic
-const formatTime = (iso) => {
-  if (!iso) return ''
-  const d = new Date(iso.replace('Z', '') + '+00:00') // assuming UTC from backend
-  if (isNaN(d.getTime())) return ''
-  return String(d.getHours()).padStart(2, '0') + ':' + 
-         String(d.getMinutes()).padStart(2, '0') + ':' + 
-         String(d.getSeconds()).padStart(2, '0')
-}
-
-const waitSec = ref(0)
-const callSec = ref(CALL_SECONDS)
-const chargePct = ref(0)
-
-const fmtMS = (s) => isNaN(s) ? '00:00' : String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0')
-
-const waitTimeFormatted = computed(() => fmtMS(waitSec.value))
-const callTimeFormatted = computed(() => fmtMS(callSec.value))
-const callRingOffset = computed(() => 515 * (1 - callSec.value / CALL_SECONDS))
-const isQueueStage = computed(() => hasActiveTask.value && backendState.value === 0)
-const queuePositionText = computed(() => {
-  if (!hasActiveTask.value) return '未排队'
-  if (backendState.value !== 0) return '已叫号'
-  const position = Math.max(1, Math.ceil(waitSec.value / 10))
-  return `第${position}位`
-})
-const queueWaitDisplay = computed(() => (isQueueStage.value ? waitTimeFormatted.value : '--:--'))
-
-const chargeDurationSec = ref(0)
-const chargeDurationFormatted = computed(() => fmtMS(chargeDurationSec.value))
-const chargeRemainMins = computed(() => Math.max(0, Math.ceil((100 - chargePct.value) / (0.2 * 60))))
-
-const chargeKwh = computed(() => (reqData.value?.actual_energy) || (chargePct.value / 100 * (reqData.value?.request_energy || 30)).toFixed(1))
-const chargeFee = computed(() => (Number(chargeKwh.value) * 1.5).toFixed(2))
-const chargeRingOffset = computed(() => 603 * (1 - chargePct.value / 100))
-
-let pollingTimer = null
-let dummyTimer = null
 
 const pollStatus = async () => {
   if (!currentReqId.value) return
-
   try {
     const res = await getRequestStatus(currentReqId.value)
-    if (res && res.code === 0) {
-      const stationId = res?.data?.station_id
-      if (stationId) {
-        reqData.value.station_id = stationId
+    if (res && res.code === 0 && res.data) {
+      applyBackendData(res.data)
+      refreshDerivedState()
+      if (isFinalStatus(res.data.status)) {
+        await fetchResultData()
       }
     }
   } catch (err) {
@@ -586,103 +505,178 @@ const pollStatus = async () => {
   }
 }
 
-onMounted(() => {
-  initTaskFlowFromSession()
-  
-  if (hasActiveTask.value && currentReqId.value) {
-    pollStatus()
-    pollingTimer = setInterval(pollStatus, 3000)
+const initTaskFlowFromSession = async () => {
+  const reqId = sessionStorage.getItem('currentRequestID') || localStorage.getItem('currentRequestID') || ''
+  if (!reqId) {
+    initNoTaskState()
+    return
   }
-  
-  dummyTimer = setInterval(() => {
-    if (!hasActiveTask.value) return
 
-    if (backendState.value === 0) {
-      if (reqData.value.submit_time && reqData.value.estimated_wait_seconds > 0) {
-        const submitTime = new Date(reqData.value.submit_time.replace('Z', '') + '+00:00').getTime()
-        if (!isNaN(submitTime)) {
-          const elapsed = Math.floor((Date.now() - submitTime) / 1000)
-          waitSec.value = Math.max(0, reqData.value.estimated_wait_seconds - elapsed)
-        }
-      } else if (waitSec.value > 0) {
-        waitSec.value--
-      }
+  currentReqId.value = reqId
+  const rawFlow = sessionStorage.getItem(`taskFlow_${reqId}`)
+  const flow = rawFlow ? JSON.parse(rawFlow) : null
 
-      if (waitSec.value <= 0) {
-        reqData.value.status = 'CALLED'
-        reqData.value.last_called_time = new Date().toISOString()
-        backendState.value = 1
-        currentState.value = 1
-        sessionStorage.setItem('calledAt_' + currentReqId.value, Date.now())
-      }
+  if (flow) {
+    hasActiveTask.value = true
+    reqData.value = { ...reqData.value, ...flow }
+    backendState.value = stageFromStatus(flow.status)
+    currentState.value = backendState.value
+    refreshDerivedState()
+  }
+
+  await pollStatus()
+}
+
+const confirmCancelQueue = async () => {
+  hideModal()
+  if (!['PENDING', 'WAITING', 'CALLED'].includes(reqData.value?.status)) {
+    ElMessage.warning(`当前状态为 ${toZhStatus(reqData.value?.status)}，不能取消排队`)
+    return
+  }
+
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await cancelQueue({ request_id: currentReqId.value, cancel_time: now })
+    if (res && res.code === 0) {
+      ElMessage.success('取消排队成功')
+      clearSessionTask()
+      initNoTaskState()
+    } else {
+      ElMessage.error(`取消失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
     }
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '取消失败'))
+  }
+}
 
-    if (backendState.value === 1) {
-      let calledAtClient = sessionStorage.getItem('calledAt_' + currentReqId.value)
-      if (!calledAtClient) {
-        calledAtClient = Date.now()
-        sessionStorage.setItem('calledAt_' + currentReqId.value, calledAtClient)
-      }
-      const elapsed = Math.floor((Date.now() - parseInt(calledAtClient)) / 1000)
-      callSec.value = Math.max(0, CALL_SECONDS - elapsed)
+const handleConfirmArrivalClick = async () => {
+  if (backendState.value !== 1) {
+    ElMessage.warning('当前未到叫号确认阶段')
+    return
+  }
+
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await confirmArrival({ request_id: currentReqId.value, confirm_time: now })
+    if (res && res.code === 0) {
+      ElMessage.success('到场确认成功')
+      await pollStatus()
+    } else {
+      ElMessage.error(`确认失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
     }
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '确认到场失败'))
+  }
+}
 
-    if (backendState.value === 2) {
-      let chargeAtClient = sessionStorage.getItem('chargeAt_' + currentReqId.value)
-      if (!chargeAtClient) {
-        chargeAtClient = Date.now()
-        sessionStorage.setItem('chargeAt_' + currentReqId.value, chargeAtClient)
-      }
-      const elapsed = Math.floor((Date.now() - parseInt(chargeAtClient)) / 1000)
-      chargeDurationSec.value = Math.min(CHARGE_SECONDS, elapsed)
-      chargePct.value = Math.min(100, elapsed / CHARGE_SECONDS * 100)
-      reqData.value.actual_energy = ((reqData.value.request_energy || 30) * (chargePct.value / 100)).toFixed(1)
+const confirmInterrupt = async () => {
+  hideModal()
+  if (backendState.value !== 2) {
+    ElMessage.warning('当前未处于充电阶段，不能中断充电')
+    return
+  }
 
-      if (elapsed >= CHARGE_SECONDS) {
-        reqData.value.status = 'WAITING_TO_LEAVE'
-        backendState.value = 3
-        currentState.value = 3
-      }
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await interruptCharge({ request_id: currentReqId.value, interrupt_time: now })
+    if (res && res.code === 0) {
+      ElMessage.success('中断充电成功')
+      await pollStatus()
+      await fetchResultData()
+    } else {
+      ElMessage.error(`中断失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
     }
-  }, 1000)
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '中断充电失败'))
+  }
+}
+
+const handleConfirmLeaveClick = async () => {
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await confirmLeave({ request_id: currentReqId.value, leave_time: now })
+    if (res && res.code === 0) {
+      ElMessage.success('确认离场成功')
+      await fetchResultData()
+      await pollStatus()
+    } else {
+      ElMessage.error(`确认离场失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
+    }
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '确认离场失败'))
+  }
+}
+
+const handlePayClick = async () => {
+  const totalFee = Number(billData.value?.bill?.total_fee || 0)
+  if (!currentReqId.value || !billData.value?.bill) {
+    ElMessage.warning('账单尚未生成，暂不可支付')
+    return
+  }
+
+  try {
+    const now = new Date().toISOString().substring(0, 19)
+    const res = await payRequest({ request_id: currentReqId.value, pay_time: now, pay_amount: totalFee })
+    if (res && res.code === 0) {
+      ElMessage.success('支付成功！欢迎下次使用。')
+      clearSessionTask()
+      initNoTaskState()
+      router.push('/user/workspace')
+    } else {
+      ElMessage.error(`支付失败: ${toZhBackendMessage(res?.message) || '请求未成功'}`)
+    }
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '支付失败'))
+  }
+}
+
+const waitTimeFormatted = computed(() => fmtMS(waitSec.value))
+const callTimeFormatted = computed(() => fmtMS(callSec.value))
+const callRingOffset = computed(() => 515 * (1 - callSec.value / CONFIRM_TIMEOUT_SECONDS))
+const chargeDurationFormatted = computed(() => fmtMS(chargeDurationSec.value))
+
+const queuePositionText = computed(() => {
+  if (!hasActiveTask.value) return '未排队'
+  if (backendState.value !== 0) return '已叫号'
+
+  const queuePosition = reqData.value.queue_position
+  if (typeof queuePosition === 'number') return `第${queuePosition}位`
+  if (queuePosition && typeof queuePosition.position === 'number') return `第${queuePosition.position}位`
+  return '等待更新'
+})
+
+const queueWaitDisplay = computed(() => (backendState.value === 0 ? waitTimeFormatted.value : '--:--'))
+
+const chargeRemainMins = computed(() => {
+  const finishAt = parseDate(reqData.value.estimated_finish_time || reqData.value.charge_end_time)
+  if (!finishAt || backendState.value !== 2) return 0
+  return Math.max(0, Math.ceil((finishAt.getTime() - Date.now()) / 60000))
+})
+
+const chargeKwh = computed(() => {
+  if (billData.value?.detail?.charge_energy) return Number(billData.value.detail.charge_energy).toFixed(1)
+  if (reqData.value.actual_energy) return Number(reqData.value.actual_energy).toFixed(1)
+  const requestEnergy = Number(reqData.value.request_energy || 0)
+  return (requestEnergy * (chargePct.value / 100)).toFixed(1)
+})
+
+const chargeFee = computed(() => {
+  if (billData.value?.bill?.total_fee != null) return Number(billData.value.bill.total_fee).toFixed(2)
+  return (Number(chargeKwh.value) * 1.5).toFixed(2)
+})
+
+const chargeRingOffset = computed(() => 603 * (1 - chargePct.value / 100))
+
+onMounted(async () => {
+  await initTaskFlowFromSession()
+  pollingTimer = setInterval(pollStatus, POLL_INTERVAL_MS)
+  uiTimer = setInterval(refreshDerivedState, 1000)
 })
 
 onUnmounted(() => {
   if (pollingTimer) clearInterval(pollingTimer)
-  if (dummyTimer) clearInterval(dummyTimer)
+  if (uiTimer) clearInterval(uiTimer)
 })
-
-const handleCallTimeout = () => {
-  if (backendState.value === 1 && callSec.value <= 0) {
-    ElMessage.warning('叫号超时，已重新排队')
-    reqData.value.status = 'WAITING'
-    backendState.value = 0
-    currentState.value = 0
-    waitSec.value = reqData.value.estimated_wait_seconds || WAIT_SECONDS
-    sessionStorage.setItem(`taskFlow_${currentReqId.value}`, JSON.stringify(reqData.value))
-  }
-}
-
-const timer = setInterval(() => {
-  if (backendState.value === 1) {
-    if (callSec.value > 0) {
-      callSec.value--
-    } else {
-      handleCallTimeout()
-    }
-  }
-
-  if (backendState.value === 0 && waitSec.value > 0) {
-    waitSec.value--
-  }
-
-  if (chargeDurationSec.value >= 0 && backendState.value === 2) {
-    chargeDurationSec.value++
-    chargePct.value = Math.min(100, chargePct.value + 0.2)
-  }
-}, 1000)
-
-onUnmounted(() => clearInterval(timer))
 </script><style scoped>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 .user-task-wrapper {

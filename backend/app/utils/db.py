@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 from flask import g, current_app
 
 
@@ -30,8 +31,14 @@ def init_db(app):
     """
     with app.app_context():
         db = get_db()
-        # 读取并执行SQL脚本
-        with open('migrations/init_schema.sql', 'r', encoding='utf-8') as f:
+        migrations_dir = Path(current_app.config['DATABASE_PATH']).resolve().parent / 'migrations'
+        if not migrations_dir.exists():
+            migrations_dir = Path(__file__).resolve().parents[2] / 'migrations'
+        schema_path = migrations_dir / 'init_schema_v2.sql'
+        if not schema_path.exists():
+            schema_path = migrations_dir / 'init_schema.sql'
+
+        with open(schema_path, 'r', encoding='utf-8') as f:
             db.executescript(f.read())
         db.commit()
     

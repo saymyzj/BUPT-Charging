@@ -20,10 +20,10 @@
       <div class="header-section">
         <h2>统计分析</h2>
         <div class="filter-group">
-          <button class="filter-btn active">今天</button>
-          <button class="filter-btn">本周</button>
-          <button class="filter-btn">本月</button>
-          <button class="filter-btn">全年</button>
+          <button class="filter-btn active" @click="notifyStaticAction('今天')">今天</button>
+          <button class="filter-btn" @click="notifyStaticAction('本周')">本周</button>
+          <button class="filter-btn" @click="notifyStaticAction('本月')">本月</button>
+          <button class="filter-btn" @click="notifyStaticAction('全年')">全年</button>
         </div>
       </div>
 
@@ -116,6 +116,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const clock = ref('')
 let clockInterval = null
@@ -131,6 +132,10 @@ onUnmounted(() => {
 
 function updateClock() {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function notifyStaticAction(range) {
+  ElMessage.info(`统计分析当前展示的是静态报表，切换到“${range}”暂未接真实后端数据`)
 }
 </script>
 

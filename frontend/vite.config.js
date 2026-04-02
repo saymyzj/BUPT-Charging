@@ -13,10 +13,13 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0', // Ensure accessible via both 127.0.0.1 and localhost
     proxy: {
+      '/health': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true
+      },
       '/api': {
         target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
       }
     }
   }

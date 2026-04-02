@@ -387,7 +387,7 @@
     <div class="modal-text">{{ modal.text }}</div>
     <div class="modal-actions">
       <button class="modal-btn cancel" @click="closeModal">取消</button>
-      <button class="modal-btn" :class="modal.type" @click="closeModal">确认</button>
+      <button class="modal-btn" :class="modal.type" @click="confirmStaticAction">确认</button>
     </div>
   </div>
 </div>
@@ -399,6 +399,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ElMessage } from 'element-plus';
 
 const clock = ref('');
 let clockInterval = null;
@@ -413,6 +414,10 @@ function showModal(title, text, type) {
 }
 function closeModal() {
   modal.value.show = false;
+}
+function confirmStaticAction() {
+  ElMessage.info(`${modal.value.title} 当前仍为静态演示功能，尚未接真实后端接口`);
+  closeModal();
 }
 
 const activeTab = ref('0');

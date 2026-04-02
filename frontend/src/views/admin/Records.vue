@@ -212,6 +212,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const clock = ref('')
 let clockInterval = null
@@ -334,6 +335,7 @@ watch([timeFilter, modeFilter, statusFilter, pileFilter, searchQuery], () => {
 
 function selectReq(req) {
   selectedReq.value = req
+  ElMessage.info('记录中心当前为静态演示数据，详情区尚未接真实后端记录接口')
 }
 
 function getPercentage(r) {

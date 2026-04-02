@@ -26,7 +26,7 @@
             <option>正常</option>
             <option>已封禁</option>
           </select>
-          <button class="action-btn">导出名单</button>
+          <button class="action-btn" @click="notifyExport">导出名单</button>
         </div>
       </div>
 
@@ -56,9 +56,9 @@
                 </span>
               </td>
               <td class="actions">
-                <button class="text-btn primary">详情</button>
-                <button v-if="u.status === '正常'" class="text-btn danger" @click="u.status = '已封禁'">封禁</button>
-                <button v-else class="text-btn" @click="u.status = '正常'">解封</button>
+                <button class="text-btn primary" @click="notifyDetail(u)">详情</button>
+                <button v-if="u.status === '正常'" class="text-btn danger" @click="toggleUserStatus(u, '已封禁')">封禁</button>
+                <button v-else class="text-btn" @click="toggleUserStatus(u, '正常')">解封</button>
               </td>
             </tr>
           </tbody>
@@ -83,6 +83,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const clock = ref('')
 let clockInterval = null
@@ -98,6 +99,19 @@ onUnmounted(() => {
 
 function updateClock() {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function notifyExport() {
+  ElMessage.info('用户管理导出当前为静态演示，真实导出接口待后续接入')
+}
+
+function notifyDetail(user) {
+  ElMessage.info(`用户 ${user.name} 的详情页当前为静态展示，未接真实接口`)
+}
+
+function toggleUserStatus(user, nextStatus) {
+  user.status = nextStatus
+  ElMessage.success(`已在静态页面中将 ${user.name} 标记为${nextStatus}`)
 }
 
 const users = ref([

@@ -68,7 +68,7 @@
             <label class="remember-me">
               <input type="checkbox"> 记住我
             </label>
-            <a href="#" class="forgot-link">忘记密码?</a>
+            <a href="#" class="forgot-link" @click.prevent="notifyUnimplemented('忘记密码')">忘记密码?</a>
           </div>
           <button type="submit" class="btn btn-login">登 录</button>
           <div class="switch-text">还没有账号? <a @click="activeTab = 'register'">立即注册</a></div>
@@ -126,6 +126,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 
 const router = useRouter();
 
@@ -171,7 +172,11 @@ function handleRegister() {
     return;
   }
   
-  alert('注册成功!');
+  ElMessage.info('注册功能尚未接真实后端接口，当前登录/注册页主要用于演示入口跳转');
+}
+
+function notifyUnimplemented(feature) {
+  ElMessage.info(`${feature} 功能尚未完善，当前登录页主要用于演示入口跳转`)
 }
 </script>
 

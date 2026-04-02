@@ -67,7 +67,7 @@ class WaitingPoolManager:
               AND cr.waiting_pool_type = ?
               AND cr.status = ?
             ORDER BY cr.priority_score DESC, cr.submit_time ASC
-        """, [config.id, WaitingPoolType.FAST_POOL.value, RequestStatus.WAITING.value])
+        """, [config['id'], WaitingPoolType.FAST_POOL.value, RequestStatus.WAITING.value])
         
         # 查询慢充池
         slow_requests = query_db("""
@@ -80,7 +80,7 @@ class WaitingPoolManager:
               AND cr.waiting_pool_type = ?
               AND cr.status = ?
             ORDER BY cr.priority_score DESC, cr.submit_time ASC
-        """, [config.id, WaitingPoolType.SLOW_POOL.value, RequestStatus.WAITING.value])
+        """, [config['id'], WaitingPoolType.SLOW_POOL.value, RequestStatus.WAITING.value])
         
         fast_count = len(fast_requests) if fast_requests else 0
         slow_count = len(slow_requests) if slow_requests else 0
@@ -96,8 +96,8 @@ class WaitingPoolManager:
                 'requests': [dict(r) for r in slow_requests] if slow_requests else []
             },
             'total_waiting': total,
-            'capacity': config.waiting_area_capacity,
-            'available_slots': max(0, config.waiting_area_capacity - total)
+            'capacity': config['waiting_area_capacity'],
+            'available_slots': max(0, config['waiting_area_capacity'] - total)
         }
     
     def can_accept_request(self, charge_mode: ChargeMode) -> tuple[bool, str]:
@@ -119,10 +119,10 @@ class WaitingPoolManager:
             return False, "无法获取等待池状态"
         
         # 检查总容量
-        if status['total_waiting'] >= config.waiting_area_capacity:
-            return False, f"等待区已满（{status['total_waiting']}/{config.waiting_area_capacity}）"
-        
-        return True, f"可以接收请求（当前等待: {status['total_waiting']}/{config.waiting_area_capacity}）"
+        if status['total_waiting'] >= config['waiting_area_capacity']:
+            return False, f"等待区已满（{status['total_waiting']}/{config['waiting_area_capacity']}）"
+
+        return True, f"可以接收请求（当前等待: {status['total_waiting']}/{config['waiting_area_capacity']}）"
     
     def add_to_pool(self, request_id: int, charge_mode: ChargeMode) -> tuple[bool, str]:
         """
@@ -161,7 +161,7 @@ class WaitingPoolManager:
             """, [
                 RequestStatus.WAITING.value,
                 pool_type.value,
-                config.id if config else None,
+                config['id'] if config else None,
                 datetime.now().isoformat(),
                 request_id
             ])
@@ -227,7 +227,7 @@ class WaitingPoolManager:
               AND cr.status = ?
             ORDER BY cr.priority_score DESC, cr.submit_time ASC
             LIMIT 1
-        """, [config.id, pool_type.value, RequestStatus.WAITING.value], one=True)
+        """, [config['id'], pool_type.value, RequestStatus.WAITING.value], one=True)
         
         return dict(request) if request else None
     
@@ -276,7 +276,7 @@ class WaitingPoolManager:
             SELECT waiting_pool_type, priority_score, submit_time
             FROM charge_request
             WHERE id = ? AND scenario_id = ? AND status = ?
-        """, [request_id, config.id, RequestStatus.WAITING.value], one=True)
+        """, [request_id, config['id'], RequestStatus.WAITING.value], one=True)
         
         if not request:
             return None
@@ -293,7 +293,7 @@ class WaitingPoolManager:
                   OR (priority_score = ? AND submit_time < ?)
               )
         """, [
-            config.id,
+            config['id'],
             request['waiting_pool_type'],
             RequestStatus.WAITING.value,
             request['priority_score'],
@@ -308,7 +308,7 @@ class WaitingPoolManager:
             WHERE scenario_id = ? 
               AND waiting_pool_type = ?
               AND status = ?
-        """, [config.id, request['waiting_pool_type'], RequestStatus.WAITING.value], one=True)
+        """, [config['id'], request['waiting_pool_type'], RequestStatus.WAITING.value], one=True)
         
         return {
             'pool_type': request['waiting_pool_type'],
@@ -339,7 +339,7 @@ class WaitingPoolManager:
             """, [
                 RequestStatus.CANCELLED.value,
                 datetime.now().isoformat(),
-                config.id,
+                config['id'],
                 RequestStatus.WAITING.value
             ])
             
@@ -367,7 +367,7 @@ class WaitingPoolManager:
             SELECT AVG(estimated_wait_seconds) as avg_wait
             FROM charge_request
             WHERE scenario_id = ? AND status = ?
-        """, [config.id, RequestStatus.WAITING.value], one=True)
+        """, [config['id'], RequestStatus.WAITING.value], one=True)
         
         # 最长等待时间
         max_wait = query_db("""
@@ -376,7 +376,7 @@ class WaitingPoolManager:
             ) as max_wait
             FROM charge_request
             WHERE scenario_id = ? AND status = ?
-        """, [config.id, RequestStatus.WAITING.value], one=True)
+        """, [config['id'], RequestStatus.WAITING.value], one=True)
         
         return {
             'fast_pool_count': status['fast_pool']['count'],

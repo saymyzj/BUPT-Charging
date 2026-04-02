@@ -27,7 +27,7 @@
         <div class="config-card">
           <div class="card-header">
             <h3>充电桩硬件配置</h3>
-            <button class="action-btn">保存修改</button>
+            <button class="action-btn" @click="notifyStaticAction('充电桩硬件配置')">保存修改</button>
           </div>
           <div class="card-body">
             <div class="form-group">
@@ -54,7 +54,7 @@
         <div class="config-card">
           <div class="card-header">
             <h3>调度与队列参数</h3>
-            <button class="action-btn">保存修改</button>
+            <button class="action-btn" @click="notifyStaticAction('调度与队列参数')">保存修改</button>
           </div>
           <div class="card-body">
             <div class="form-group">
@@ -76,7 +76,7 @@
         <div class="config-card full-width">
           <div class="card-header">
             <h3>计费策略配置</h3>
-            <button class="action-btn">保存计费策略</button>
+            <button class="action-btn" @click="notifyStaticAction('计费策略配置')">保存计费策略</button>
           </div>
           <div class="card-body price-grid">
             <div class="price-col">
@@ -121,6 +121,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const clock = ref('')
 let clockInterval = null
@@ -136,6 +137,10 @@ onUnmounted(() => {
 
 function updateClock() {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function notifyStaticAction(section) {
+  ElMessage.info(`${section} 目前是静态演示区，真实保存接口待后续接入`)
 }
 </script>
 

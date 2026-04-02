@@ -1,6 +1,5 @@
-from flask import Blueprint
+from flask import Blueprint, jsonify
 from datetime import datetime
-from app.utils.response import success_response
 
 health_bp = Blueprint('health', __name__)
 
@@ -13,15 +12,11 @@ def health_check():
     
     Returns:
         {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "status": "ok",
-                "timestamp": "2026-03-31T10:00:00"
-            }
+            "status": "ok",
+            "timestamp": "2026-03-31T10:00:00"
         }
     """
-    return success_response({
+    return jsonify({
         "status": "ok",
         "timestamp": datetime.now().isoformat()
     })

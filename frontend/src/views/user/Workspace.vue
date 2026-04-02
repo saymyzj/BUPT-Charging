@@ -214,14 +214,15 @@ async function submitRequest() {
         }
       )
       // 保存请求信息到 sessionStorage（会话级，不跨浏览器重开）供任务页面读取
-      const simulatedWaitSeconds = 30
       sessionStorage.setItem('currentRequestID', res.data.request_id)
       sessionStorage.setItem(`taskFlow_${res.data.request_id}`, JSON.stringify({
         request_id: res.data.request_id,
         request_energy: Number(kwh.value),
         charge_mode: mode.value.toUpperCase(),
-        submit_time: new Date().toISOString(),
-        estimated_wait_seconds: simulatedWaitSeconds,
+        submit_time: payload.request_time,
+        estimated_wait_seconds: Number(res.data.estimated_wait_seconds || 0),
+        estimated_start_time: res.data.estimated_start_time || null,
+        estimated_finish_time: res.data.estimated_finish_time || null,
         status: 'WAITING'
       }))
       // 清理旧的持久化缓存，避免“下次打开仍保留记录”
