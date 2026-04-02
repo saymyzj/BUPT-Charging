@@ -9,9 +9,15 @@ from app.utils.validators import (
     validate_pay_request
 )
 from app.services.billing_service import generate_detail, generate_bill, save_bill, process_payment
-from app.services.config_manager import ConfigManager, get_active_scenario, can_accept_request
+from app.services.config_manager import get_active_scenario, can_accept_request
+from app.services.scheduler_engine import (
+    predict_request_by_id,
+    reschedule_waiting_requests,
+    service_seconds_for_request,
+    trigger_reschedule_for_event,
+)
 from app.services.waiting_pool import get_waiting_pool_manager
-from app.enums import ChargeMode, RequestStatus
+from app.enums import ChargeMode, EventType
 from app.utils.db import query_db, execute_db
 from datetime import datetime
 
@@ -64,44 +70,14 @@ def create_request():
     # 生成 request_id
     count = query_db("SELECT COUNT(*) as cnt FROM charge_request", one=True)
     request_id = f"REQ{count['cnt'] + 1:03d}"
-    
-    # 使用服务器当前时间作为提交时间
-    submit_time = datetime.now()
-    submit_time_iso = submit_time.isoformat()
-    
-    # 计算临时预测值（基于当前等待池状态）
-    pool_manager = get_waiting_pool_manager()
-    pool_status = pool_manager.get_pool_status()
-    
-    # 基础等待时间：每个在池中的人增加5分钟
-    base_wait_per_person = 300  # 5分钟 = 300秒
-    
-    if charge_mode == ChargeMode.FAST:
-        queue_count = pool_status['fast_pool']['count'] if pool_status else 0
-        power_kw = 30.0  # 快充功率
-    else:
-        queue_count = pool_status['slow_pool']['count'] if pool_status else 0
-        power_kw = 7.0   # 慢充功率
-    
-    # 预计等待时间 = 队列中人数 × 每人的基础等待时间
-    estimated_wait_seconds = queue_count * base_wait_per_person
-    
-    # 预计开始时间 = 当前时间 + 等待时间
-    estimated_start_time = submit_time.timestamp() + estimated_wait_seconds
-    estimated_start_dt = datetime.fromtimestamp(estimated_start_time)
-    estimated_start_iso = estimated_start_dt.isoformat()
-    
-    # 预计服务时长（分钟）= 电量 / 功率 × 60
+
+    # `request_time` 是业务时间，当前阶段不得被服务器当前时间覆盖
+    submit_time = datetime.fromisoformat(data['request_time'].replace('Z', '+00:00'))
+    submit_time_iso = submit_time.strftime('%Y-%m-%dT%H:%M:%S')
     request_energy = float(data['request_energy'])
-    estimated_service_minutes = (request_energy / power_kw) * 60
-    estimated_service_seconds = int(estimated_service_minutes * 60)
-    
-    # 预计完成时间 = 开始时间 + 服务时长
-    estimated_finish_time = estimated_start_time + estimated_service_seconds
-    estimated_finish_dt = datetime.fromtimestamp(estimated_finish_time)
-    estimated_finish_iso = estimated_finish_dt.isoformat()
-    
-    # 插入数据库，状态设为 WAITING，使用服务器时间
+    estimated_service_seconds = service_seconds_for_request(request_energy, data['charge_mode'])
+
+    # 插入数据库，预测结果由调度模块统一重算
     execute_db("""
         INSERT INTO charge_request (
             request_id, charge_mode, request_energy, status, submit_time,
@@ -114,9 +90,9 @@ def create_request():
         data['charge_mode'],
         request_energy,
         submit_time_iso,
-        estimated_wait_seconds,
-        estimated_start_iso,
-        estimated_finish_iso,
+        0,
+        submit_time_iso,
+        submit_time_iso,
         estimated_service_seconds,
         active_scenario.id
     ])
@@ -139,16 +115,22 @@ def create_request():
             # 回滚：删除已创建的请求
             execute_db("DELETE FROM charge_request WHERE id = ?", [new_request['id']])
             return error_response(1003, f"Failed to add to waiting pool: {pool_message}")
-    
-    # TODO: 调用调度模块获取真实预测结果
-    # scheduler_client.get_prediction(request_id, charge_mode, request_energy)
+
+    reschedule_waiting_requests(
+        active_scenario.id,
+        event_type=EventType.NEW_REQUEST.value,
+        event_time=submit_time_iso
+    )
+    prediction = predict_request_by_id(request_id, event_time=submit_time_iso)
+    if not prediction:
+        return error_response(1099, "Failed to generate scheduler prediction")
     
     return success_response({
         "request_id": request_id,
-        "status": "WAITING",
-        "estimated_wait_seconds": estimated_wait_seconds,
-        "estimated_start_time": estimated_start_iso,
-        "estimated_finish_time": estimated_finish_iso
+        "status": prediction["status"],
+        "estimated_wait_seconds": prediction["estimated_wait_seconds"],
+        "estimated_start_time": prediction["estimated_start_time"],
+        "estimated_finish_time": prediction["estimated_finish_time"]
     })
 
 
@@ -295,8 +277,12 @@ def cancel_queue():
         WHERE request_id = ?
     """, [cancel_time, request_id])
     
-    # TODO: 触发重调度
-    # scheduler_client.trigger_reschedule('CANCEL', request_id)
+    if req['scenario_id']:
+        trigger_reschedule_for_event(
+            req['scenario_id'],
+            EventType.CANCEL,
+            cancel_time
+        )
     
     return success_response({
         "request_id": request_id,
@@ -489,8 +475,12 @@ def interrupt_charge():
         WHERE id = ?
     """, [interrupt_time, session['station_id']])
     
-    # TODO: 触发重调度
-    # scheduler_client.trigger_reschedule('CHARGE_INTERRUPT', request_id)
+    if req['scenario_id']:
+        trigger_reschedule_for_event(
+            req['scenario_id'],
+            EventType.CHARGE_INTERRUPT,
+            interrupt_time
+        )
     
     return success_response({
         "request_id": request_id,
@@ -576,8 +566,12 @@ def confirm_leave():
         WHERE id = ?
     """, [leave_time, session['station_id']])
     
-    # TODO: 触发重调度
-    # scheduler_client.trigger_reschedule('LEAVE', request_id)
+    if req['scenario_id']:
+        trigger_reschedule_for_event(
+            req['scenario_id'],
+            EventType.LEAVE,
+            leave_time
+        )
     
     return success_response({
         "request_id": request_id,

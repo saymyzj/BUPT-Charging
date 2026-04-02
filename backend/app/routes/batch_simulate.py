@@ -11,8 +11,7 @@
 
 from flask import Blueprint, request
 from app.utils.response import success_response, error_response
-from app.services.scenario_adapter import adapt_and_initialize, get_scenario_adapter
-from app.services.config_manager import ConfigManager
+from app.services.scheduler_engine import simulate_batch_case
 from app.enums import StationQueueMode
 from typing import Dict, Any, List
 
@@ -89,24 +88,8 @@ def batch_simulate():
         test_case_id = data.get('test_case_id', 'BATCH_UNKNOWN')
         users_config = data.get('users', [])
         
-        # 2. 适配并初始化场景
-        success, message, config_id = adapt_and_initialize(scenario_config)
-        if not success:
-            return error_response(1003, f"场景初始化失败: {message}")
-        
-        # 3. 执行批量模拟（基础版本：顺序执行）
-        # TODO: 后续优化为时间序列模拟
-        results = execute_batch_simulation_basic(config_id, users_config)
-        
-        # 4. 计算统计指标
-        summary = calculate_summary(results)
-        
-        # 5. 组装响应
-        return success_response({
-            "test_case_id": test_case_id,
-            "summary": summary,
-            "results": results
-        })
+        simulation = simulate_batch_case(test_case_id, scenario_config, users_config)
+        return success_response(simulation)
         
     except Exception as e:
         return error_response(1099, f"批量模拟执行失败: {str(e)}")
@@ -189,99 +172,3 @@ def validate_user_config(user: Dict[str, Any], index: int) -> List[str]:
     
     return errors
 
-
-def execute_batch_simulation_basic(config_id: int, users_config: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    执行基础批量模拟（顺序执行版本）
-    
-    简化实现：按顺序处理每个用户请求
-    后续优化为时间序列模拟
-    
-    Args:
-        config_id: 场景配置ID
-        users_config: 用户配置列表
-    
-    Returns:
-        每个用户的执行结果列表
-    """
-    results = []
-    
-    for user_config in users_config:
-        user_result = simulate_single_user(config_id, user_config)
-        results.append(user_result)
-    
-    return results
-
-
-def simulate_single_user(config_id: int, user_config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    模拟单个用户的完整流程
-    
-    基础版本：简化处理，只模拟请求创建
-    后续完善为完整流程模拟
-    """
-    user_id = user_config.get('user_id')
-    
-    try:
-        # TODO: 完整流程模拟
-        # 1. 创建请求
-        # 2. 根据行为参数模拟用户行为
-        # 3. 等待调度
-        # 4. 模拟充电过程
-        # 5. 生成详单账单
-        
-        # 当前简化版本：只返回用户ID和占位结果
-        return {
-            "user_id": user_id,
-            "status": "SIMULATED",
-            "detail": {
-                "request_id": f"REQ_{user_id}",
-                "charge_mode": user_config.get('charge_mode'),
-                "request_energy": user_config.get('request_energy'),
-                "note": "基础模拟版本，完整流程待实现"
-            },
-            "bill": {
-                "total_fee": 0.0,
-                "note": "基础模拟版本，账单待计算"
-            }
-        }
-        
-    except Exception as e:
-        return {
-            "user_id": user_id,
-            "status": "FAILED",
-            "error": str(e),
-            "detail": {},
-            "bill": {}
-        }
-
-
-def calculate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    计算批量模拟的统计指标
-    
-    基础版本：简化计算
-    后续完善为真实指标计算
-    """
-    total_users = len(results)
-    completed_users = sum(1 for r in results if r.get('status') == 'SIMULATED')
-    failed_users = sum(1 for r in results if r.get('status') == 'FAILED')
-    
-    # 基础版本使用模拟值
-    # TODO: 后续根据真实结果计算
-    return {
-        "total_users": total_users,
-        "completed_users": completed_users,
-        "failed_users": failed_users,
-        "avg_wait_seconds": 0,        # 待实现
-        "avg_finish_seconds": 0,      # 待实现
-        "total_finish_seconds": 0,    # 待实现
-        "station_utilization": 0.0,   # 待实现
-        "note": "基础版本，统计指标待完善"
-    }
-
-
-# TODO: 后续实现时间序列模拟引擎
-# class BatchSimulationEngine:
-#     """批量模拟引擎（时间序列版本）"""
-#     pass
