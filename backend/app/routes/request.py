@@ -9,6 +9,9 @@ from app.utils.validators import (
     validate_pay_request
 )
 from app.services.billing_service import generate_detail, generate_bill, save_bill, process_payment
+from app.services.config_manager import ConfigManager, get_active_scenario, can_accept_request
+from app.services.waiting_pool import get_waiting_pool_manager
+from app.enums import ChargeMode, RequestStatus
 from app.utils.db import query_db, execute_db
 from datetime import datetime
 
@@ -47,31 +50,95 @@ def create_request():
     if not is_valid:
         return error_response(1001, "Invalid parameters", {"errors": errors})
     
+    # 检查是否有激活的场景配置
+    active_scenario = get_active_scenario()
+    if not active_scenario:
+        return error_response(1003, "No active scenario configuration")
+    
+    # 检查等待区容量
+    charge_mode = ChargeMode(data['charge_mode'])
+    can_accept, message = can_accept_request(charge_mode)
+    if not can_accept:
+        return error_response(1003, message)
+    
     # 生成 request_id
     count = query_db("SELECT COUNT(*) as cnt FROM charge_request", one=True)
     request_id = f"REQ{count['cnt'] + 1:03d}"
     
-    # 准备预测数据（临时模拟值，待调度模块接入后替换）
-    estimated_wait_seconds = 600
-    estimated_start_time = "2026-03-31T10:10:00"
-    estimated_finish_time = "2026-03-31T11:10:00"
+    # 使用服务器当前时间作为提交时间
+    submit_time = datetime.now()
+    submit_time_iso = submit_time.isoformat()
     
-    # 插入数据库，状态直接设为 WAITING，同时写入预测字段
+    # 计算临时预测值（基于当前等待池状态）
+    pool_manager = get_waiting_pool_manager()
+    pool_status = pool_manager.get_pool_status()
+    
+    # 基础等待时间：每个在池中的人增加5分钟
+    base_wait_per_person = 300  # 5分钟 = 300秒
+    
+    if charge_mode == ChargeMode.FAST:
+        queue_count = pool_status['fast_pool']['count'] if pool_status else 0
+        power_kw = 30.0  # 快充功率
+    else:
+        queue_count = pool_status['slow_pool']['count'] if pool_status else 0
+        power_kw = 7.0   # 慢充功率
+    
+    # 预计等待时间 = 队列中人数 × 每人的基础等待时间
+    estimated_wait_seconds = queue_count * base_wait_per_person
+    
+    # 预计开始时间 = 当前时间 + 等待时间
+    estimated_start_time = submit_time.timestamp() + estimated_wait_seconds
+    estimated_start_dt = datetime.fromtimestamp(estimated_start_time)
+    estimated_start_iso = estimated_start_dt.isoformat()
+    
+    # 预计服务时长（分钟）= 电量 / 功率 × 60
+    request_energy = float(data['request_energy'])
+    estimated_service_minutes = (request_energy / power_kw) * 60
+    estimated_service_seconds = int(estimated_service_minutes * 60)
+    
+    # 预计完成时间 = 开始时间 + 服务时长
+    estimated_finish_time = estimated_start_time + estimated_service_seconds
+    estimated_finish_dt = datetime.fromtimestamp(estimated_finish_time)
+    estimated_finish_iso = estimated_finish_dt.isoformat()
+    
+    # 插入数据库，状态设为 WAITING，使用服务器时间
     execute_db("""
         INSERT INTO charge_request (
             request_id, charge_mode, request_energy, status, submit_time,
-            estimated_wait_seconds, estimated_start_time, estimated_finish_time
+            estimated_wait_seconds, estimated_start_time, estimated_finish_time,
+            estimated_service_seconds, scenario_id
         )
-        VALUES (?, ?, ?, 'WAITING', ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'WAITING', ?, ?, ?, ?, ?, ?)
     """, [
         request_id,
         data['charge_mode'],
-        data['request_energy'],
-        data['request_time'],
+        request_energy,
+        submit_time_iso,
         estimated_wait_seconds,
-        estimated_start_time,
-        estimated_finish_time
+        estimated_start_iso,
+        estimated_finish_iso,
+        estimated_service_seconds,
+        active_scenario.id
     ])
+    
+    # 获取新创建请求的ID
+    new_request = query_db(
+        "SELECT id FROM charge_request WHERE request_id = ?",
+        [request_id],
+        one=True
+    )
+    
+    # 添加到等待池
+    if new_request:
+        pool_manager = get_waiting_pool_manager()
+        success, pool_message = pool_manager.add_to_pool(
+            new_request['id'], 
+            charge_mode
+        )
+        if not success:
+            # 回滚：删除已创建的请求
+            execute_db("DELETE FROM charge_request WHERE id = ?", [new_request['id']])
+            return error_response(1003, f"Failed to add to waiting pool: {pool_message}")
     
     # TODO: 调用调度模块获取真实预测结果
     # scheduler_client.get_prediction(request_id, charge_mode, request_energy)
@@ -80,8 +147,8 @@ def create_request():
         "request_id": request_id,
         "status": "WAITING",
         "estimated_wait_seconds": estimated_wait_seconds,
-        "estimated_start_time": estimated_start_time,
-        "estimated_finish_time": estimated_finish_time
+        "estimated_start_time": estimated_start_iso,
+        "estimated_finish_time": estimated_finish_iso
     })
 
 
@@ -129,15 +196,35 @@ def get_status(request_id):
     # 计算预计等待时间（简化计算）
     estimated_wait = 0
     if req['status'] in ['WAITING', 'CALLED']:
-        estimated_wait = 300  # 默认 5 分钟
+        estimated_wait = req['estimated_wait_seconds'] or 300
     
-    return success_response({
+    # 获取队列位置信息（如果在等待中）
+    queue_position = None
+    if req['status'] == 'WAITING' and req['waiting_pool_type']:
+        pool_manager = get_waiting_pool_manager()
+        position_info = pool_manager.get_request_position(req['id'])
+        if position_info:
+            queue_position = {
+                'pool_type': position_info['pool_type'],
+                'position': position_info['position'],
+                'total_in_pool': position_info['total_in_pool']
+            }
+    
+    response_data = {
         "request_id": request_id,
         "status": req['status'],
         "station_id": station_id,
         "estimated_wait_seconds": estimated_wait,
         "last_called_time": req['last_called_at']
-    })
+    }
+    
+    # 添加池类型和队列位置（如果有）
+    if req['waiting_pool_type']:
+        response_data['waiting_pool_type'] = req['waiting_pool_type']
+    if queue_position:
+        response_data['queue_position'] = queue_position
+    
+    return success_response(response_data)
 
 
 @request_bp.route('/cancel_queue', methods=['POST'])
@@ -186,6 +273,11 @@ def cancel_queue():
     if req['status'] not in ['PENDING', 'WAITING', 'CALLED']:
         return error_response(1003, "Current status does not allow cancel")
     
+    # 如果已在等待池中，先移除
+    if req['status'] == 'WAITING' and req['waiting_pool_type']:
+        pool_manager = get_waiting_pool_manager()
+        pool_manager.remove_from_pool(req['id'])
+    
     # 如果已分配充电桩，释放预留
     if req['assigned_station_id']:
         execute_db("""
@@ -197,12 +289,11 @@ def cancel_queue():
     # 更新请求状态为 CANCELLED
     execute_db("""
         UPDATE charge_request 
-        SET status = 'CANCELLED', updated_at = ? 
+        SET status = 'CANCELLED', 
+            waiting_pool_type = NULL,
+            updated_at = ? 
         WHERE request_id = ?
     """, [cancel_time, request_id])
-    
-    # TODO: 调用调度模块从等待池移除
-    # scheduler_client.remove_from_pool(request_id, req['charge_mode'])
     
     # TODO: 触发重调度
     # scheduler_client.trigger_reschedule('CANCEL', request_id)

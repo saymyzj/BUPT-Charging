@@ -75,3 +75,15 @@ class EventType(Enum):
     CHARGE_INTERRUPT = "CHARGE_INTERRUPT"  # 充电中断
     LEAVE = "LEAVE"                        # 挪车离开
     STATION_FAULT = "STATION_FAULT"        # 桩故障
+
+
+class WaitingPoolType(Enum):
+    """等待池类型枚举"""
+    FAST_POOL = "FAST_POOL"                # 快充等待池
+    SLOW_POOL = "SLOW_POOL"                # 慢充等待池
+
+
+class StationQueueMode(Enum):
+    """充电桩队列模式枚举"""
+    UNIFORM_CAPACITY = "UNIFORM_CAPACITY"  # 统一容量模式（每桩相同容量上限）
+    STATION_SNAPSHOT = "STATION_SNAPSHOT"  # 桩级快照模式（每桩独立初始状态）
