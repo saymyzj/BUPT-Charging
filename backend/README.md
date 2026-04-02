@@ -1,151 +1,128 @@
-# 智能充电桩调度计费系统 - 后端服务
+# 智能充电桩调度计费系统 - 后端说明
 
-## 项目简介
+> 文档版本：V2.0  
+> 更新日期：2026-04-02  
+> 适用范围：当前 `develop` 分支真实后端实现
 
-北京邮电大学软件工程课程项目 - 智能充电桩调度计费系统的 Flask 后端服务。
+---
 
-## 技术栈
+## 1. 文档定位
 
-- Python 3.9+
-- Flask 3.0.0
-- Flask-CORS 4.0.0
-- SQLite3
-- PyJWT 2.8.0
+本文档用于说明当前后端在 `develop` 分支上的真实状态，作为组内统一口径。
 
-## 目录结构
+请与以下文档配合阅读：
 
-```
-backend/
-├── app/                    # 应用主目录
-│   ├── __init__.py        # Flask应用初始化
-│   ├── config.py          # 配置文件
-│   ├── enums.py           # 枚举定义
-│   ├── models/            # 数据模型
-│   ├── routes/            # 路由/接口
-│   │   ├── health.py      # 健康检查
-│   │   └── request.py     # 请求相关接口
-│   ├── services/          # 业务逻辑
-│   └── utils/             # 工具函数
-│       ├── db.py          # 数据库工具
-│       ├── response.py    # 响应封装
-│       └── validators.py  # 输入校验
-├── migrations/            # 数据库迁移
-│   └── init_schema.sql    # 初始建表SQL
-├── tests/                 # 测试文件
-├── requirements.txt       # Python依赖
-├── run.py                 # 启动入口
-└── README.md              # 本文件
-```
+- [系统验收接口与测试输入规范说明](/Users/zhoujia/code/SE/ChargingPile/docs/系统验收接口与测试输入规范说明.md)
+- [冻结接口文档](/Users/zhoujia/code/SE/ChargingPile/docs/冻结接口文档.md)
+- [调度模块输入输出约定](/Users/zhoujia/code/SE/ChargingPile/docs/调度模块输入输出约定.md)
+- [Fix本地联调](/Users/zhoujia/code/SE/ChargingPile/docs/04-02/Fix本地联调.md)
 
-## 快速开始
+---
 
-### 1. 创建虚拟环境
+## 2. 当前已完成内容
+
+### 2.1 场景与基础能力
+
+- 已支持动态场景配置：
+  - 快充桩数量
+  - 慢充桩数量
+  - 全局共享等待区容量
+  - `UNIFORM_CAPACITY`
+  - `STATION_SNAPSHOT`
+- 已实现快充/慢充双等待池
+- 已实现调度模块最小闭环
+- 已实现批量模拟基础执行引擎
+
+### 2.2 当前可用接口
+
+- `GET /health`
+- `POST /api/request/create`
+- `GET /api/request/status/{request_id}`
+- `POST /api/request/cancel_queue`
+- `POST /api/request/confirm_arrival`
+- `POST /api/request/interrupt_charge`
+- `POST /api/request/confirm_leave`
+- `GET /api/request/result/{request_id}`
+- `POST /api/request/pay`
+- `GET /api/stations/overview`
+- `POST /api/batch/simulate`
+
+### 2.3 当前可演示主线
+
+- 用户提交充电请求
+- 返回预计等待/开始/结束时间
+- 状态轮询
+- 叫号与确认到场
+- 充电结束 / 中断后结算
+- 详单与账单生成
+- 支付
+- 批量模拟返回 `summary + results`
+
+---
+
+## 3. 当前仍为简化实现的部分
+
+- 调度算法是课程项目阶段的最小可用版本，不是最终优化版
+- 状态自动推进仍有为演示闭环服务的简化处理
+- 管理端接口仍未完整接入真实数据
+- 批量模拟已可返回真实结构，但仍是阶段性实现
+
+---
+
+## 4. 本地启动
+
+### 4.1 安装依赖
 
 ```bash
-python -m venv venv
-
-# Windows:
-venv\Scripts\activate
-
-# Mac/Linux:
-source venv/bin/activate
-```
-
-### 2. 安装依赖
-
-```bash
+cd /Users/zhoujia/code/SE/ChargingPile/backend
 pip install -r requirements.txt
 ```
 
-### 3. 启动服务
+### 4.2 启动服务
+
+建议使用临时数据库启动：
 
 ```bash
-python run.py
+cd /Users/zhoujia/code/SE/ChargingPile/backend
+DATABASE_PATH=/tmp/charging_fix_20260402.db python3 run.py
 ```
 
-服务将启动在 `http://0.0.0.0:8080`
+服务默认监听：
 
-### 4. 测试健康检查接口
+- `http://127.0.0.1:8080`
+
+### 4.3 健康检查
 
 ```bash
-curl http://localhost:8080/health
+curl http://127.0.0.1:8080/health
 ```
 
-预期响应：
+预期返回：
+
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "status": "ok",
-    "timestamp": "2026-03-31T10:00:00"
-  }
+  "status": "ok",
+  "timestamp": "2026-04-02T21:00:00"
 }
 ```
 
-## API接口
+---
 
-### 健康检查
-- `GET /health` - 服务健康检查
+## 5. 当前后端目录重点
 
-### 充电请求（单次模拟核心接口）
-- `POST /api/request/create` - 提交充电请求
-- `GET /api/request/status/<request_id>` - 查询请求状态
-- `POST /api/request/cancel_queue` - 取消排队
-- `POST /api/request/confirm_arrival` - 确认到场
-- `POST /api/request/interrupt_charge` - 中断充电
-- `POST /api/request/confirm_leave` - 确认挪车
-- `GET /api/request/result/<request_id>` - 获取详单与账单
-- `POST /api/request/pay` - 支付确认
+- [run.py](/Users/zhoujia/code/SE/ChargingPile/backend/run.py)
+- [request.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/routes/request.py)
+- [batch_simulate.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/routes/batch_simulate.py)
+- [health.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/routes/health.py)
+- [scheduler_engine.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/services/scheduler_engine.py)
+- [waiting_pool.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/services/waiting_pool.py)
+- [config_manager.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/services/config_manager.py)
+- [scenario_adapter.py](/Users/zhoujia/code/SE/ChargingPile/backend/app/services/scenario_adapter.py)
 
-**说明**：以上 8 个接口已实现框架和基础逻辑，但尚未接入调度模块（预计等待时间等使用临时模拟值）。
+---
 
-### 批量模拟（待实现）
-- `POST /api/admin/simulate/batch` - 批量模拟入口
+## 6. 当前统一结论
 
-### 管理端（待实现）
-- `GET /api/admin/overview` - 查看全场状态
-- `GET/PUT /api/admin/station/<id>` - 充电桩管理
-- `GET/PUT /api/admin/scheduler/config` - 调度策略配置
-- `GET/PUT /api/admin/billing/config` - 计费规则配置
-
-## 配置说明
-
-配置文件位于 `app/config.py`，支持以下环境：
-
-- `development` - 开发环境（默认）
-- `production` - 生产环境
-- `testing` - 测试环境
-
-可通过环境变量 `FLASK_ENV` 切换环境。
-
-## 数据库
-
-使用 SQLite3，数据库文件默认位于 `backend/charging_system.db`。
-
-初始化时会自动创建所有表和初始数据。
-
-## 跨设备访问
-
-服务默认监听 `0.0.0.0:8080`，支持局域网内其他设备访问。
-
-获取本机IP：
-```bash
-# Windows:
-ipconfig
-
-# Mac/Linux:
-ifconfig | grep inet
-```
-
-其他设备访问：`http://<你的IP>:8080/health`
-
-## 开发规范
-
-- 接口返回统一格式：`{code, message, data}`
-- code=0 表示成功，code>=1000 表示错误
-- 使用 ISO 8601 格式传递时间
-
-## 作者
-
-成员B - 服务端/联合验收负责人
+- 后端当前已经具备最小闭环演示能力
+- 当前后端口径已经切换为“最终验收 / 系统验收”
+- 不再以旧版“联合验收”文档和阶段表述作为实现依据
