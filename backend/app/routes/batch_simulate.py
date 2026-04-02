@@ -1,12 +1,17 @@
 """
-批量模拟接口模块
-实现系统验收要求的批量测试接口
+批量模拟接口模块【框架版本 - 待完善】
+
+当前状态：框架完成，核心逻辑待实现
+- 场景参数解析：已完成
+- 用户行为解析：已完成
+- 批量模拟执行：基础顺序模拟，时间序列模拟待实现
+- 结果统计：占位值，真实计算待实现
 
 路径：POST /api/batch/simulate
 
 作者：成员 B
 日期：2026-04-02
-版本：V1.0
+版本：V1.0-framework
 """
 
 from flask import Blueprint, request
@@ -192,17 +197,17 @@ def validate_user_config(user: Dict[str, Any], index: int) -> List[str]:
 
 def execute_batch_simulation_basic(config_id: int, users_config: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    执行基础批量模拟（顺序执行版本）
-    
-    简化实现：按顺序处理每个用户请求
-    后续优化为时间序列模拟
-    
+    执行基础批量模拟（顺序执行版本）【框架实现】
+
+    当前实现：按顺序处理每个用户请求（简化版本）
+    待完善：时间序列模拟引擎，真实调度接入
+
     Args:
         config_id: 场景配置ID
         users_config: 用户配置列表
-    
+
     Returns:
-        每个用户的执行结果列表
+        每个用户的执行结果列表（含占位数据）
     """
     results = []
     
@@ -215,10 +220,15 @@ def execute_batch_simulation_basic(config_id: int, users_config: List[Dict[str, 
 
 def simulate_single_user(config_id: int, user_config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    模拟单个用户的完整流程
-    
-    基础版本：简化处理，只模拟请求创建
-    后续完善为完整流程模拟
+    模拟单个用户的完整流程【框架实现 - 占位返回】
+
+    当前实现：仅返回用户ID和占位结果
+    待完善：
+    1. 创建请求并加入等待池
+    2. 根据行为参数模拟用户行为
+    3. 等待调度模块分配充电桩
+    4. 模拟充电过程
+    5. 生成详单和账单
     """
     user_id = user_config.get('user_id')
     
@@ -258,10 +268,14 @@ def simulate_single_user(config_id: int, user_config: Dict[str, Any]) -> Dict[st
 
 def calculate_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    计算批量模拟的统计指标
-    
-    基础版本：简化计算
-    后续完善为真实指标计算
+    计算批量模拟的统计指标【框架实现 - 占位值】
+
+    当前实现：仅统计用户数量，其他指标为0
+    待完善：根据真实模拟结果计算
+    - 平均等待时间
+    - 平均完成时间
+    - 总完成时间
+    - 充电桩利用率
     """
     total_users = len(results)
     completed_users = sum(1 for r in results if r.get('status') == 'SIMULATED')

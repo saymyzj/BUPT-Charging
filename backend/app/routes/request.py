@@ -64,44 +64,45 @@ def create_request():
     # 生成 request_id
     count = query_db("SELECT COUNT(*) as cnt FROM charge_request", one=True)
     request_id = f"REQ{count['cnt'] + 1:03d}"
-    
-    # 使用服务器当前时间作为提交时间
-    submit_time = datetime.now()
-    submit_time_iso = submit_time.isoformat()
-    
+
+    # 使用客户端传入的 request_time 作为 submit_time
+    # 这对于批量模拟回放很重要，必须保留原始请求时间
+    submit_time_iso = data['request_time']
+    submit_time = datetime.fromisoformat(submit_time_iso)
+
     # 计算临时预测值（基于当前等待池状态）
     pool_manager = get_waiting_pool_manager()
     pool_status = pool_manager.get_pool_status()
-    
+
     # 基础等待时间：每个在池中的人增加5分钟
     base_wait_per_person = 300  # 5分钟 = 300秒
-    
+
     if charge_mode == ChargeMode.FAST:
         queue_count = pool_status['fast_pool']['count'] if pool_status else 0
         power_kw = 30.0  # 快充功率
     else:
         queue_count = pool_status['slow_pool']['count'] if pool_status else 0
         power_kw = 7.0   # 慢充功率
-    
+
     # 预计等待时间 = 队列中人数 × 每人的基础等待时间
     estimated_wait_seconds = queue_count * base_wait_per_person
-    
-    # 预计开始时间 = 当前时间 + 等待时间
+
+    # 预计开始时间 = 请求时间 + 等待时间
     estimated_start_time = submit_time.timestamp() + estimated_wait_seconds
     estimated_start_dt = datetime.fromtimestamp(estimated_start_time)
     estimated_start_iso = estimated_start_dt.isoformat()
-    
+
     # 预计服务时长（分钟）= 电量 / 功率 × 60
     request_energy = float(data['request_energy'])
     estimated_service_minutes = (request_energy / power_kw) * 60
     estimated_service_seconds = int(estimated_service_minutes * 60)
-    
+
     # 预计完成时间 = 开始时间 + 服务时长
     estimated_finish_time = estimated_start_time + estimated_service_seconds
     estimated_finish_dt = datetime.fromtimestamp(estimated_finish_time)
     estimated_finish_iso = estimated_finish_dt.isoformat()
-    
-    # 插入数据库，状态设为 WAITING，使用服务器时间
+
+    # 插入数据库，状态设为 WAITING，使用客户端传入的 request_time
     execute_db("""
         INSERT INTO charge_request (
             request_id, charge_mode, request_energy, status, submit_time,
