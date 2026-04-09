@@ -11,6 +11,7 @@ from app.utils.validators import (
 from app.services.billing_service import generate_detail, generate_bill, save_bill, process_payment
 from app.services.config_manager import get_active_scenario, can_accept_request
 from app.services.scheduler_engine import (
+    advance_request_state_for_status_view,
     predict_request_by_id,
     reschedule_waiting_requests,
     service_seconds_for_request,
@@ -19,7 +20,7 @@ from app.services.scheduler_engine import (
 from app.services.waiting_pool import get_waiting_pool_manager
 from app.enums import ChargeMode, EventType
 from app.utils.db import query_db, execute_db
-from datetime import datetime, timedelta
+from datetime import datetime
 
 request_bp = Blueprint('request', __name__)
 
@@ -36,103 +37,6 @@ def format_iso_datetime(value):
     if isinstance(value, str):
         return value
     return value.strftime('%Y-%m-%dT%H:%M:%S')
-
-
-def get_scheduler_minutes(config_key, default_value):
-    config = query_db(
-        "SELECT config_value FROM scheduler_config WHERE config_key = ?",
-        [config_key],
-        one=True
-    )
-    return int(config['config_value']) if config else default_value
-
-
-def auto_advance_request_state(req):
-    """
-    在状态查询前，根据当前时间推进简单状态机：
-    WAITING -> CALLED -> CHARGING -> COMPLETED(待离场)
-    """
-    now = datetime.now()
-    current = query_db(
-        "SELECT * FROM charge_request WHERE id = ?",
-        [req['id']],
-        one=True
-    )
-    if not current:
-        return req
-
-    current = dict(current)
-    status = current['status']
-    estimated_start_dt = parse_iso_datetime(current.get('estimated_start_time'))
-    estimated_finish_dt = parse_iso_datetime(current.get('estimated_finish_time'))
-    call_ahead_seconds = get_scheduler_minutes('T_CALL_MINUTES', 5) * 60
-
-    if status == 'WAITING' and current.get('assigned_station_id') and estimated_start_dt:
-        called_at = max(now, estimated_start_dt - timedelta(seconds=call_ahead_seconds))
-        if now >= called_at:
-            execute_db("""
-                UPDATE charge_request
-                SET status = 'CALLED',
-                    last_called_at = COALESCE(last_called_at, ?),
-                    updated_at = ?
-                WHERE id = ?
-            """, [
-                format_iso_datetime(called_at),
-                format_iso_datetime(now),
-                current['id']
-            ])
-            current['status'] = 'CALLED'
-            current['last_called_at'] = format_iso_datetime(called_at)
-
-    if current['status'] == 'CHARGING' and current.get('assigned_station_id') and estimated_finish_dt and now >= estimated_finish_dt:
-        session = query_db("""
-            SELECT * FROM charging_session
-            WHERE request_id = ? AND status = 'CHARGING'
-            ORDER BY id DESC
-            LIMIT 1
-        """, [current['id']], one=True)
-        if session:
-            execute_db("""
-                UPDATE charging_session
-                SET end_time = ?, actual_energy = ?, status = 'COMPLETED'
-                WHERE id = ?
-            """, [
-                format_iso_datetime(estimated_finish_dt),
-                current['request_energy'],
-                session['id']
-            ])
-
-        execute_db("""
-            UPDATE charge_request
-            SET status = 'COMPLETED',
-                actual_energy = ?,
-                actual_service_seconds = ?,
-                updated_at = ?
-            WHERE id = ?
-        """, [
-            current['request_energy'],
-            current.get('estimated_service_seconds') or 0,
-            format_iso_datetime(now),
-            current['id']
-        ])
-        execute_db("""
-            UPDATE charging_station
-            SET status = 'WAITING_TO_LEAVE',
-                current_request_id = ?
-            WHERE id = ?
-        """, [
-            current['id'],
-            current['assigned_station_id']
-        ])
-        current['status'] = 'COMPLETED'
-        current['actual_energy'] = current['request_energy']
-
-    refreshed = query_db(
-        "SELECT * FROM charge_request WHERE id = ?",
-        [current['id']],
-        one=True
-    )
-    return dict(refreshed) if refreshed else current
 
 
 @request_bp.route('/create', methods=['POST'])
@@ -275,7 +179,7 @@ def get_status(request_id):
     if not req:
         return error_response(1002, "Request not found")
     req = dict(req)
-    req = auto_advance_request_state(req)
+    req = advance_request_state_for_status_view(req) or req
     
     # 获取充电桩编号
     station_id = None

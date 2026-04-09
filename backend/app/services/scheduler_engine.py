@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.enums import ChargeMode, EventType, RequestStatus, StationStatus, WaitingPoolType
 from app.utils.db import execute_db, query_db
@@ -37,6 +37,22 @@ class RuntimeStation:
     available_at: datetime
     status: str
     busy_seconds: int = 0
+
+
+@dataclass
+class RuntimePrediction:
+    """调度预测结果。保持路由层依赖的核心字段稳定。"""
+
+    id: int
+    request_id: str
+    queue_position: int
+    estimated_wait_seconds: Optional[int]
+    estimated_start_time: Optional[datetime]
+    estimated_finish_time: Optional[datetime]
+    estimated_service_seconds: int
+    recommended_station_id: Optional[int]
+    recommended_station_code: Optional[str]
+    priority_score: float
 
 
 def parse_datetime(value: Any, fallback: Optional[datetime] = None) -> datetime:
@@ -71,6 +87,40 @@ def service_seconds_for_request(request_energy: float, charge_mode: str, power_k
     if power_kw <= 0:
         return 0
     return max(0, int(round(float(request_energy) / float(power_kw) * 3600)))
+
+
+def _get_scheduler_numeric_config(config_key: str, default_value: float) -> float:
+    row = query_db(
+        "SELECT config_value FROM scheduler_config WHERE config_key = ?",
+        [config_key],
+        one=True,
+    )
+    if not row:
+        return default_value
+    try:
+        return float(row["config_value"])
+    except (TypeError, ValueError):
+        return default_value
+
+
+def _load_priority_weights() -> Dict[str, float]:
+    """
+    加载调度权重。
+
+    文档冻结的是输入输出和语义，不冻结具体公式参数；
+    这里将权重读取集中在一起，方便后续升级而不影响调用方。
+    """
+    return {
+        "a": _get_scheduler_numeric_config("PRIORITY_WEIGHT_A", 1.0),
+        "b": _get_scheduler_numeric_config("PRIORITY_WEIGHT_B", 0.5),
+        "c": _get_scheduler_numeric_config("PRIORITY_WEIGHT_C", 1.0),
+        "d": _get_scheduler_numeric_config("PRIORITY_WEIGHT_D", 0.3),
+        "e": _get_scheduler_numeric_config("PRIORITY_WEIGHT_E", 0.8),
+    }
+
+
+def _call_ahead_seconds() -> int:
+    return int(_get_scheduler_numeric_config("T_CALL_MINUTES", 5) * 60)
 
 
 def waiting_pool_for_mode(charge_mode: str) -> str:
@@ -128,7 +178,8 @@ def _load_waiting_requests(scenario_id: int, pool_type: str) -> List[Dict[str, A
     rows = query_db(
         """
         SELECT id, request_id, charge_mode, request_energy, submit_time,
-               estimated_service_seconds, priority_score, waiting_pool_type
+               estimated_service_seconds, priority_score, waiting_pool_type,
+               retry_count, no_show_count, fault_requeue_flag
         FROM charge_request
         WHERE scenario_id = ?
           AND waiting_pool_type = ?
@@ -145,31 +196,106 @@ def _load_waiting_requests(scenario_id: int, pool_type: str) -> List[Dict[str, A
     return [dict(row) for row in rows] if rows else []
 
 
+def _score_waiting_request(
+    req: Dict[str, Any],
+    anchor_time: datetime,
+    default_power_kw: Optional[float],
+    weights: Dict[str, float],
+) -> float:
+    """
+    计算等待请求的优先级分数。
+
+    当前实现采用“等待时间 + 补偿 - 服务时长 - 过号惩罚”的可扩展形式，
+    与文档语义对齐，同时保留后续继续细化的空间。
+    """
+    submit_time = parse_datetime(req["submit_time"], fallback=anchor_time)
+    wait_minutes = max(0.0, (anchor_time - submit_time).total_seconds() / 60.0)
+    service_minutes = (
+        float(req.get("estimated_service_seconds") or service_seconds_for_request(
+            req["request_energy"],
+            req["charge_mode"],
+            default_power_kw,
+        )) / 60.0
+    )
+    retry_bonus = float(req.get("retry_count") or 0) * 5.0
+    fault_bonus = 10.0 if bool(req.get("fault_requeue_flag")) else 0.0
+    no_show_penalty = float(req.get("no_show_count") or 0) * 3.0
+
+    score = (
+        weights["a"] * wait_minutes
+        + weights["b"] * retry_bonus
+        + weights["c"] * fault_bonus
+        - weights["d"] * service_minutes
+        - weights["e"] * no_show_penalty
+    )
+    return round(score, 4)
+
+
+def _choose_best_station(
+    runtime_stations: List[RuntimeStation],
+    submit_time: datetime,
+    anchor_time: datetime,
+    request_energy: float,
+    charge_mode: str,
+) -> Tuple[RuntimeStation, int, datetime, datetime, int]:
+    """
+    为当前请求选择预测完成时间最优的充电桩。
+
+    这样后续如果要升级为更复杂的选桩策略，只需替换本函数。
+    """
+    candidates: List[Tuple[datetime, datetime, str, RuntimeStation, int]] = []
+
+    for station in runtime_stations:
+        service_seconds = service_seconds_for_request(request_energy, charge_mode, station.power_kw)
+        start_time = max(anchor_time, submit_time, station.available_at)
+        finish_time = start_time + timedelta(seconds=service_seconds)
+        candidates.append((finish_time, start_time, station.station_code, station, service_seconds))
+
+    finish_time, start_time, _, station, service_seconds = min(candidates, key=lambda item: (item[0], item[1], item[2]))
+    wait_seconds = max(0, int((start_time - submit_time).total_seconds()))
+    return station, wait_seconds, start_time, finish_time, service_seconds
+
+
 def _predict_pool_requests(
     requests: List[Dict[str, Any]],
     stations: List[RuntimeStation],
     anchor_time: datetime,
-) -> List[Dict[str, Any]]:
+) -> List[RuntimePrediction]:
     """对同一等待池内的请求执行最早可用桩分配预测。"""
     if not requests:
         return []
 
+    weights = _load_priority_weights()
+    default_power_kw = stations[0].power_kw if stations else None
+    prepared_requests = []
+    for req in requests:
+        enriched = dict(req)
+        enriched["priority_score"] = _score_waiting_request(req, anchor_time, default_power_kw, weights)
+        prepared_requests.append(enriched)
+    prepared_requests.sort(
+        key=lambda req: (
+            -float(req["priority_score"]),
+            parse_datetime(req["submit_time"], fallback=anchor_time),
+            req["id"],
+        )
+    )
+
     if not stations:
         return [
-            {
-                "id": req["id"],
-                "request_id": req["request_id"],
-                "queue_position": index + 1,
-                "estimated_wait_seconds": None,
-                "estimated_start_time": None,
-                "estimated_finish_time": None,
-                "estimated_service_seconds": req.get("estimated_service_seconds")
+            RuntimePrediction(
+                id=req["id"],
+                request_id=req["request_id"],
+                queue_position=index + 1,
+                estimated_wait_seconds=None,
+                estimated_start_time=None,
+                estimated_finish_time=None,
+                estimated_service_seconds=req.get("estimated_service_seconds")
                 or service_seconds_for_request(req["request_energy"], req["charge_mode"]),
-                "recommended_station_id": None,
-                "recommended_station_code": None,
-                "priority_score": float(len(requests) - index),
-            }
-            for index, req in enumerate(requests)
+                recommended_station_id=None,
+                recommended_station_code=None,
+                priority_score=float(req["priority_score"]),
+            )
+            for index, req in enumerate(prepared_requests)
         ]
 
     runtime_stations = [
@@ -185,36 +311,74 @@ def _predict_pool_requests(
         for station in stations
     ]
 
-    predictions: List[Dict[str, Any]] = []
+    predictions: List[RuntimePrediction] = []
 
-    for index, req in enumerate(requests):
+    for index, req in enumerate(prepared_requests):
         submit_time = parse_datetime(req["submit_time"], fallback=anchor_time)
-        chosen_station = min(runtime_stations, key=lambda station: (station.available_at, station.station_code))
-        service_seconds = req.get("estimated_service_seconds") or service_seconds_for_request(
-            req["request_energy"], req["charge_mode"], chosen_station.power_kw
+        chosen_station, wait_seconds, start_time, finish_time, service_seconds = _choose_best_station(
+            runtime_stations,
+            submit_time,
+            anchor_time,
+            float(req["request_energy"]),
+            req["charge_mode"],
         )
-        start_time = max(anchor_time, submit_time, chosen_station.available_at)
-        finish_time = start_time + timedelta(seconds=service_seconds)
-        wait_seconds = max(0, int((start_time - submit_time).total_seconds()))
 
         predictions.append(
-            {
-                "id": req["id"],
-                "request_id": req["request_id"],
-                "queue_position": index + 1,
-                "estimated_wait_seconds": wait_seconds,
-                "estimated_start_time": start_time,
-                "estimated_finish_time": finish_time,
-                "estimated_service_seconds": service_seconds,
-                "recommended_station_id": chosen_station.station_id,
-                "recommended_station_code": chosen_station.station_code,
-                "priority_score": float(len(requests) - index),
-            }
+            RuntimePrediction(
+                id=req["id"],
+                request_id=req["request_id"],
+                queue_position=index + 1,
+                estimated_wait_seconds=wait_seconds,
+                estimated_start_time=start_time,
+                estimated_finish_time=finish_time,
+                estimated_service_seconds=service_seconds,
+                recommended_station_id=chosen_station.station_id,
+                recommended_station_code=chosen_station.station_code,
+                priority_score=float(req["priority_score"]),
+            )
         )
 
         chosen_station.available_at = finish_time
 
     return predictions
+
+
+def _build_call_recommendation(
+    predictions: List[RuntimePrediction],
+    anchor_time: datetime,
+) -> Optional[Dict[str, Any]]:
+    """
+    生成当前时刻的叫号建议。
+
+    当前调用方暂未强依赖该结果，但保留该结构可以方便后续将简化状态机
+    升级为文档中的完整叫号机制，而不必改动重调度入口。
+    """
+    threshold_seconds = _call_ahead_seconds()
+    eligible: List[RuntimePrediction] = []
+    for prediction in predictions:
+        if not prediction.recommended_station_code or not prediction.estimated_start_time:
+            continue
+        delta = (prediction.estimated_start_time - anchor_time).total_seconds()
+        if delta <= threshold_seconds:
+            eligible.append(prediction)
+
+    if not eligible:
+        return None
+
+    target = min(
+        eligible,
+        key=lambda item: (
+            item.estimated_start_time or anchor_time,
+            item.queue_position,
+            item.request_id,
+        ),
+    )
+    return {
+        "request_id": target.request_id,
+        "station_code": target.recommended_station_code,
+        "call_before_seconds": threshold_seconds,
+        "estimated_start_time": format_datetime(target.estimated_start_time),
+    }
 
 
 def reschedule_waiting_requests(
@@ -241,8 +405,9 @@ def reschedule_waiting_requests(
         anchor_time,
     )
 
+    all_predictions = fast_predictions + slow_predictions
     updated_ids: List[str] = []
-    for prediction in fast_predictions + slow_predictions:
+    for prediction in all_predictions:
         execute_db(
             """
             UPDATE charge_request
@@ -256,23 +421,27 @@ def reschedule_waiting_requests(
             WHERE id = ?
             """,
             [
-                prediction["estimated_wait_seconds"],
-                format_datetime(prediction["estimated_start_time"]),
-                format_datetime(prediction["estimated_finish_time"]),
-                prediction["estimated_service_seconds"],
-                prediction["recommended_station_id"],
-                prediction["priority_score"],
+                prediction.estimated_wait_seconds,
+                format_datetime(prediction.estimated_start_time),
+                format_datetime(prediction.estimated_finish_time),
+                prediction.estimated_service_seconds,
+                prediction.recommended_station_id,
+                prediction.priority_score,
                 format_datetime(anchor_time),
-                prediction["id"],
+                prediction.id,
             ],
         )
-        updated_ids.append(prediction["request_id"])
+        updated_ids.append(prediction.request_id)
+
+    call_recommendation = _build_call_recommendation(all_predictions, anchor_time)
 
     return {
         "event_type": event_type,
         "event_time": format_datetime(anchor_time),
         "updated_request_ids": updated_ids,
         "updated_count": len(updated_ids),
+        "should_call": call_recommendation is not None,
+        "call_recommendation": call_recommendation,
     }
 
 
@@ -358,6 +527,120 @@ def trigger_reschedule_for_event(
     event_time: Optional[str] = None,
 ) -> Dict[str, Any]:
     return reschedule_waiting_requests(scenario_id, event_type=event_type.value, event_time=event_time)
+
+
+def advance_request_state_for_status_view(request_ref: Any, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+    """
+    供状态查询使用的最小状态推进器。
+
+    目前保留 04-02 联调阶段所需的简化自动推进行为，但收口到服务层，
+    方便后续逐步替换为更完整的叫号/充电状态机，而不把逻辑散落在路由里。
+    """
+    now = now or datetime.now()
+
+    if isinstance(request_ref, dict):
+        lookup_value = request_ref.get("id")
+        lookup_field = "id"
+    elif isinstance(request_ref, int):
+        lookup_value = request_ref
+        lookup_field = "id"
+    else:
+        lookup_value = request_ref
+        lookup_field = "request_id"
+
+    current = query_db(
+        f"SELECT * FROM charge_request WHERE {lookup_field} = ?",
+        [lookup_value],
+        one=True,
+    )
+    if not current:
+        return None
+
+    current = dict(current)
+    status = current["status"]
+    estimated_start_dt = parse_datetime(current.get("estimated_start_time"))
+    estimated_finish_dt = parse_datetime(current.get("estimated_finish_time"))
+
+    if status == RequestStatus.WAITING.value and current.get("assigned_station_id") and estimated_start_dt:
+        called_at = max(now, estimated_start_dt - timedelta(seconds=_call_ahead_seconds()))
+        if now >= called_at:
+            execute_db(
+                """
+                UPDATE charge_request
+                SET status = 'CALLED',
+                    last_called_at = COALESCE(last_called_at, ?),
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                [
+                    format_datetime(called_at),
+                    format_datetime(now),
+                    current["id"],
+                ],
+            )
+            current["status"] = RequestStatus.CALLED.value
+            current["last_called_at"] = format_datetime(called_at)
+
+    if current["status"] == RequestStatus.CHARGING.value and current.get("assigned_station_id") and estimated_finish_dt and now >= estimated_finish_dt:
+        session = query_db(
+            """
+            SELECT * FROM charging_session
+            WHERE request_id = ? AND status = 'CHARGING'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            [current["id"]],
+            one=True,
+        )
+        if session:
+            execute_db(
+                """
+                UPDATE charging_session
+                SET end_time = ?, actual_energy = ?, status = 'COMPLETED'
+                WHERE id = ?
+                """,
+                [
+                    format_datetime(estimated_finish_dt),
+                    current["request_energy"],
+                    session["id"],
+                ],
+            )
+
+        execute_db(
+            """
+            UPDATE charge_request
+            SET status = 'COMPLETED',
+                actual_energy = ?,
+                actual_service_seconds = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            [
+                current["request_energy"],
+                current.get("estimated_service_seconds") or 0,
+                format_datetime(now),
+                current["id"],
+            ],
+        )
+        execute_db(
+            """
+            UPDATE charging_station
+            SET status = 'WAITING_TO_LEAVE',
+                current_request_id = ?
+            WHERE id = ?
+            """,
+            [
+                current["id"],
+                current["assigned_station_id"],
+            ],
+        )
+
+    refreshed = query_db(
+        "SELECT * FROM charge_request WHERE id = ?",
+        [current["id"]],
+        one=True,
+    )
+    return dict(refreshed) if refreshed else current
 
 
 def _create_runtime_stations_for_batch(scenario: Dict[str, Any], base_time: datetime) -> Dict[str, List[RuntimeStation]]:
