@@ -14,6 +14,7 @@ from app.utils.response import success_response, error_response
 from app.services.scheduler_engine import simulate_batch_case
 from app.enums import StationQueueMode
 from typing import Dict, Any, List
+from datetime import datetime
 
 batch_bp = Blueprint('batch', __name__)
 
@@ -132,15 +133,25 @@ def validate_batch_request(data: Dict[str, Any]) -> tuple[bool, List[str]]:
         if mode == StationQueueMode.STATION_SNAPSHOT.value:
             if not scenario.get('station_snapshots'):
                 errors.append("STATION_SNAPSHOT 模式下需要提供 station_snapshots")
+            else:
+                expected_count = int(scenario.get('fast_station_count', 0)) + int(scenario.get('slow_station_count', 0))
+                if len(scenario['station_snapshots']) != expected_count:
+                    errors.append("station_snapshots 数量必须与快充桩数量和慢充桩数量之和一致")
     
     # 校验 users
     users = data.get('users', [])
     if not isinstance(users, list):
         errors.append("users 必须是数组")
     else:
+        seen_user_ids = set()
         for i, user in enumerate(users):
             user_errors = validate_user_config(user, i)
             errors.extend(user_errors)
+            user_id = user.get('user_id')
+            if user_id in seen_user_ids:
+                errors.append(f"users[{i}].user_id 重复")
+            elif user_id:
+                seen_user_ids.add(user_id)
     
     return len(errors) == 0, errors
 
@@ -163,6 +174,14 @@ def validate_user_config(user: Dict[str, Any], index: int) -> List[str]:
     # 校验 request_energy
     if user.get('request_energy', 0) <= 0:
         errors.append(f"{prefix}.request_energy 必须大于0")
+
+    # 校验 request_time
+    request_time = user.get('request_time')
+    if request_time:
+        try:
+            datetime.fromisoformat(str(request_time).replace('Z', '+00:00'))
+        except ValueError:
+            errors.append(f"{prefix}.request_time 必须是 ISO 8601 时间格式")
     
     # 校验布尔字段
     boolean_fields = ['cancel_queue', 'interrupt_charge']
@@ -171,4 +190,3 @@ def validate_user_config(user: Dict[str, Any], index: int) -> List[str]:
             errors.append(f"{prefix}.{field} 必须是布尔值")
     
     return errors
-

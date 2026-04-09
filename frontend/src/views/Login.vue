@@ -127,6 +127,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { login, register } from '../api/charging';
 
 const router = useRouter();
 
@@ -147,19 +148,32 @@ function togglePwd(type) {
   if (type === 'confirm') regPwdConfirmType.value = regPwdConfirmType.value === 'password' ? 'text' : 'password';
 }
 
-function handleLogin() {
+async function handleLogin() {
   loginErrors.value.user = !loginForm.value.user.trim();
   loginErrors.value.pwd = !loginForm.value.pwd.trim();
   if (!loginErrors.value.user && !loginErrors.value.pwd) {
-    if (loginForm.value.user === 'admin') {
-      router.push('/admin/overview');
-    } else {
-      router.push('/user/workspace');
+    try {
+      const res = await login({
+        username: loginForm.value.user.trim(),
+        password: loginForm.value.pwd
+      });
+      const data = res.data || res;
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('auth_role', data.role);
+      localStorage.setItem('auth_username', data.username);
+      if (data.role === 'ADMIN') {
+        router.push('/admin/overview');
+      } else {
+        router.push('/user/workspace');
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || '登录失败，请检查用户名和密码';
+      ElMessage.error(message);
     }
   }
 }
 
-function handleRegister() {
+async function handleRegister() {
   regErrors.value.user = !regForm.value.user.trim();
   regErrors.value.pwd = !regForm.value.pwd.trim();
   regErrors.value.confirm = !regForm.value.confirm.trim();
@@ -171,8 +185,22 @@ function handleRegister() {
     regErrors.value.confirmMsg = '两次密码不一致';
     return;
   }
-  
-  ElMessage.info('注册功能尚未接真实后端接口，当前登录/注册页主要用于演示入口跳转');
+
+  try {
+    await register({
+      username: regForm.value.user.trim(),
+      password: regForm.value.pwd,
+      role: regForm.value.role === 'admin' ? 'ADMIN' : 'USER'
+    });
+    ElMessage.success('注册成功，请登录');
+    activeTab.value = 'login';
+    loginForm.value.user = regForm.value.user.trim();
+    loginForm.value.pwd = '';
+    regForm.value = { user: '', pwd: '', confirm: '', role: 'user' };
+  } catch (error) {
+    const message = error?.response?.data?.message || '注册失败';
+    ElMessage.error(message);
+  }
 }
 
 function notifyUnimplemented(feature) {

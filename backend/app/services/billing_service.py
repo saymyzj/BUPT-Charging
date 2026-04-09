@@ -5,6 +5,7 @@
 
 from app.utils.db import query_db, execute_db
 from datetime import datetime
+from app.services.contract_builders import build_bill_record, build_detail_record
 
 
 def get_billing_config():
@@ -70,30 +71,27 @@ def generate_detail(request_id):
         deadline = datetime.fromisoformat(req['leave_deadline'])
         is_leave_timeout = left_time > deadline
     
-    # 构建详单（18个字段）
-    detail = {
-        "request_id": request_id,
-        "charge_mode": req['charge_mode'],
-        "request_energy": float(req['request_energy']),
-        "actual_energy": float(req['actual_energy']),
-        "request_time": req['submit_time'],
-        "queue_enter_time": req['submit_time'],  # 简化：入队时间等于提交时间
-        "called_time": req['last_called_at'],
-        "arrival_confirm_time": req['confirmed_at'],
-        "charge_start_time": req['start_time'],
-        "charge_end_time": req['end_time'],
-        "leave_notify_time": req['end_time'],  # 充电结束即提醒挪车
-        "final_leave_time": req['left_at'],
-        "station_id": station_code,
-        "final_status": req['status'],
-        "is_no_show": req['status'] == 'NO_SHOW',
-        "is_cancelled": req['status'] == 'CANCELLED',
-        "is_interrupted": req['status'] == 'INTERRUPTED',
-        "is_fault_requeue": bool(req['fault_requeue_flag']),
-        "is_leave_timeout": is_leave_timeout
-    }
-    
-    return detail
+    return build_detail_record(
+        request_id=request_id,
+        charge_mode=req['charge_mode'],
+        request_energy=req['request_energy'],
+        actual_energy=req['actual_energy'],
+        request_time=req['submit_time'],
+        queue_enter_time=req['submit_time'],
+        called_time=req['last_called_at'],
+        arrival_confirm_time=req['confirmed_at'],
+        charge_start_time=req['start_time'],
+        charge_end_time=req['end_time'],
+        leave_notify_time=req['end_time'],
+        final_leave_time=req['left_at'],
+        station_id=station_code,
+        final_status=req['status'],
+        is_no_show=req['status'] == 'NO_SHOW',
+        is_cancelled=req['status'] == 'CANCELLED',
+        is_interrupted=req['status'] == 'INTERRUPTED',
+        is_fault_requeue=bool(req['fault_requeue_flag']),
+        is_leave_timeout=is_leave_timeout,
+    )
 
 
 def generate_bill(request_id):
@@ -131,17 +129,17 @@ def generate_bill(request_id):
     
     if billing_record:
         # 返回已存在的账单
-        return {
-            "request_id": request_id,
-            "billing_mode": billing_record['billing_mode'],
-            "request_energy": float(req['request_energy']),
-            "billing_energy": float(billing_record['billing_energy']),
-            "energy_fee": float(billing_record['energy_fee']),
-            "time_fee": float(billing_record['time_fee']),
-            "occupancy_fee": float(billing_record['occupancy_fee']),
-            "total_fee": float(billing_record['total_fee']),
-            "payment_status": billing_record['payment_status']
-        }
+        return build_bill_record(
+            request_id=request_id,
+            billing_mode=billing_record['billing_mode'],
+            request_energy=req['request_energy'],
+            billing_energy=billing_record['billing_energy'],
+            energy_fee=billing_record['energy_fee'],
+            time_fee=billing_record['time_fee'],
+            occupancy_fee=billing_record['occupancy_fee'],
+            total_fee=billing_record['total_fee'],
+            payment_status=billing_record['payment_status'],
+        )
     
     # 获取计费配置
     config = get_billing_config()
@@ -173,17 +171,17 @@ def generate_bill(request_id):
     # 确定计费电量
     billing_energy = actual_energy if config['billing_mode'] == 'ENERGY' else 0.0
     
-    return {
-        "request_id": request_id,
-        "billing_mode": config['billing_mode'],
-        "request_energy": float(req['request_energy']),
-        "billing_energy": billing_energy,
-        "energy_fee": energy_fee,
-        "time_fee": time_fee,
-        "occupancy_fee": occupancy_fee,
-        "total_fee": total_fee,
-        "payment_status": "UNPAID"
-    }
+    return build_bill_record(
+        request_id=request_id,
+        billing_mode=config['billing_mode'],
+        request_energy=req['request_energy'],
+        billing_energy=billing_energy,
+        energy_fee=energy_fee,
+        time_fee=time_fee,
+        occupancy_fee=occupancy_fee,
+        total_fee=total_fee,
+        payment_status="UNPAID",
+    )
 
 
 def save_bill(request_id, bill_data):

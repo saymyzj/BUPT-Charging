@@ -1,5 +1,8 @@
 # Fix本地联调
 
+> 归档说明：本文是 2026-04-02 的本地联调阶段快照，已不再作为当前 `develop` 公共基线要求。  
+> 当前请以 [冻结接口文档.md](/Users/zhoujia/code/SE/ChargingPile/docs/冻结接口文档.md)、[调度模块输入输出约定.md](/Users/zhoujia/code/SE/ChargingPile/docs/调度模块输入输出约定.md) 和 [公共基线收口说明.md](/Users/zhoujia/code/SE/ChargingPile/docs/04-09/公共基线收口说明.md) 为准。
+
 ## 一、本次收口做了什么
 
 ### 1. 后端收口

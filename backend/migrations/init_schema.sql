@@ -15,14 +15,15 @@ CREATE TABLE IF NOT EXISTS user (
 -- 充电桩表
 CREATE TABLE IF NOT EXISTS charging_station (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    station_code TEXT UNIQUE NOT NULL,
+    station_code TEXT NOT NULL,
     station_type TEXT NOT NULL CHECK(station_type IN ('FAST', 'SLOW')),
     power_kw REAL NOT NULL,
     status TEXT DEFAULT 'IDLE' CHECK(status IN ('IDLE', 'RESERVED', 'CHARGING', 'WAITING_TO_LEAVE', 'FAULT')),
     current_request_id INTEGER,
     available_time TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (current_request_id) REFERENCES charge_request(id)
+    FOREIGN KEY (current_request_id) REFERENCES charge_request(id),
+    UNIQUE (station_code)
 );
 
 -- 充电请求表

@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS system_scenario_config (
 -- 充电桩表（增强版）
 CREATE TABLE IF NOT EXISTS charging_station (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    station_code TEXT UNIQUE NOT NULL,                   -- 桩编号（如 FAST_01, SLOW_01）
+    station_code TEXT NOT NULL,                          -- 桩编号（如 FAST_01, SLOW_01）
     station_type TEXT NOT NULL CHECK(station_type IN ('FAST', 'SLOW')),
     power_kw REAL NOT NULL,                              -- 额定功率（kW）
     
@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS charging_station (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (current_request_id) REFERENCES charge_request(id),
-    FOREIGN KEY (scenario_id) REFERENCES system_scenario_config(id)
+    FOREIGN KEY (scenario_id) REFERENCES system_scenario_config(id),
+    UNIQUE (station_code, scenario_id)
 );
 
 -- 充电请求表（增强版）
