@@ -40,7 +40,7 @@ class TestingConfig(Config):
     """测试环境配置"""
     DEBUG = True
     TESTING = True
-    DATABASE_PATH = ':memory:'  # 内存数据库
+    DATABASE_PATH = os.environ.get('TEST_DATABASE_PATH') or os.path.join(Config.BASE_DIR, 'charging_system_test.db')
 
 
 # 配置映射

@@ -294,11 +294,6 @@ class ScenarioAdapter:
             if not config:
                 return False, "场景配置不存在"
             
-            # 清空现有等待池（如果有）
-            from app.services.waiting_pool import WaitingPoolManager
-            manager = WaitingPoolManager()
-            manager.clear_pool()
-            
             # 根据模式进行特定初始化
             if config.station_queue_mode == StationQueueMode.UNIFORM_CAPACITY.value:
                 return self._init_uniform_capacity_pools(config)

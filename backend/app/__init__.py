@@ -19,12 +19,14 @@ def create_app(config_name='default'):
     
     # 注册蓝图
     from app.routes.health import health_bp
+    from app.routes.auth import auth_bp
     from app.routes.request import request_bp
     from app.routes.stations import stations_bp
     from app.routes.batch_simulate import batch_bp
     from app.routes.admin import admin_bp
     
     app.register_blueprint(health_bp)
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(request_bp, url_prefix='/api/request')
     app.register_blueprint(stations_bp, url_prefix='/api/stations')
     app.register_blueprint(batch_bp, url_prefix='/api/batch')

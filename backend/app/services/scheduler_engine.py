@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.enums import ChargeMode, EventType, RequestStatus, StationStatus, WaitingPoolType
+from app.services.contract_builders import build_batch_summary, build_bill_record, build_detail_record
 from app.utils.db import execute_db, query_db
 
 
@@ -121,6 +122,14 @@ def _load_priority_weights() -> Dict[str, float]:
 
 def _call_ahead_seconds() -> int:
     return int(_get_scheduler_numeric_config("T_CALL_MINUTES", 5) * 60)
+
+
+def _confirm_timeout_seconds() -> int:
+    return int(_get_scheduler_numeric_config("CONFIRM_TIMEOUT_MINUTES", 3) * 60)
+
+
+def _leave_buffer_seconds() -> int:
+    return int(_get_scheduler_numeric_config("LEAVE_BUFFER_MINUTES", 10) * 60)
 
 
 def waiting_pool_for_mode(charge_mode: str) -> str:
@@ -434,12 +443,19 @@ def reschedule_waiting_requests(
         updated_ids.append(prediction.request_id)
 
     call_recommendation = _build_call_recommendation(all_predictions, anchor_time)
+    updated_predictions = [
+        prediction
+        for request_id in updated_ids
+        for prediction in [predict_request_by_id(request_id, event_time=format_datetime(anchor_time))]
+        if prediction is not None
+    ]
 
     return {
         "event_type": event_type,
         "event_time": format_datetime(anchor_time),
         "updated_request_ids": updated_ids,
         "updated_count": len(updated_ids),
+        "updated_predictions": updated_predictions,
         "should_call": call_recommendation is not None,
         "call_recommendation": call_recommendation,
     }
@@ -529,6 +545,47 @@ def trigger_reschedule_for_event(
     return reschedule_waiting_requests(scenario_id, event_type=event_type.value, event_time=event_time)
 
 
+def _reserve_station_for_request(request_row: Dict[str, Any], reserved_until: datetime, updated_at: datetime) -> None:
+    if not request_row.get("assigned_station_id"):
+        return
+    execute_db(
+        """
+        UPDATE charging_station
+        SET status = 'RESERVED',
+            current_request_id = ?,
+            available_time = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        [
+            request_row["id"],
+            format_datetime(reserved_until),
+            format_datetime(updated_at),
+            request_row["assigned_station_id"],
+        ],
+    )
+
+
+def _release_station(station_id: Optional[int], available_time: datetime) -> None:
+    if not station_id:
+        return
+    execute_db(
+        """
+        UPDATE charging_station
+        SET status = 'IDLE',
+            current_request_id = NULL,
+            available_time = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        [
+            format_datetime(available_time),
+            format_datetime(available_time),
+            station_id,
+        ],
+    )
+
+
 def advance_request_state_for_status_view(request_ref: Any, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     """
     供状态查询使用的最小状态推进器。
@@ -578,8 +635,103 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
                     current["id"],
                 ],
             )
+            reserved_until = estimated_finish_dt or estimated_start_dt
+            _reserve_station_for_request(current, reserved_until, now)
+            if current.get("scenario_id"):
+                reschedule_waiting_requests(
+                    current["scenario_id"],
+                    event_type="CALL_ISSUED",
+                    event_time=format_datetime(now),
+                )
             current["status"] = RequestStatus.CALLED.value
             current["last_called_at"] = format_datetime(called_at)
+
+    if current["status"] == RequestStatus.CALLED.value and current.get("last_called_at"):
+        called_at = parse_datetime(current["last_called_at"], fallback=now)
+        if now >= called_at + timedelta(seconds=_confirm_timeout_seconds()):
+            execute_db(
+                """
+                UPDATE charge_request
+                SET status = 'NO_SHOW',
+                    no_show_count = COALESCE(no_show_count, 0) + 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                [
+                    format_datetime(now),
+                    current["id"],
+                ],
+            )
+            _release_station(current.get("assigned_station_id"), now)
+            if current.get("scenario_id"):
+                trigger_reschedule_for_event(
+                    current["scenario_id"],
+                    EventType.NO_SHOW,
+                    format_datetime(now),
+                )
+            current["status"] = RequestStatus.NO_SHOW.value
+
+    if current["status"] == RequestStatus.CONFIRMED.value and current.get("assigned_station_id") and estimated_start_dt and now >= estimated_start_dt:
+        session = query_db(
+            """
+            SELECT id
+            FROM charging_session
+            WHERE request_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            [current["id"]],
+            one=True,
+        )
+        if not session:
+            execute_db(
+                """
+                INSERT INTO charging_session (
+                    request_id, station_id, start_time, status, actual_energy
+                ) VALUES (?, ?, ?, 'CHARGING', 0.0)
+                """,
+                [
+                    current["id"],
+                    current["assigned_station_id"],
+                    format_datetime(estimated_start_dt),
+                ],
+            )
+
+        execute_db(
+            """
+            UPDATE charge_request
+            SET status = 'CHARGING',
+                updated_at = ?
+            WHERE id = ?
+            """,
+            [
+                format_datetime(now),
+                current["id"],
+            ],
+        )
+        execute_db(
+            """
+            UPDATE charging_station
+            SET status = 'CHARGING',
+                current_request_id = ?,
+                available_time = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            [
+                current["id"],
+                format_datetime(estimated_finish_dt or estimated_start_dt),
+                format_datetime(now),
+                current["assigned_station_id"],
+            ],
+        )
+        if current.get("scenario_id"):
+            trigger_reschedule_for_event(
+                current["scenario_id"],
+                EventType.CHARGE_START,
+                format_datetime(now),
+            )
+        current["status"] = RequestStatus.CHARGING.value
 
     if current["status"] == RequestStatus.CHARGING.value and current.get("assigned_station_id") and estimated_finish_dt and now >= estimated_finish_dt:
         session = query_db(
@@ -606,6 +758,7 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
                 ],
             )
 
+        leave_deadline = estimated_finish_dt + timedelta(seconds=_leave_buffer_seconds())
         execute_db(
             """
             UPDATE charge_request
@@ -626,14 +779,35 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
             """
             UPDATE charging_station
             SET status = 'WAITING_TO_LEAVE',
-                current_request_id = ?
+                current_request_id = ?,
+                available_time = ?,
+                updated_at = ?
             WHERE id = ?
             """,
             [
                 current["id"],
+                format_datetime(leave_deadline),
+                format_datetime(now),
                 current["assigned_station_id"],
             ],
         )
+        execute_db(
+            """
+            UPDATE charging_session
+            SET leave_deadline = ?
+            WHERE request_id = ?
+            """,
+            [
+                format_datetime(leave_deadline),
+                current["id"],
+            ],
+        )
+        if current.get("scenario_id"):
+            trigger_reschedule_for_event(
+                current["scenario_id"],
+                EventType.CHARGE_END,
+                format_datetime(now),
+            )
 
     refreshed = query_db(
         "SELECT * FROM charge_request WHERE id = ?",
@@ -776,38 +950,61 @@ def _build_detail_and_bill(
     actual_finish_time: Optional[datetime],
     actual_energy: float,
     station_code: Optional[str],
-    note: Optional[str] = None,
+    is_fault_requeue: bool = False,
+    is_leave_timeout: bool = False,
+    occupancy_fee: float = 0.0,
+    leave_notify_time: Optional[datetime] = None,
+    final_leave_time: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     energy_fee = round(actual_energy * ENERGY_PRICE, 2)
-    bill = {
-        "request_id": request_id,
-        "billing_energy": round(actual_energy, 2),
-        "energy_fee": energy_fee,
-        "time_fee": 0.0,
-        "occupancy_fee": 0.0,
-        "total_fee": energy_fee,
-        "payment_status": "UNPAID" if actual_energy > 0 else "UNPAID",
-    }
+    total_fee = round(energy_fee + occupancy_fee, 2)
+    called_time = None
+    if status == RequestStatus.NO_SHOW.value and estimated_start_time:
+        called_time = max(submit_time, estimated_start_time - timedelta(seconds=DEFAULT_CALL_AHEAD_SECONDS))
+    elif status not in (RequestStatus.CANCELLED.value,) and actual_start_time and estimated_start_time:
+        called_time = max(submit_time, estimated_start_time - timedelta(seconds=DEFAULT_CALL_AHEAD_SECONDS))
 
-    detail = {
-        "request_id": request_id,
-        "user_id": user_id,
-        "charge_mode": charge_mode,
-        "request_energy": request_energy,
-        "status": status,
-        "submit_time": format_datetime(submit_time),
-        "estimated_wait_seconds": estimated_wait_seconds,
-        "estimated_start_time": format_datetime(estimated_start_time),
-        "estimated_finish_time": format_datetime(estimated_finish_time),
-        "actual_start_time": format_datetime(actual_start_time),
-        "actual_finish_time": format_datetime(actual_finish_time),
-        "actual_energy": round(actual_energy, 2),
-        "station_id": station_code,
-    }
-    if note:
-        detail["note"] = note
-        bill["note"] = note
+    resolved_leave_notify_time = leave_notify_time if leave_notify_time is not None else actual_finish_time
+    resolved_final_leave_time = final_leave_time
+    if resolved_final_leave_time is None and actual_finish_time and status in (
+        RequestStatus.COMPLETED.value,
+        RequestStatus.COMPLETED_EARLY.value,
+        RequestStatus.INTERRUPTED.value,
+    ):
+        resolved_final_leave_time = actual_finish_time + timedelta(seconds=DEFAULT_LEAVE_DELAY_SECONDS)
 
+    detail = build_detail_record(
+        request_id=request_id,
+        charge_mode=charge_mode,
+        request_energy=request_energy,
+        actual_energy=actual_energy,
+        request_time=submit_time,
+        queue_enter_time=submit_time,
+        called_time=called_time,
+        arrival_confirm_time=actual_start_time,
+        charge_start_time=actual_start_time,
+        charge_end_time=actual_finish_time,
+        leave_notify_time=resolved_leave_notify_time,
+        final_leave_time=resolved_final_leave_time,
+        station_id=station_code,
+        final_status=status,
+        is_no_show=status == RequestStatus.NO_SHOW.value,
+        is_cancelled=status == RequestStatus.CANCELLED.value,
+        is_interrupted=status == RequestStatus.INTERRUPTED.value,
+        is_fault_requeue=is_fault_requeue,
+        is_leave_timeout=is_leave_timeout,
+    )
+    bill = build_bill_record(
+        request_id=request_id,
+        billing_mode="ENERGY",
+        request_energy=request_energy,
+        billing_energy=actual_energy,
+        energy_fee=energy_fee,
+        time_fee=0.0,
+        occupancy_fee=occupancy_fee,
+        total_fee=total_fee,
+        payment_status="UNPAID",
+    )
     return {"detail": detail, "bill": bill}
 
 
@@ -849,7 +1046,7 @@ def simulate_batch_case(
                 user_id=user_id,
                 charge_mode=charge_mode,
                 request_energy=request_energy,
-                status="REJECTED_WAITING_AREA_FULL",
+                status=RequestStatus.CANCELLED.value,
                 submit_time=request_time,
                 estimated_wait_seconds=None,
                 estimated_start_time=None,
@@ -858,9 +1055,8 @@ def simulate_batch_case(
                 actual_finish_time=None,
                 actual_energy=0.0,
                 station_code=None,
-                note="等待区容量已满，当前请求未进入调度队列",
             )
-            results.append({"user_id": user_id, "status": "FAILED", **assembled})
+            results.append({"user_id": user_id, **assembled})
             continue
 
         if not stations:
@@ -869,7 +1065,7 @@ def simulate_batch_case(
                 user_id=user_id,
                 charge_mode=charge_mode,
                 request_energy=request_energy,
-                status="REJECTED_NO_STATION",
+                status=RequestStatus.CANCELLED.value,
                 submit_time=request_time,
                 estimated_wait_seconds=None,
                 estimated_start_time=None,
@@ -878,9 +1074,8 @@ def simulate_batch_case(
                 actual_finish_time=None,
                 actual_energy=0.0,
                 station_code=None,
-                note="当前场景不存在匹配的充电桩类型",
             )
-            results.append({"user_id": user_id, "status": "FAILED", **assembled})
+            results.append({"user_id": user_id, **assembled})
             continue
 
         chosen_station = min(stations, key=lambda station: (station.available_at, station.station_code))
@@ -916,9 +1111,8 @@ def simulate_batch_case(
                 actual_finish_time=None,
                 actual_energy=0.0,
                 station_code=chosen_station.station_code,
-                note="用户在预计开始充电前取消排队",
             )
-            results.append({"user_id": user_id, "status": RequestStatus.CANCELLED.value, **assembled})
+            results.append({"user_id": user_id, **assembled})
             continue
 
         confirm_delay_seconds = int(user.get("confirm_arrival_delay_seconds") or 0)
@@ -952,9 +1146,8 @@ def simulate_batch_case(
                 actual_finish_time=None,
                 actual_energy=0.0,
                 station_code=chosen_station.station_code,
-                note="用户确认到场超时，按过号处理",
             )
-            results.append({"user_id": user_id, "status": RequestStatus.NO_SHOW.value, **assembled})
+            results.append({"user_id": user_id, **assembled})
             continue
 
         interrupt_charge = bool(user.get("interrupt_charge"))
@@ -972,7 +1165,8 @@ def simulate_batch_case(
             final_status = RequestStatus.INTERRUPTED.value
 
         leave_delay_seconds = int(user.get("leave_delay_seconds") or DEFAULT_LEAVE_DELAY_SECONDS)
-        chosen_station.available_at = actual_finish_time + timedelta(seconds=leave_delay_seconds)
+        user_leave_time = actual_finish_time + timedelta(seconds=leave_delay_seconds)
+        chosen_station.available_at = user_leave_time
         chosen_station.busy_seconds += max(0, int((actual_finish_time - actual_start_time).total_seconds()))
 
         simulation_timeline.append(
@@ -999,58 +1193,56 @@ def simulate_batch_case(
             actual_finish_time=actual_finish_time,
             actual_energy=actual_energy,
             station_code=chosen_station.station_code,
-            note=(
-                "用户正常完成充电"
-                if final_status == RequestStatus.COMPLETED.value
-                else "用户在充电过程中主动中断"
-            ),
+            leave_notify_time=actual_finish_time,
+            final_leave_time=user_leave_time,
         )
-        results.append({"user_id": user_id, "status": final_status, **assembled})
+        results.append({"user_id": user_id, **assembled})
 
     service_results = [
-        result for result in results if result["status"] in (
+        result for result in results if result["detail"]["final_status"] in (
             RequestStatus.COMPLETED.value,
             RequestStatus.COMPLETED_EARLY.value,
             RequestStatus.INTERRUPTED.value,
         )
     ]
     wait_samples = [
-        result["detail"]["estimated_wait_seconds"]
+        int(
+            (
+                parse_datetime(result["detail"]["charge_start_time"])
+                - parse_datetime(result["detail"]["request_time"])
+            ).total_seconds()
+        )
         for result in results
-        if result["detail"].get("estimated_wait_seconds") is not None
+        if result["detail"].get("charge_start_time")
     ]
     finish_samples = [
         int(
             (
-                parse_datetime(result["detail"]["actual_finish_time"])
-                - parse_datetime(result["detail"]["submit_time"])
+                parse_datetime(result["detail"]["charge_end_time"])
+                - parse_datetime(result["detail"]["request_time"])
             ).total_seconds()
         )
         for result in service_results
-        if result["detail"].get("actual_finish_time")
+        if result["detail"].get("charge_end_time")
     ]
 
     all_stations = stations_by_mode[ChargeMode.FAST.value] + stations_by_mode[ChargeMode.SLOW.value]
     busy_seconds = sum(station.busy_seconds for station in all_stations)
     if results:
-        simulation_start = min(parse_datetime(result["detail"]["submit_time"]) for result in results)
+        simulation_start = min(parse_datetime(result["detail"]["request_time"]) for result in results)
         simulation_end = max(station.available_at for station in all_stations) if all_stations else simulation_start
         makespan_seconds = max(1, int((simulation_end - simulation_start).total_seconds()))
     else:
         makespan_seconds = 1
 
-    summary = {
-        "total_users": len(results),
-        "completed_users": len(service_results),
-        "failed_users": sum(1 for result in results if result["status"] == "FAILED"),
-        "avg_wait_seconds": round(sum(wait_samples) / len(wait_samples), 2) if wait_samples else 0,
-        "avg_finish_seconds": round(sum(finish_samples) / len(finish_samples), 2) if finish_samples else 0,
-        "total_finish_seconds": sum(finish_samples),
-        "station_utilization": round(
-            busy_seconds / (makespan_seconds * max(1, len(all_stations))),
-            4,
-        ),
-    }
+    summary = build_batch_summary(
+        total_users=len(results),
+        completed_users=len(service_results),
+        avg_wait_seconds=(sum(wait_samples) / len(wait_samples)) if wait_samples else 0,
+        avg_finish_seconds=(sum(finish_samples) / len(finish_samples)) if finish_samples else 0,
+        total_finish_seconds=sum(finish_samples),
+        station_utilization=busy_seconds / (makespan_seconds * max(1, len(all_stations))),
+    )
 
     return {
         "test_case_id": test_case_id,
