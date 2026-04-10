@@ -142,7 +142,6 @@ class FrozenContractTests(unittest.TestCase):
                 ],
             },
         )
-
         data = response.get_json()["data"]
         self.assertEqual(
             set(data["summary"].keys()),
@@ -195,6 +194,87 @@ class FrozenContractTests(unittest.TestCase):
                 "payment_status",
             },
         )
+
+    def test_status_sync_can_complete_early_without_changing_contract(self):
+        request_time = datetime(2026, 4, 9, 10, 0, 0)
+        create_resp = self.client.post(
+            "/api/request/create",
+            json={
+                "request_time": request_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "charge_mode": "FAST",
+                "request_energy": 20.0,
+            },
+        )
+        request_id = create_resp.get_json()["data"]["request_id"]
+        called_start = request_time + timedelta(minutes=1)
+        finish_time = called_start + timedelta(minutes=40)
+
+        with self.app.app_context():
+            execute_db(
+                """
+                UPDATE charge_request
+                SET status = 'WAITING',
+                    estimated_start_time = ?,
+                    estimated_finish_time = ?,
+                    assigned_station_id = 1,
+                    estimated_wait_seconds = ?,
+                    battery_limit_energy = ?
+                WHERE request_id = ?
+                """,
+                [
+                    called_start.strftime("%Y-%m-%dT%H:%M:%S"),
+                    finish_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    int((called_start - request_time).total_seconds()),
+                    10.0,
+                    request_id,
+                ],
+            )
+
+        self.client.get(f"/api/request/status/{request_id}")
+        self.client.post(
+            "/api/request/confirm_arrival",
+            json={
+                "request_id": request_id,
+                "confirm_time": (called_start + timedelta(seconds=30)).strftime("%Y-%m-%dT%H:%M:%S"),
+            },
+        )
+
+        with self.app.app_context():
+            execute_db(
+                """
+                UPDATE charge_request
+                SET estimated_start_time = ?, confirmed_at = ?
+                WHERE request_id = ?
+                """,
+                [
+                    (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S"),
+                    (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S"),
+                    request_id,
+                ],
+            )
+
+        status_payload = self.client.get(f"/api/request/status/{request_id}").get_json()["data"]
+        self.assertEqual(status_payload["status"], "COMPLETED_EARLY")
+        self.assertEqual(
+            set(status_payload.keys()),
+            {"request_id", "status", "station_id", "estimated_wait_seconds", "last_called_time"},
+        )
+
+    def test_create_request_rejects_when_all_target_stations_are_fault(self):
+        with self.app.app_context():
+            execute_db("UPDATE charging_station SET status = 'FAULT' WHERE station_type = 'FAST'")
+
+        response = self.client.post(
+            "/api/request/create",
+            json={
+                "request_time": "2026-04-09T10:00:00",
+                "charge_mode": "FAST",
+                "request_energy": 20.0,
+            },
+        )
+        payload = response.get_json()
+        self.assertEqual(payload["code"], 1003)
+        self.assertIn("全部故障", payload["message"])
 
 
 if __name__ == "__main__":
