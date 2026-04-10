@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通知中心 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #faf8f5; --card: #ffffff; --shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --primary: #2d6a4f; --secondary: #c45d3e; --accent: #d4a853;
+  --text: #2c2c2c; --text-sec: #7a7a7a; --success: #2d6a4f; --warning: #d4a853; --error: #c45d3e;
+  --nav-bg: #f5f0e8; --radius: 10px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1, h2, h3, h4, h5 { font-family: Georgia, 'Times New Roman', serif; }
+
+/* NAV */
+.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: var(--nav-bg); border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 56px; }
+.nav-brand { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 0; }
+.nav-tab { padding: 16px 22px; font-size: 14px; color: var(--text-sec); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -3px; transition: all 0.2s; text-decoration: none; }
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+.nav-bell { cursor: pointer; position: relative; padding: 4px 8px; border-radius: 6px; transition: background 0.2s; }
+.nav-bell:hover { background: rgba(0,0,0,0.05); }
+.nav-bell .badge { position: absolute; top: -2px; right: 0; background: var(--secondary); color: #fff; font-size: 10px; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.nav-user { color: var(--text); font-weight: 500; }
+.nav-logout { color: var(--secondary); cursor: pointer; text-decoration: none; font-size: 14px; }
+.nav-logout:hover { text-decoration: underline; }
+.nav-clock { color: var(--text-sec); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* MAIN LAYOUT */
+.main { padding-top: 72px; max-width: 860px; margin: 0 auto; padding-left: 24px; padding-right: 24px; padding-bottom: 40px; }
+
+/* PAGE HEADER */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+.page-title .icon { font-size: 24px; }
+.unread-count { font-size: 13px; color: var(--secondary); font-weight: 600; background: rgba(196,93,62,0.1); padding: 2px 10px; border-radius: 12px; font-family: -apple-system, sans-serif; }
+.btn-mark-all { background: none; border: 1px solid var(--primary); color: var(--primary); padding: 7px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.btn-mark-all:hover { background: var(--primary); color: #fff; }
+
+/* FILTERS */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-chip { padding: 6px 16px; border-radius: 20px; font-size: 13px; border: 1px solid #e0dbd3; background: var(--card); color: var(--text-sec); cursor: pointer; transition: all 0.2s; }
+.filter-chip:hover { border-color: var(--primary); color: var(--primary); }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-chip .count { font-size: 11px; margin-left: 4px; opacity: 0.8; }
+
+/* NOTIFICATION LIST */
+.notif-list { display: flex; flex-direction: column; gap: 10px; }
+
+.notif-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px; display: flex; gap: 14px; align-items: flex-start; cursor: pointer; transition: all 0.2s; border-left: 4px solid transparent; position: relative; }
+.notif-card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(120,80,40,0.12); }
+.notif-card.unread { border-left-color: var(--accent); background: #fffdf8; }
+.notif-card.unread::after { content: ''; position: absolute; top: 10px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+.notif-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.notif-icon.call { background: rgba(45,106,79,0.1); }
+.notif-icon.charged { background: rgba(212,168,83,0.15); }
+.notif-icon.noshow { background: rgba(196,93,62,0.1); }
+.notif-icon.move { background: rgba(45,106,79,0.1); }
+.notif-icon.fault { background: rgba(196,93,62,0.15); }
+.notif-icon.wait { background: rgba(122,122,122,0.1); }
+
+.notif-body { flex: 1; min-width: 0; }
+.notif-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.notif-type-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.badge-call { background: rgba(45,106,79,0.1); color: var(--success); }
+.badge-charged { background: rgba(212,168,83,0.15); color: #b8922e; }
+.badge-noshow { background: rgba(196,93,62,0.1); color: var(--error); }
+.badge-move { background: rgba(45,106,79,0.15); color: var(--success); }
+.badge-fault { background: rgba(196,93,62,0.15); color: var(--error); }
+.badge-wait { background: rgba(122,122,122,0.1); color: var(--text-sec); }
+
+.notif-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.notif-msg { font-size: 13px; color: var(--text-sec); line-height: 1.5; margin-top: 4px; }
+.notif-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--text-sec); }
+.notif-meta .req-id { font-family: 'SF Mono', 'Fira Code', monospace; background: #f5f0e8; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.notif-time { font-size: 12px; color: var(--text-sec); white-space: nowrap; flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+
+/* DETAIL EXPANSION */
+.notif-detail { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0ece5; font-size: 13px; line-height: 1.6; color: var(--text); }
+.notif-card.expanded .notif-detail { display: block; }
+.notif-detail-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.notif-detail-label { color: var(--text-sec); min-width: 80px; flex-shrink: 0; }
+.notif-detail-value { color: var(--text); font-weight: 500; }
+
+.notif-actions { display: flex; gap: 8px; margin-top: 10px; }
+.notif-btn { padding: 5px 14px; border-radius: 5px; font-size: 12px; border: none; cursor: pointer; transition: all 0.2s; }
+.notif-btn-primary { background: var(--primary); color: #fff; }
+.notif-btn-primary:hover { background: #245a42; }
+.notif-btn-ghost { background: none; border: 1px solid #ddd; color: var(--text-sec); }
+.notif-btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+/* EMPTY STATE */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-sec); }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state .title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.empty-state .desc { font-size: 13px; }
+
+/* ANIMATION */
+.notif-card { opacity: 0; transform: translateY(20px); animation: fadeInUp 0.4s ease forwards; }
+.notif-card:nth-child(1) { animation-delay: 0.05s; }
+.notif-card:nth-child(2) { animation-delay: 0.1s; }
+.notif-card:nth-child(3) { animation-delay: 0.15s; }
+.notif-card:nth-child(4) { animation-delay: 0.2s; }
+.notif-card:nth-child(5) { animation-delay: 0.25s; }
+.notif-card:nth-child(6) { animation-delay: 0.3s; }
+.notif-card:nth-child(7) { animation-delay: 0.35s; }
+.notif-card:nth-child(8) { animation-delay: 0.4s; }
+.notif-card:nth-child(9) { animation-delay: 0.45s; }
+.notif-card:nth-child(10) { animation-delay: 0.5s; }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+/* POLLING INDICATOR */
+.poll-indicator { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-sec); margin-bottom: 16px; }
+.poll-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: blink 2s ease infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统</div>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="#">工作台</a>
+    <a class="nav-tab" href="#">当前任务</a>
+    <a class="nav-tab active" href="#">通知中心</a>
+    <a class="nav-tab" href="#">账户中心</a>
+  </div>
+  <div class="nav-right">
+    <span class="nav-bell">🔔 通知(6)<span class="badge">6</span></span>
+    <span class="nav-user">用户: 张三</span>
+    <a class="nav-logout" href="#">退出</a>
+    <span class="nav-clock" id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h2 class="page-title"><span class="icon">🔔</span> 通知中心</h2>
+      <span class="unread-count">6 条未读</span>
+    </div>
+    <button class="btn-mark-all" onclick="markAllRead()">📬 全部已读</button>
+  </div>
+
+  <!-- POLLING INDICATOR -->
+  <div class="poll-indicator">
+    <span class="poll-dot"></span>
+    <span>实时轮询中 · 每 10 秒更新</span>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filter-bar">
+    <span class="filter-chip active" onclick="filterNotif('all', this)">全部<span class="count">(10)</span></span>
+    <span class="filter-chip" onclick="filterNotif('call', this)">📢 叫号<span class="count">(2)</span></span>
+    <span class="filter-chip" onclick="filterNotif('charged', this)">🔋 充电<span class="count">(3)</span></span>
+    <span class="filter-chip" onclick="filterNotif('fault', this)">⚠️ 异常<span class="count">(2)</span></span>
+    <span class="filter-chip" onclick="filterNotif('system', this)">📋 系统<span class="count">(3)</span></span>
+  </div>
+
+  <!-- NOTIFICATION LIST -->
+  <div class="notif-list" id="notifList">
+
+    <!-- 1. 叫号提醒 - unread -->
+    <div class="notif-card unread" data-type="call" onclick="toggleDetail(this)">
+      <div class="notif-icon call">📢</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-call">叫号提醒</span>
+          <span class="notif-title">您已被叫号，请尽快确认</span>
+        </div>
+        <div class="notif-msg">您排队的快充请求已被叫号，充电桩 A-03 已为您预留。请在 5 分钟内确认，否则将自动过号。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0012</span>
+          <span>充电桩 A-03 · 快充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0012</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电桩</span><span class="notif-detail-value">A-03（快充 120kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电模式</span><span class="notif-detail-value">快充</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">预计充电量</span><span class="notif-detail-value">35 kWh</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">确认截止</span><span class="notif-detail-value" style="color:var(--secondary);font-weight:700;">14:28:00（剩余 4 分 15 秒）</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-primary">立即确认</button>
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">2 分钟前</span>
+    </div>
+
+    <!-- 2. 充满提醒 - unread -->
+    <div class="notif-card unread" data-type="charged" onclick="toggleDetail(this)">
+      <div class="notif-icon charged">🔋</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-charged">充满提醒</span>
+          <span class="notif-title">充电已完成，请及时挪车</span>
+        </div>
+        <div class="notif-msg">您在充电桩 B-01 的充电已完成，电量已从 20% 充至 95%。请尽快挪车，避免产生超时占位费用。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0008</span>
+          <span>充电桩 B-01 · 慢充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0008</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电桩</span><span class="notif-detail-value">B-01（慢充 7kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电时长</span><span class="notif-detail-value">4 小时 32 分钟</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电电量</span><span class="notif-detail-value">32.5 kWh（20% → 95%）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电费用</span><span class="notif-detail-value">¥ 28.60</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-primary">查看详情</button>
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">15 分钟前</span>
+    </div>
+
+    <!-- 3. 过号提醒 - unread -->
+    <div class="notif-card unread" data-type="call" onclick="toggleDetail(this)">
+      <div class="notif-icon noshow">🚫</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-noshow">过号提醒</span>
+          <span class="notif-title">确认超时，已自动过号</span>
+        </div>
+        <div class="notif-msg">您的快充请求因超时未确认，已自动过号。如需继续充电，请重新排队。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0006</span>
+          <span>充电桩 A-01</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0006</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">原分配桩</span><span class="notif-detail-value">A-01（快充 120kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">过号时间</span><span class="notif-detail-value">14:05:00</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">状态</span><span class="notif-detail-value" style="color:var(--error);">NO_SHOW</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-primary">重新排队</button>
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">25 分钟前</span>
+    </div>
+
+    <!-- 4. 挪车提醒 - unread -->
+    <div class="notif-card unread" data-type="charged" onclick="toggleDetail(this)">
+      <div class="notif-icon move">🚗</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-move">挪车提醒</span>
+          <span class="notif-title">请限时挪车，避免超时费用</span>
+        </div>
+        <div class="notif-msg">您在充电桩 C-02 的充电已完成，当前处于等待挪车状态。请在 15 分钟内完成挪车，超时将按 ¥1/分钟 收取占位费。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0005</span>
+          <span>充电桩 C-02 · 慢充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0005</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电桩</span><span class="notif-detail-value">C-02（慢充 7kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">挪车截止</span><span class="notif-detail-value" style="color:var(--secondary);font-weight:700;">14:45:00（剩余 12 分钟）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">超时费率</span><span class="notif-detail-value">¥1.00 / 分钟</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-primary">我已知晓</button>
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">30 分钟前</span>
+    </div>
+
+    <!-- 5. 异常提醒 - unread -->
+    <div class="notif-card unread" data-type="fault" onclick="toggleDetail(this)">
+      <div class="notif-icon fault">⚠️</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-fault">异常提醒</span>
+          <span class="notif-title">充电桩故障，充电中断</span>
+        </div>
+        <div class="notif-msg">充电桩 A-02 发生通信故障，您的充电已被中断。系统已自动为您重新排队，预计等待约 8 分钟。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0004</span>
+          <span>充电桩 A-02 · 快充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0004</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">故障桩号</span><span class="notif-detail-value">A-02（快充 120kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">故障类型</span><span class="notif-detail-value" style="color:var(--error);">通信故障 (ERR_COMM_TIMEOUT)</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">已充电量</span><span class="notif-detail-value">18.2 kWh（中断前）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">重排状态</span><span class="notif-detail-value" style="color:var(--success);">已重新排队 · 预计等待 8 分钟</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-primary">查看排队状态</button>
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">1 小时前</span>
+    </div>
+
+    <!-- 6. 等待时间变更 - unread -->
+    <div class="notif-card unread" data-type="system" onclick="toggleDetail(this)">
+      <div class="notif-icon wait">⏱️</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-wait">等待时间变更</span>
+          <span class="notif-title">预计等待时间已更新</span>
+        </div>
+        <div class="notif-msg">由于调度优化，您的排队请求预计等待时间从 25 分钟调整为 15 分钟。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260409-0010</span>
+          <span>快充排队中</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260409-0010</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">原等待时间</span><span class="notif-detail-value">约 25 分钟</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">新等待时间</span><span class="notif-detail-value" style="color:var(--success);font-weight:700;">约 15 分钟</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">变更原因</span><span class="notif-detail-value">系统调度优化</span></div>
+          <div class="notif-actions">
+            <button class="notif-btn notif-btn-ghost">标记已读</button>
+          </div>
+        </div>
+      </div>
+      <span class="notif-time">1 小时前</span>
+    </div>
+
+    <!-- 7. 充满提醒 - read -->
+    <div class="notif-card" data-type="charged" onclick="toggleDetail(this)">
+      <div class="notif-icon charged">🔋</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-charged">充满提醒</span>
+          <span class="notif-title">充电已完成</span>
+        </div>
+        <div class="notif-msg">您在充电桩 B-03 的充电已完成，电量已从 30% 充至 90%。本次充电费用 ¥22.40。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260408-0021</span>
+          <span>充电桩 B-03 · 慢充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260408-0021</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电桩</span><span class="notif-detail-value">B-03（慢充 7kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电电量</span><span class="notif-detail-value">25.8 kWh（30% → 90%）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">费用</span><span class="notif-detail-value">¥ 22.40</span></div>
+        </div>
+      </div>
+      <span class="notif-time">昨天 18:30</span>
+    </div>
+
+    <!-- 8. 异常提醒 - read -->
+    <div class="notif-card" data-type="fault" onclick="toggleDetail(this)">
+      <div class="notif-icon fault">⚠️</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-fault">异常提醒</span>
+          <span class="notif-title">充电桩维护通知</span>
+        </div>
+        <div class="notif-msg">充电桩 A-01 计划于今晚 22:00 - 次日 06:00 进行例行维护，届时将暂停服务。</div>
+        <div class="notif-meta">
+          <span class="req-id">SYS-20260408-0003</span>
+          <span>充电桩 A-01</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">公告编号</span><span class="notif-detail-value">SYS-20260408-0003</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">维护桩号</span><span class="notif-detail-value">A-01（快充 120kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">维护时段</span><span class="notif-detail-value">22:00 - 次日 06:00</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">影响范围</span><span class="notif-detail-value">A-01 快充桩暂停服务</span></div>
+        </div>
+      </div>
+      <span class="notif-time">昨天 16:00</span>
+    </div>
+
+    <!-- 9. 叫号提醒 - read -->
+    <div class="notif-card" data-type="call" onclick="toggleDetail(this)">
+      <div class="notif-icon call">📢</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-call">叫号提醒</span>
+          <span class="notif-title">您已被叫号（已确认）</span>
+        </div>
+        <div class="notif-msg">充电桩 C-01 已分配给您，您已成功确认。充电进行中。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260408-0019</span>
+          <span>充电桩 C-01 · 慢充</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260408-0019</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">充电桩</span><span class="notif-detail-value">C-01（慢充 7kW）</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">确认时间</span><span class="notif-detail-value">昨天 15:42</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">状态</span><span class="notif-detail-value" style="color:var(--success);">已确认 · 充电完成</span></div>
+        </div>
+      </div>
+      <span class="notif-time">昨天 15:40</span>
+    </div>
+
+    <!-- 10. 等待变更 - read -->
+    <div class="notif-card" data-type="system" onclick="toggleDetail(this)">
+      <div class="notif-icon wait">⏱️</div>
+      <div class="notif-body">
+        <div class="notif-top">
+          <span class="notif-type-badge badge-wait">等待时间变更</span>
+          <span class="notif-title">预计等待时间延长</span>
+        </div>
+        <div class="notif-msg">由于前方排队用户充电需求增加，您的等待时间从 10 分钟调整为 20 分钟，敬请谅解。</div>
+        <div class="notif-meta">
+          <span class="req-id">REQ-20260408-0018</span>
+          <span>快充排队中</span>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail-row"><span class="notif-detail-label">请求编号</span><span class="notif-detail-value">REQ-20260408-0018</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">原等待时间</span><span class="notif-detail-value">约 10 分钟</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">新等待时间</span><span class="notif-detail-value" style="color:var(--secondary);">约 20 分钟</span></div>
+          <div class="notif-detail-row"><span class="notif-detail-label">变更原因</span><span class="notif-detail-value">前方排队用户充电需求增加</span></div>
+        </div>
+      </div>
+      <span class="notif-time">昨天 14:10</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Toggle detail expansion
+function toggleDetail(card) {
+  card.classList.toggle('expanded');
+}
+
+// Filter notifications
+function filterNotif(type, chip) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  document.querySelectorAll('.notif-card').forEach(card => {
+    if (type === 'all') {
+      card.style.display = 'flex';
+    } else if (type === 'system') {
+      card.style.display = card.dataset.type === 'system' ? 'flex' : 'none';
+    } else if (type === 'charged') {
+      card.style.display = (card.dataset.type === 'charged') ? 'flex' : 'none';
+    } else if (type === 'call') {
+      card.style.display = card.dataset.type === 'call' ? 'flex' : 'none';
+    } else if (type === 'fault') {
+      card.style.display = card.dataset.type === 'fault' ? 'flex' : 'none';
+    }
+  });
+}
+
+// Mark all as read
+function markAllRead() {
+  document.querySelectorAll('.notif-card.unread').forEach(card => {
+    card.classList.remove('unread');
+  });
+  document.querySelector('.unread-count').textContent = '0 条未读';
+  document.querySelector('.nav-bell .badge').textContent = '0';
+  document.querySelector('.nav-bell').childNodes[0].textContent = '🔔 通知(0)';
+}
+
+// Simulate polling
+setInterval(() => {
+  console.log('[Polling] GET /api/v1/notifications?since=...');
+}, 10000);
+</script>
+</body>
+</html>

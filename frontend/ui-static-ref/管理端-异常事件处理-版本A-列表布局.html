@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>异常事件处理 - 智能充电桩调度计费系统 · 管理端</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
+}
+h1, h2, h3, h4 { font-family: Georgia, 'Noto Serif SC', serif; font-weight: 700; }
+
+/* NAV */
+.top-nav {
+  background: var(--nav-bg); border-bottom: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 56px; position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 8px 20px; border-radius: 8px 8px 0 0; font-size: 14px; cursor: pointer;
+  border: none; background: transparent; color: var(--text-sec); transition: all 0.2s; font-family: inherit;
+}
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: var(--primary); }
+.nav-tab.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 -2px 0 var(--primary) inset; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 13px; color: var(--text-sec); }
+.nav-alert { position: relative; cursor: pointer; padding: 4px 10px; background: rgba(196,93,62,0.1); border-radius: 6px; color: var(--secondary); font-weight: 600; }
+
+/* MAIN */
+.main-content { padding: 20px 24px; max-width: 1920px; margin: 0 auto; }
+
+/* STATS CARDS */
+.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--card); border-radius: var(--radius); padding: 16px 18px;
+  box-shadow: var(--shadow); border-left: 4px solid var(--primary);
+  opacity: 0; animation: fadeInUp 0.5s forwards;
+}
+.stat-card:nth-child(1) { animation-delay: 0s; border-left-color: var(--secondary); }
+.stat-card:nth-child(2) { animation-delay: 0.06s; border-left-color: var(--accent); }
+.stat-card:nth-child(3) { animation-delay: 0.12s; border-left-color: var(--primary); }
+.stat-card:nth-child(4) { animation-delay: 0.18s; border-left-color: #e67e22; }
+.stat-card:nth-child(5) { animation-delay: 0.24s; border-left-color: var(--secondary); }
+.stat-card:nth-child(6) { animation-delay: 0.30s; border-left-color: var(--primary); }
+.stat-label { font-size: 12px; color: var(--text-sec); margin-bottom: 6px; }
+.stat-value { font-family: Georgia, serif; font-size: 28px; font-weight: 700; color: var(--text); }
+.stat-sub { font-size: 11px; color: var(--text-sec); margin-top: 4px; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* SECTION TITLE */
+.section-title { font-size: 15px; margin-bottom: 12px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.section-title::before { content: ''; width: 4px; height: 18px; background: var(--primary); border-radius: 2px; }
+
+/* FILTER BAR */
+.filter-bar {
+  background: var(--card); border-radius: var(--radius); padding: 14px 18px;
+  box-shadow: var(--shadow); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.filter-bar label { font-size: 13px; color: var(--text-sec); }
+.filter-bar select, .filter-bar input {
+  padding: 6px 12px; border: 1px solid #e0d8cc; border-radius: 6px; font-size: 13px;
+  background: var(--bg); color: var(--text); font-family: inherit;
+}
+.filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--primary); }
+.btn {
+  padding: 7px 16px; border-radius: 6px; font-size: 13px; border: none; cursor: pointer;
+  font-family: inherit; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #235539; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a84d32; }
+.btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+.btn-outline:hover { background: rgba(45,106,79,0.08); }
+.btn-warning { background: var(--accent); color: #fff; }
+.btn-warning:hover { background: #c09840; }
+
+/* TABLE */
+.table-wrap {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: var(--nav-bg); padding: 12px 14px; font-size: 13px; font-weight: 600;
+  color: var(--primary); text-align: left; border-bottom: 2px solid #e0d8cc;
+}
+tbody td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #f0ece4; }
+tbody tr { transition: background 0.15s; cursor: pointer; }
+tbody tr:hover { background: rgba(45,106,79,0.03); }
+tbody tr.expanded { background: rgba(212,168,83,0.06); }
+
+/* BADGES */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+}
+.badge-miss { background: #ffeaa7; color: #856404; }
+.badge-cancel { background: #dfe6e9; color: #636e72; }
+.badge-interrupt { background: #ffecd2; color: #e67e22; }
+.badge-overtime { background: #fab1a0; color: #d63031; }
+.badge-fault { background: #ff7675; color: #fff; }
+.badge-recover { background: #55efc4; color: #00695c; }
+
+.status-done { color: var(--primary); font-weight: 600; }
+.status-pending { color: var(--secondary); font-weight: 600; }
+
+/* EXPAND ROW */
+.detail-row { display: none; }
+.detail-row.show { display: table-row; }
+.detail-row td { padding: 0; }
+.detail-panel {
+  padding: 18px 24px; background: #fdfcfa; border-left: 4px solid var(--accent);
+  margin: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;
+}
+.detail-panel .detail-group h4 { font-size: 13px; color: var(--primary); margin-bottom: 8px; }
+.detail-panel .detail-item { font-size: 12px; color: var(--text-sec); margin-bottom: 4px; }
+.detail-panel .detail-item span { color: var(--text); font-weight: 500; }
+.detail-actions { display: flex; gap: 8px; align-items: flex-end; justify-content: flex-end; }
+
+/* ACTION BAR */
+.action-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.action-bar-left { display: flex; gap: 10px; }
+
+/* REAL-TIME FEED */
+.feed-section { margin-top: 20px; }
+.feed-wrap {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px 20px; max-height: 240px; overflow-y: auto;
+}
+.feed-item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 10px 0;
+  border-bottom: 1px solid #f0ece4; font-size: 13px;
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-time { font-size: 11px; color: var(--text-sec); white-space: nowrap; min-width: 70px; padding-top: 2px; }
+.feed-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.feed-dot.fault { background: var(--secondary); }
+.feed-dot.recover { background: var(--primary); }
+.feed-dot.miss { background: var(--accent); }
+.feed-dot.cancel { background: #636e72; }
+.feed-dot.interrupt { background: #e67e22; }
+.feed-dot.overtime { background: #d63031; }
+.feed-text { flex: 1; }
+.feed-text strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <button class="nav-tab">运营总览</button>
+    <button class="nav-tab">记录中心</button>
+    <button class="nav-tab">系统配置</button>
+    <button class="nav-tab">统计分析</button>
+    <button class="nav-tab">用户管理</button>
+    <button class="nav-tab active">异常事件</button>
+    <button class="nav-tab">设备管理</button>
+    <button class="nav-tab">报表导出</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">&#128276; 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="main-content">
+
+  <!-- STATS CARDS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">用户过号</div>
+      <div class="stat-value">3</div>
+      <div class="stat-sub">今日累计</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">用户取消</div>
+      <div class="stat-value">5</div>
+      <div class="stat-sub">今日累计</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">用户中断</div>
+      <div class="stat-value">2</div>
+      <div class="stat-sub">今日累计</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">超时未挪车</div>
+      <div class="stat-value">1</div>
+      <div class="stat-sub">今日累计</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">充电桩故障</div>
+      <div class="stat-value">2</div>
+      <div class="stat-sub">今日累计 / 1 待处理</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">故障恢复</div>
+      <div class="stat-value">1</div>
+      <div class="stat-sub">今日累计</div>
+    </div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <h3 class="section-title">异常事件列表</h3>
+    <div class="action-bar-left">
+      <button class="btn btn-secondary" onclick="alert('手动标记故障')">手动标记故障</button>
+      <button class="btn btn-primary" onclick="alert('恢复故障')">恢复故障</button>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <label>事件类型</label>
+    <select>
+      <option value="">全部类型</option>
+      <option>用户过号</option>
+      <option>用户取消</option>
+      <option>用户中断</option>
+      <option>超时未挪车</option>
+      <option>充电桩故障</option>
+      <option>故障恢复</option>
+    </select>
+    <label>处理状态</label>
+    <select>
+      <option value="">全部状态</option>
+      <option>已处理</option>
+      <option>待处理</option>
+    </select>
+    <label>时间范围</label>
+    <input type="date" value="2026-04-09"> <span style="color:var(--text-sec)">至</span> <input type="date" value="2026-04-09">
+    <button class="btn btn-outline">查询</button>
+    <button class="btn btn-outline" style="margin-left: auto;">导出</button>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:50px">#</th>
+          <th>事件类型</th>
+          <th>发生时间</th>
+          <th>关联请求</th>
+          <th>关联桩号</th>
+          <th>影响用户</th>
+          <th>处理状态</th>
+          <th>处理结果</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Event 1 -->
+        <tr onclick="toggleDetail('d1')">
+          <td>1</td>
+          <td><span class="badge badge-fault">充电桩故障</span></td>
+          <td>14:12:30</td>
+          <td>REQ-20260409-0087</td>
+          <td>C-003</td>
+          <td>用户 王伟 (U1023)</td>
+          <td><span class="status-pending">待处理</span></td>
+          <td>充电中断，用户待重入队</td>
+          <td><button class="btn btn-primary" style="font-size:12px;padding:4px 10px;">确认处理</button></td>
+        </tr>
+        <tr class="detail-row" id="d1">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>充电桩故障</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 14:12:30</span></div>
+                <div class="detail-item">关联请求: <span>REQ-20260409-0087</span></div>
+                <div class="detail-item">关联桩号: <span>C-003 (快充 120kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">影响用户: <span>王伟 (U1023)</span></div>
+                <div class="detail-item">已充电量: <span>15.3 kWh / 目标 40 kWh</span></div>
+                <div class="detail-item">剩余需求: <span>24.7 kWh</span></div>
+                <div class="detail-item">处理方式: <span>中断会话，创建 FAULT_REQUEUE 请求，补偿优先级 +10</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>操作</h4>
+                <div class="detail-actions" style="flex-direction:column;align-items:flex-start;gap:6px;margin-top:4px;">
+                  <button class="btn btn-primary">确认处理</button>
+                  <button class="btn btn-secondary">手动标记故障</button>
+                  <button class="btn btn-outline">查看用户详情</button>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 2 -->
+        <tr onclick="toggleDetail('d2')">
+          <td>2</td>
+          <td><span class="badge badge-miss">用户过号</span></td>
+          <td>13:45:10</td>
+          <td>REQ-20260409-0072</td>
+          <td>C-007</td>
+          <td>用户 李娜 (U0856)</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>自动重选下一用户 U0901</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d2">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>用户过号</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 13:45:10</span></div>
+                <div class="detail-item">关联请求: <span>REQ-20260409-0072</span></div>
+                <div class="detail-item">关联桩号: <span>C-007 (慢充 7kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">影响用户: <span>李娜 (U0856)</span></div>
+                <div class="detail-item">叫号时间: <span>13:40:00</span></div>
+                <div class="detail-item">超时时间: <span>5分10秒</span></div>
+                <div class="detail-item">处理方式: <span>自动重选下一用户 张丽 (U0901)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已自动处理</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 3 -->
+        <tr onclick="toggleDetail('d3')">
+          <td>3</td>
+          <td><span class="badge badge-cancel">用户取消</span></td>
+          <td>13:20:05</td>
+          <td>REQ-20260409-0065</td>
+          <td>-</td>
+          <td>用户 赵强 (U0912)</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>已从等待池移除，触发重调度</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d3">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>用户取消</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 13:20:05</span></div>
+                <div class="detail-item">关联请求: <span>REQ-20260409-0065</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">影响用户: <span>赵强 (U0912)</span></div>
+                <div class="detail-item">排队位置: <span>第 4 位</span></div>
+                <div class="detail-item">处理方式: <span>从等待池移除，触发重调度</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已自动处理</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 4 -->
+        <tr onclick="toggleDetail('d4')">
+          <td>4</td>
+          <td><span class="badge badge-interrupt">用户中断</span></td>
+          <td>12:55:42</td>
+          <td>REQ-20260409-0058</td>
+          <td>C-005</td>
+          <td>用户 陈明 (U0788)</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>按实际量 22.1kWh 结算，已释放桩</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d4">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>用户中断</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 12:55:42</span></div>
+                <div class="detail-item">关联桩号: <span>C-005 (快充 60kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">影响用户: <span>陈明 (U0788)</span></div>
+                <div class="detail-item">实际充电量: <span>22.1 kWh / 目标 35 kWh</span></div>
+                <div class="detail-item">结算金额: <span>&#165;28.73</span></div>
+                <div class="detail-item">处理方式: <span>按实际量结算，释放充电桩</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已自动处理</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 5 -->
+        <tr onclick="toggleDetail('d5')">
+          <td>5</td>
+          <td><span class="badge badge-overtime">超时未挪车</span></td>
+          <td>12:30:00</td>
+          <td>REQ-20260409-0051</td>
+          <td>C-001</td>
+          <td>用户 刘洋 (U0654)</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>已计入占位费 &#165;15.00</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d5">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>超时未挪车</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 12:30:00</span></div>
+                <div class="detail-item">关联桩号: <span>C-001 (快充 120kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">影响用户: <span>刘洋 (U0654)</span></div>
+                <div class="detail-item">充电完成时间: <span>12:00:00</span></div>
+                <div class="detail-item">超时时长: <span>30 分钟</span></div>
+                <div class="detail-item">占位费: <span>&#165;15.00 (&#165;0.50/分钟)</span></div>
+                <div class="detail-item">桩状态: <span style="color:var(--secondary)">不可重新分配（占位中）</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已处理，占位费已计入</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 6 -->
+        <tr onclick="toggleDetail('d6')">
+          <td>6</td>
+          <td><span class="badge badge-recover">故障恢复</span></td>
+          <td>11:50:20</td>
+          <td>-</td>
+          <td>C-002</td>
+          <td>-</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>已恢复 IDLE，重新参与调度</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d6">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>故障恢复</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 11:50:20</span></div>
+                <div class="detail-item">关联桩号: <span>C-002 (快充 60kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">故障开始时间: <span>09:30:00</span></div>
+                <div class="detail-item">故障持续: <span>2小时20分钟</span></div>
+                <div class="detail-item">处理方式: <span>恢复 IDLE 状态，重新参与调度</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已自动处理，已触发重调度</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Event 7 -->
+        <tr onclick="toggleDetail('d7')">
+          <td>7</td>
+          <td><span class="badge badge-fault">充电桩故障</span></td>
+          <td>09:30:00</td>
+          <td>-</td>
+          <td>C-002</td>
+          <td>-</td>
+          <td><span class="status-done">已处理</span></td>
+          <td>空闲桩故障，已标记 FAULT 排除调度</td>
+          <td><button class="btn btn-outline" style="font-size:12px;padding:4px 10px;">查看</button></td>
+        </tr>
+        <tr class="detail-row" id="d7">
+          <td colspan="9">
+            <div class="detail-panel">
+              <div class="detail-group">
+                <h4>事件详情</h4>
+                <div class="detail-item">事件类型: <span>充电桩故障</span></div>
+                <div class="detail-item">发生时间: <span>2026-04-09 09:30:00</span></div>
+                <div class="detail-item">关联桩号: <span>C-002 (快充 60kW)</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>影响与处理</h4>
+                <div class="detail-item">桩运行状态: <span>空闲 (IDLE) 时故障</span></div>
+                <div class="detail-item">影响用户: <span>无</span></div>
+                <div class="detail-item">处理方式: <span>标记 FAULT，排除出调度池</span></div>
+              </div>
+              <div class="detail-group">
+                <h4>状态</h4>
+                <div class="detail-item" style="color:var(--primary);font-weight:600;">已处理，11:50:20 恢复</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- REAL-TIME FEED -->
+  <div class="feed-section">
+    <h3 class="section-title">实时事件动态</h3>
+    <div class="feed-wrap">
+      <div class="feed-item">
+        <div class="feed-time">14:12:30</div>
+        <div class="feed-dot fault"></div>
+        <div class="feed-text"><strong>充电桩故障</strong> C-003 发生故障，用户 王伟 充电中断，已创建 FAULT_REQUEUE 请求</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">13:45:10</div>
+        <div class="feed-dot miss"></div>
+        <div class="feed-text"><strong>用户过号</strong> 用户 李娜 叫号超时未确认，已自动重选用户 张丽</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">13:20:05</div>
+        <div class="feed-dot cancel"></div>
+        <div class="feed-text"><strong>用户取消</strong> 用户 赵强 取消排队请求，已从等待池移除并触发重调度</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">12:55:42</div>
+        <div class="feed-dot interrupt"></div>
+        <div class="feed-text"><strong>用户中断</strong> 用户 陈明 主动结束充电，实际 22.1kWh，已按量结算释放桩 C-005</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">12:30:00</div>
+        <div class="feed-dot overtime"></div>
+        <div class="feed-text"><strong>超时未挪车</strong> 用户 刘洋 充电完成后30分钟未挪车，已计入占位费 &#165;15.00</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">11:50:20</div>
+        <div class="feed-dot recover"></div>
+        <div class="feed-text"><strong>故障恢复</strong> C-002 故障修复，已恢复 IDLE 状态，重新参与调度</div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-time">09:30:00</div>
+        <div class="feed-dot fault"></div>
+        <div class="feed-text"><strong>充电桩故障</strong> C-002 空闲时发生故障，已标记 FAULT 排除调度</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleDetail(id) {
+  const row = document.getElementById(id);
+  if (row) row.classList.toggle('show');
+}
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toTimeString().split(' ')[0];
+}
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

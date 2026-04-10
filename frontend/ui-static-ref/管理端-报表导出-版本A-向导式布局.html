@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报表导出 - 向导式布局 | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1, h2, h3, h4 { font-family: Georgia, serif; }
+
+/* Nav */
+.top-nav { background: var(--nav-bg); border-bottom: 1px solid #e8e0d4; padding: 0 24px; display: flex; align-items: center; height: 56px; gap: 24px; }
+.nav-brand { font-family: Georgia, serif; font-size: 15px; color: var(--primary); font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.nav-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.nav-tabs a { padding: 8px 14px; font-size: 13px; color: var(--text-sec); text-decoration: none; border-radius: 6px; white-space: nowrap; transition: all .2s; }
+.nav-tabs a:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.nav-tabs a.active { background: var(--primary); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-sec); white-space: nowrap; flex-shrink: 0; }
+.nav-right .badge { background: var(--secondary); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 2px; }
+
+/* Layout */
+.page { max-width: 900px; margin: 32px auto; padding: 0 24px; }
+.page-title { font-size: 22px; color: var(--primary); margin-bottom: 24px; }
+
+/* Wizard steps indicator */
+.wizard-steps { display: flex; gap: 0; margin-bottom: 32px; }
+.wizard-step { flex: 1; text-align: center; position: relative; }
+.wizard-step .step-num { width: 36px; height: 36px; border-radius: 50%; background: #e8e0d4; color: var(--text-sec); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; margin-bottom: 6px; transition: all .3s; }
+.wizard-step.active .step-num { background: var(--primary); color: #fff; }
+.wizard-step.done .step-num { background: var(--accent); color: #fff; }
+.wizard-step .step-label { display: block; font-size: 12px; color: var(--text-sec); }
+.wizard-step.active .step-label { color: var(--primary); font-weight: 600; }
+.wizard-step.done .step-label { color: var(--accent); }
+.wizard-step:not(:last-child)::after { content: ''; position: absolute; top: 18px; left: calc(50% + 24px); width: calc(100% - 48px); height: 2px; background: #e8e0d4; }
+.wizard-step.done:not(:last-child)::after { background: var(--accent); }
+
+/* Cards */
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; margin-bottom: 20px; }
+.card-title { font-size: 16px; color: var(--primary); margin-bottom: 16px; }
+
+/* Form elements */
+label { display: block; font-size: 13px; color: var(--text-sec); margin-bottom: 6px; font-weight: 500; }
+input[type="date"], input[type="text"], select {
+  width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 14px; color: var(--text); background: #fff; transition: border .2s;
+}
+input:focus, select:focus { outline: none; border-color: var(--primary); }
+.form-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.form-row > * { flex: 1; }
+
+.quick-presets { display: flex; gap: 8px; margin-bottom: 16px; }
+.quick-presets button {
+  padding: 6px 16px; border: 1px solid #ddd; background: #fff; border-radius: 20px;
+  font-size: 13px; color: var(--text-sec); cursor: pointer; transition: all .2s;
+}
+.quick-presets button:hover, .quick-presets button.active { border-color: var(--primary); background: rgba(45,106,79,0.06); color: var(--primary); }
+
+/* Radio cards */
+.radio-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.radio-card {
+  flex: 1; min-width: 200px; padding: 16px; border: 2px solid #e8e0d4; border-radius: var(--radius);
+  cursor: pointer; transition: all .2s; text-align: center;
+}
+.radio-card:hover { border-color: var(--accent); }
+.radio-card.selected { border-color: var(--primary); background: rgba(45,106,79,0.04); }
+.radio-card .rc-icon { font-size: 28px; margin-bottom: 8px; }
+.radio-card .rc-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.radio-card .rc-desc { font-size: 12px; color: var(--text-sec); }
+
+/* Buttons */
+.btn-group { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+.btn { padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn-secondary { background: #f0ebe3; color: var(--text); }
+.btn-secondary:hover { background: #e8e0d4; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: #c49a45; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Preview */
+.preview-box { background: var(--bg); border-radius: 8px; padding: 20px; margin-top: 12px; }
+.preview-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e8e0d4; font-size: 14px; }
+.preview-row:last-child { border-bottom: none; }
+.preview-row .pr-label { color: var(--text-sec); }
+.preview-row .pr-value { font-weight: 600; }
+
+/* Progress bar */
+.progress-container { margin-top: 16px; display: none; }
+.progress-bar-bg { width: 100%; height: 8px; background: #e8e0d4; border-radius: 4px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: 4px; width: 0%; transition: width 0.5s ease; }
+.progress-text { font-size: 12px; color: var(--text-sec); margin-top: 6px; text-align: center; }
+
+/* History */
+.history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.history-table th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-sec); font-weight: 600; border-bottom: 1px solid #e8e0d4; }
+.history-table td { padding: 10px 12px; border-bottom: 1px solid #f0ebe3; }
+.status-tag { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.status-success { background: rgba(45,106,79,0.1); color: var(--primary); }
+.status-pending { background: rgba(212,168,83,0.15); color: #b8922e; }
+
+/* Step panels */
+.step-panel { display: none; }
+.step-panel.active { display: block; }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <a href="#">运营总览</a><a href="#">记录中心</a><a href="#">系统配置</a>
+    <a href="#">统计分析</a><a href="#">用户管理</a><a href="#">异常事件</a>
+    <a href="#">设备管理</a><a href="#" class="active">报表导出</a>
+  </div>
+  <div class="nav-right">
+    <span>🔔 告警<span class="badge">2</span></span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="page">
+  <h2 class="page-title">报表导出</h2>
+
+  <!-- Wizard Steps -->
+  <div class="wizard-steps" id="wizardSteps">
+    <div class="wizard-step active" data-step="1"><span class="step-num">1</span><span class="step-label">选择时间范围</span></div>
+    <div class="wizard-step" data-step="2"><span class="step-num">2</span><span class="step-label">选择导出类型</span></div>
+    <div class="wizard-step" data-step="3"><span class="step-num">3</span><span class="step-label">选择格式</span></div>
+    <div class="wizard-step" data-step="4"><span class="step-num">4</span><span class="step-label">预览与确认</span></div>
+  </div>
+
+  <!-- Step 1: Time Range -->
+  <div class="step-panel active" id="step1">
+    <div class="card">
+      <h3 class="card-title">选择时间范围</h3>
+      <div class="quick-presets">
+        <button onclick="setPreset('today', this)">今天</button>
+        <button onclick="setPreset('week', this)">本周</button>
+        <button class="active" onclick="setPreset('month', this)">本月</button>
+      </div>
+      <div class="form-row">
+        <div><label>开始日期</label><input type="date" id="startDate" value="2026-04-01"></div>
+        <div><label>结束日期</label><input type="date" id="endDate" value="2026-04-09"></div>
+      </div>
+    </div>
+    <div class="btn-group"><button class="btn btn-primary" onclick="goStep(2)">下一步</button></div>
+  </div>
+
+  <!-- Step 2: Export Type -->
+  <div class="step-panel" id="step2">
+    <div class="card">
+      <h3 class="card-title">选择导出类型</h3>
+      <div class="radio-cards">
+        <div class="radio-card selected" onclick="selectType(this, 'detail')">
+          <div class="rc-icon">📋</div>
+          <div class="rc-title">详单导出</div>
+          <div class="rc-desc">充电请求详细记录，包含时间节点、状态等19个字段</div>
+        </div>
+        <div class="radio-card" onclick="selectType(this, 'bill')">
+          <div class="rc-icon">💰</div>
+          <div class="rc-title">账单导出</div>
+          <div class="rc-desc">计费账单记录，包含费用明细、支付状态等9个字段</div>
+        </div>
+        <div class="radio-card" onclick="selectType(this, 'stats')">
+          <div class="rc-icon">📊</div>
+          <div class="rc-title">统计报表导出</div>
+          <div class="rc-desc">统计分析结果，包含等待时间、利用率等8项指标</div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
+      <button class="btn btn-primary" onclick="goStep(3)">下一步</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Format -->
+  <div class="step-panel" id="step3">
+    <div class="card">
+      <h3 class="card-title">选择导出格式</h3>
+      <div class="radio-cards">
+        <div class="radio-card selected" onclick="selectFormat(this, 'json')">
+          <div class="rc-icon">{ }</div>
+          <div class="rc-title">JSON 格式</div>
+          <div class="rc-desc">主要格式，匹配冻结接口规范，适用于系统对接</div>
+        </div>
+        <div class="radio-card" onclick="selectFormat(this, 'csv')">
+          <div class="rc-icon">📄</div>
+          <div class="rc-title">CSV 格式</div>
+          <div class="rc-desc">可选格式，适用于 Excel 等工具打开查看</div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="goStep(2)">上一步</button>
+      <button class="btn btn-primary" onclick="goStep(4)">下一步</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Preview & Confirm -->
+  <div class="step-panel" id="step4">
+    <div class="card">
+      <h3 class="card-title">导出预览</h3>
+      <div class="preview-box">
+        <div class="preview-row"><span class="pr-label">时间范围</span><span class="pr-value" id="pvDateRange">2026-04-01 ~ 2026-04-09</span></div>
+        <div class="preview-row"><span class="pr-label">导出类型</span><span class="pr-value" id="pvType">详单导出</span></div>
+        <div class="preview-row"><span class="pr-label">导出格式</span><span class="pr-value" id="pvFormat">JSON</span></div>
+        <div class="preview-row"><span class="pr-label">预计记录数</span><span class="pr-value" id="pvCount">1,247 条</span></div>
+        <div class="preview-row"><span class="pr-label">包含字段数</span><span class="pr-value" id="pvFields">19 个</span></div>
+        <div class="preview-row"><span class="pr-label">预计文件大小</span><span class="pr-value" id="pvSize">~2.3 MB</span></div>
+      </div>
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">准备导出...</div>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="goStep(3)">上一步</button>
+      <button class="btn btn-accent" id="exportBtn" onclick="startExport()">确认导出</button>
+    </div>
+  </div>
+
+  <!-- Export History -->
+  <div class="card" style="margin-top: 32px;">
+    <h3 class="card-title">导出历史</h3>
+    <table class="history-table">
+      <thead><tr><th>导出时间</th><th>类型</th><th>格式</th><th>记录数</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr><td>2026-04-09 10:15:32</td><td>详单导出</td><td>JSON</td><td>856</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-08 16:42:11</td><td>账单导出</td><td>CSV</td><td>423</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-07 09:05:48</td><td>统计报表</td><td>JSON</td><td>8</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-05 14:30:00</td><td>详单导出</td><td>JSON</td><td>2,104</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let currentStep = 1;
+let selectedType = 'detail';
+let selectedFormat = 'json';
+
+const typeLabels = { detail: '详单导出', bill: '账单导出', stats: '统计报表导出' };
+const typeCounts = { detail: '1,247 条', bill: '632 条', stats: '8 项' };
+const typeFields = { detail: '19 个', bill: '9 个', stats: '8 项指标' };
+const typeSizes = { detail: { json: '~2.3 MB', csv: '~1.8 MB' }, bill: { json: '~0.9 MB', csv: '~0.6 MB' }, stats: { json: '~12 KB', csv: '~5 KB' } };
+
+function goStep(step) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('step' + step).classList.add('active');
+  document.querySelectorAll('.wizard-step').forEach(s => {
+    const n = parseInt(s.dataset.step);
+    s.classList.remove('active', 'done');
+    if (n === step) s.classList.add('active');
+    else if (n < step) s.classList.add('done');
+  });
+  if (step === 4) updatePreview();
+  currentStep = step;
+}
+
+function setPreset(preset, el) {
+  document.querySelectorAll('.quick-presets button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const today = new Date('2026-04-09');
+  let start;
+  if (preset === 'today') start = new Date('2026-04-09');
+  else if (preset === 'week') start = new Date('2026-04-06');
+  else start = new Date('2026-04-01');
+  document.getElementById('startDate').value = start.toISOString().slice(0, 10);
+  document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+}
+
+function selectType(el, type) {
+  document.querySelectorAll('#step2 .radio-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedType = type;
+}
+
+function selectFormat(el, fmt) {
+  document.querySelectorAll('#step3 .radio-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedFormat = fmt;
+}
+
+function updatePreview() {
+  document.getElementById('pvDateRange').textContent = document.getElementById('startDate').value + ' ~ ' + document.getElementById('endDate').value;
+  document.getElementById('pvType').textContent = typeLabels[selectedType];
+  document.getElementById('pvFormat').textContent = selectedFormat.toUpperCase();
+  document.getElementById('pvCount').textContent = typeCounts[selectedType];
+  document.getElementById('pvFields').textContent = typeFields[selectedType];
+  document.getElementById('pvSize').textContent = typeSizes[selectedType][selectedFormat];
+}
+
+function startExport() {
+  const container = document.getElementById('progressContainer');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const btn = document.getElementById('exportBtn');
+  container.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = '导出中...';
+  let progress = 0;
+  const timer = setInterval(() => {
+    progress += Math.random() * 15 + 5;
+    if (progress >= 100) {
+      progress = 100;
+      clearInterval(timer);
+      text.textContent = '导出完成！文件已准备好下载';
+      btn.textContent = '重新导出';
+      btn.disabled = false;
+      fill.style.background = 'linear-gradient(90deg, var(--accent), var(--primary))';
+    } else {
+      text.textContent = '正在导出... ' + Math.round(progress) + '%';
+    }
+    fill.style.width = progress + '%';
+  }, 300);
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

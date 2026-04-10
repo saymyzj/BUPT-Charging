@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户管理 - 补充用户详情弹窗 | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5;
+  --card: #ffffff;
+  --primary: #2d6a4f;
+  --secondary: #c45d3e;
+  --accent: #d4a853;
+  --text: #2c2c2c;
+  --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --nav-bg: #f5f0e8;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(circle, rgba(160,140,110,0.06) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+body > * { position: relative; z-index: 1; }
+h1, h2, h3, h4 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ===== NAV ===== */
+.topnav {
+  background: var(--nav-bg);
+  border-bottom: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topnav-brand {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.topnav-tabs {
+  display: flex;
+  gap: 0;
+  height: 100%;
+}
+.topnav-tab {
+  padding: 0 20px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-sec);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.topnav-tab:hover {
+  color: var(--primary);
+  background: rgba(45,106,79,0.05);
+}
+.topnav-tab.active {
+  color: var(--primary);
+  font-weight: 600;
+  border-bottom-color: var(--primary);
+}
+.topnav-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 14px;
+  color: var(--text-sec);
+  white-space: nowrap;
+}
+.alert-badge { position: relative; cursor: pointer; }
+.alert-badge .dot {
+  background: var(--secondary);
+  color: #fff;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 2px;
+}
+
+/* ===== LAYOUT ===== */
+.page-content {
+  padding: 32px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+.header-section {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.header-section h2 {
+  font-size: 24px;
+  color: var(--primary);
+  margin: 0;
+}
+.page-subtitle {
+  color: var(--text-sec);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* ===== NEW badge & highlight ===== */
+.badge-new {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+.new-highlight {
+  border: 2px dashed var(--primary);
+  border-radius: 8px;
+  position: relative;
+}
+.new-highlight-label {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+/* ===== FILTER BAR ===== */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.search-input {
+  padding: 8px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  width: 240px;
+  outline: none;
+}
+.search-input:focus { border-color: var(--primary); }
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+.action-btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.action-btn:hover { opacity: 0.9; }
+.action-btn-outline {
+  padding: 8px 18px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.action-btn-outline:hover { background: rgba(45,106,79,0.06); }
+
+/* ===== TABLE ===== */
+.table-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.user-table th {
+  padding: 14px 20px;
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+  background: var(--nav-bg);
+  border-bottom: 1px solid #e8e0d8;
+}
+.user-table td {
+  padding: 14px 20px;
+  font-size: 14px;
+  color: var(--text);
+  border-bottom: 1px solid #f0ebe4;
+  transition: background 0.2s;
+}
+.user-table tbody tr:hover td { background: #faf8f5; }
+.font-mono { font-family: monospace; color: var(--text-sec); }
+.font-bold { font-weight: 600; }
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+.status-badge.active { background: rgba(45,106,79,.1); color: var(--primary); }
+.status-badge.banned { background: rgba(196,93,62,.1); color: var(--secondary); }
+
+.actions { display: flex; gap: 12px; }
+.text-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-sec);
+  transition: color 0.2s;
+}
+.text-btn:hover { text-decoration: underline; }
+.text-btn.primary { color: var(--primary); }
+.text-btn.danger { color: var(--secondary); }
+
+/* Checkbox in table */
+.row-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* ===== PAGINATION ===== */
+.pagination {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #e8e0d8;
+  background: #faf8f5;
+  font-size: 13px;
+  color: var(--text-sec);
+}
+.pages { display: flex; gap: 4px; }
+.page-btn {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  transition: all 0.2s;
+}
+.page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== BATCH BAR ===== */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: rgba(45,106,79,0.04);
+  border-bottom: 1px solid #e8e0d8;
+  font-size: 13px;
+  color: var(--text-sec);
+}
+.batch-bar .count { font-weight: 600; color: var(--primary); }
+
+/* ===== MODAL OVERLAY ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+.modal-header {
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid #f0ebe4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  border-radius: 14px 14px 0 0;
+  z-index: 2;
+}
+.modal-header h3 {
+  font-size: 20px;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0ebe4;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--text-sec);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.modal-close:hover { background: #e8e0d8; }
+.modal-body { padding: 0 28px 28px; }
+
+/* Modal sections */
+.modal-section {
+  margin-top: 24px;
+}
+.modal-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-section-title .icon { font-size: 16px; }
+
+/* Basic info grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.info-item {
+  background: #faf8f4;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.info-item .label {
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-bottom: 4px;
+}
+.info-item .value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.info-item .value .role-tag {
+  display: inline-block;
+  background: rgba(45,106,79,0.1);
+  color: var(--primary);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* Compact table for modal */
+.compact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.compact-table thead th {
+  background: #f8f6f1;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-sec);
+  border-bottom: 2px solid #e8e2d8;
+}
+.compact-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0ece6;
+  color: var(--text);
+}
+.compact-table tbody tr:hover { background: #faf8f4; }
+.compact-table .tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.compact-table .tag-fast { background: rgba(196,93,62,0.1); color: var(--secondary); }
+.compact-table .tag-slow { background: rgba(45,106,79,0.1); color: var(--primary); }
+.compact-table .tag-done { background: rgba(45,106,79,0.1); color: var(--primary); }
+.compact-table .tag-charging { background: rgba(212,168,83,0.15); color: #a07820; }
+.compact-table .tag-cancelled { background: rgba(122,122,122,0.1); color: var(--text-sec); }
+.compact-table .tag-recharge { background: rgba(45,106,79,0.1); color: var(--primary); }
+.compact-table .tag-consume { background: rgba(196,93,62,0.1); color: var(--secondary); }
+.compact-table .tag-refund { background: rgba(212,168,83,0.15); color: #a07820; }
+
+/* Stat cards row */
+.stat-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1;
+  min-width: 130px;
+  background: #faf8f4;
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: center;
+  border: 1px solid #f0ece6;
+}
+.stat-card .stat-value {
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.stat-card .stat-value.warn { color: var(--secondary); }
+.stat-card .stat-value.zero { color: #bbb; }
+.stat-card .stat-label {
+  font-size: 12px;
+  color: var(--text-sec);
+  line-height: 1.3;
+}
+
+/* Balance section */
+.balance-display {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.balance-amount {
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.balance-amount .currency {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-sec);
+}
+.recharge-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.recharge-input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 160px;
+  outline: none;
+}
+.recharge-input:focus { border-color: var(--primary); }
+.recharge-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.recharge-btn:hover { opacity: 0.9; }
+
+/* Modal new-highlight override */
+.modal-section.new-highlight {
+  padding: 18px 20px;
+  margin-top: 24px;
+}
+</style>
+</head>
+<body>
+
+<!-- ===== TOP NAV ===== -->
+<nav class="topnav">
+  <div class="topnav-brand">&#9889; 智能充电桩调度计费系统 &middot; 管理端</div>
+  <div class="topnav-tabs">
+    <div class="topnav-tab">运营总览</div>
+    <div class="topnav-tab">记录中心</div>
+    <div class="topnav-tab">系统配置</div>
+    <div class="topnav-tab">统计分析</div>
+    <div class="topnav-tab active">用户管理</div>
+    <div class="topnav-tab">异常事件</div>
+    <div class="topnav-tab">设备管理</div>
+    <div class="topnav-tab">报表导出</div>
+  </div>
+  <div class="topnav-right">
+    <span class="alert-badge">&#128276; 告警<span class="dot">2</span></span>
+    <span>管理员: 张三</span>
+    <span>14:32:10</span>
+  </div>
+</nav>
+
+<!-- ===== PAGE CONTENT ===== -->
+<div class="page-content">
+  <p class="page-subtitle">F-A08 用户管理完整功能补充。标注 <span class="badge-new">新增</span> 的区域为本次新增的功能元素：用户详情弹窗、角色筛选、批量操作。</p>
+
+  <div class="header-section">
+    <h2>用户管理</h2>
+    <div class="filter-bar">
+      <input type="text" class="search-input" placeholder="搜索用户名或工号...">
+      <select class="filter-select">
+        <option>状态: 全部</option>
+        <option>正常</option>
+        <option>已封禁</option>
+      </select>
+      <!-- NEW: 角色筛选 -->
+      <div class="new-highlight" style="padding: 0; border-width: 2px;">
+        <span class="new-highlight-label" style="top: -10px; left: 6px; font-size: 10px; padding: 1px 6px;">新增</span>
+        <select class="filter-select" style="border: none; border-radius: 4px;">
+          <option>角色: 全部角色</option>
+          <option>普通用户</option>
+          <option>管理员</option>
+        </select>
+      </div>
+      <!-- NEW: 批量操作 -->
+      <div class="new-highlight" style="padding: 0; border-width: 2px;">
+        <span class="new-highlight-label" style="top: -10px; left: 6px; font-size: 10px; padding: 1px 6px;">新增</span>
+        <select class="filter-select" style="border: none; border-radius: 4px;">
+          <option>批量操作</option>
+          <option>批量封禁</option>
+          <option>批量充值</option>
+        </select>
+      </div>
+      <button class="action-btn">导出名单</button>
+    </div>
+  </div>
+
+  <!-- ===== USER TABLE ===== -->
+  <div class="table-card">
+    <!-- NEW: Batch bar -->
+    <div class="batch-bar new-highlight" style="border-radius: 0; border-left: none; border-right: none; border-top: none;">
+      <span class="new-highlight-label" style="top: -10px;">新增</span>
+      <span>已选择 <span class="count">2</span> 名用户</span>
+      <button class="action-btn" style="padding: 4px 14px; font-size: 12px;">执行批量操作</button>
+    </div>
+
+    <table class="user-table">
+      <thead>
+        <tr>
+          <th style="width: 40px;"><input type="checkbox" class="row-checkbox"></th>
+          <th>用户ID</th>
+          <th>用户名</th>
+          <th>注册时间</th>
+          <th>累计充电次数</th>
+          <th>账户余额</th>
+          <th>当前状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background: rgba(45,106,79,0.03);">
+          <td><input type="checkbox" class="row-checkbox" checked></td>
+          <td class="font-mono">USR_1001</td>
+          <td class="font-bold">user_001</td>
+          <td>2026-01-12</td>
+          <td>24</td>
+          <td class="font-bold">&yen; 156.40</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary" style="text-decoration: underline;">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1002</td>
+          <td class="font-bold">user_002</td>
+          <td>2026-01-15</td>
+          <td>18</td>
+          <td class="font-bold">&yen; 40.00</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1003</td>
+          <td class="font-bold">user_003</td>
+          <td>2026-02-03</td>
+          <td>42</td>
+          <td class="font-bold">&yen; 350.80</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr style="background: rgba(45,106,79,0.03);">
+          <td><input type="checkbox" class="row-checkbox" checked></td>
+          <td class="font-mono">USR_1004</td>
+          <td class="font-bold">user_004</td>
+          <td>2026-02-18</td>
+          <td>5</td>
+          <td class="font-bold" style="color: var(--secondary);">&yen; -15.00</td>
+          <td><span class="status-badge banned">已封禁</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn">解封</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1005</td>
+          <td class="font-bold">user_005</td>
+          <td>2026-03-01</td>
+          <td>12</td>
+          <td class="font-bold">&yen; 88.50</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1006</td>
+          <td class="font-bold">user_006</td>
+          <td>2026-03-09</td>
+          <td>9</td>
+          <td class="font-bold">&yen; 25.00</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1007</td>
+          <td class="font-bold">user_007</td>
+          <td>2026-03-21</td>
+          <td>31</td>
+          <td class="font-bold">&yen; 110.25</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" class="row-checkbox"></td>
+          <td class="font-mono">USR_1008</td>
+          <td class="font-bold">user_008</td>
+          <td>2026-03-22</td>
+          <td>1</td>
+          <td class="font-bold">&yen; 0.00</td>
+          <td><span class="status-badge active">正常</span></td>
+          <td class="actions">
+            <button class="text-btn primary">详情</button>
+            <button class="text-btn danger">封禁</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      <span>共 86 名用户</span>
+      <div class="pages">
+        <button class="page-btn" disabled>&lt;</button>
+        <button class="page-btn active">1</button>
+        <button class="page-btn">2</button>
+        <button class="page-btn">3</button>
+        <button class="page-btn">...</button>
+        <button class="page-btn">9</button>
+        <button class="page-btn">&gt;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- NEW: 用户详情弹窗 (Modal visible for static reference)         -->
+<!-- ============================================================== -->
+<div class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>
+        &#128100; 用户详情 - user_001
+        <span class="badge-new">新增</span>
+      </h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- ===== 基本信息 ===== -->
+      <div class="modal-section">
+        <div class="modal-section-title"><span class="icon">&#128196;</span> 基本信息</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="label">用户名</div>
+            <div class="value">user_001</div>
+          </div>
+          <div class="info-item">
+            <div class="label">角色</div>
+            <div class="value"><span class="role-tag">USER</span></div>
+          </div>
+          <div class="info-item">
+            <div class="label">注册时间</div>
+            <div class="value">2026-01-12</div>
+          </div>
+          <div class="info-item">
+            <div class="label">当前状态</div>
+            <div class="value"><span class="status-badge active">正常</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 充电历史记录 (F-A08) ===== -->
+      <div class="modal-section new-highlight" style="padding: 18px 20px;">
+        <span class="new-highlight-label">新增 - F-A08 充电历史</span>
+        <div class="modal-section-title" style="margin-top: 6px;"><span class="icon">&#128267;</span> 充电历史记录</div>
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>请求编号</th>
+              <th>充电模式</th>
+              <th>充电桩号</th>
+              <th>实际充电量</th>
+              <th>费用</th>
+              <th>状态</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-mono">REQ_20260405_001</td>
+              <td><span class="tag tag-fast">快充</span></td>
+              <td>C-01</td>
+              <td>35.2 kWh</td>
+              <td>&yen; 28.16</td>
+              <td><span class="tag tag-done">已完成</span></td>
+              <td>2026-04-05 14:20</td>
+            </tr>
+            <tr>
+              <td class="font-mono">REQ_20260401_003</td>
+              <td><span class="tag tag-slow">慢充</span></td>
+              <td>C-04</td>
+              <td>48.0 kWh</td>
+              <td>&yen; 19.20</td>
+              <td><span class="tag tag-done">已完成</span></td>
+              <td>2026-04-01 23:15</td>
+            </tr>
+            <tr>
+              <td class="font-mono">REQ_20260328_007</td>
+              <td><span class="tag tag-fast">快充</span></td>
+              <td>C-02</td>
+              <td>12.5 kWh</td>
+              <td>&yen; 12.50</td>
+              <td><span class="tag tag-cancelled">已取消</span></td>
+              <td>2026-03-28 10:40</td>
+            </tr>
+            <tr>
+              <td class="font-mono">REQ_20260320_012</td>
+              <td><span class="tag tag-slow">慢充</span></td>
+              <td>C-05</td>
+              <td>60.0 kWh</td>
+              <td>&yen; 24.00</td>
+              <td><span class="tag tag-done">已完成</span></td>
+              <td>2026-03-20 22:30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ===== 异常记录统计 (F-A08) ===== -->
+      <div class="modal-section new-highlight" style="padding: 18px 20px;">
+        <span class="new-highlight-label">新增 - F-A08 异常记录</span>
+        <div class="modal-section-title" style="margin-top: 6px;"><span class="icon">&#9888;&#65039;</span> 异常记录统计</div>
+        <div class="stat-cards">
+          <div class="stat-card">
+            <div class="stat-value warn">2</div>
+            <div class="stat-label">过号次数<br><span style="font-size:11px; color:#bbb;">no_show_count</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color: var(--accent);">1</div>
+            <div class="stat-label">取消次数<br><span style="font-size:11px; color:#bbb;">cancel_count</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value zero">0</div>
+            <div class="stat-label">中断次数<br><span style="font-size:11px; color:#bbb;">interrupt_count</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color: var(--accent);">1</div>
+            <div class="stat-label">故障重排次数<br><span style="font-size:11px; color:#bbb;">fault_requeue_count</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value zero">0</div>
+            <div class="stat-label">超时未挪车<br><span style="font-size:11px; color:#bbb;">leave_timeout_count</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 虚拟余额管理 (F-A08) ===== -->
+      <div class="modal-section new-highlight" style="padding: 18px 20px;">
+        <span class="new-highlight-label">新增 - F-A08 余额管理</span>
+        <div class="modal-section-title" style="margin-top: 6px;"><span class="icon">&#128176;</span> 虚拟余额管理</div>
+
+        <div class="balance-display">
+          <div class="balance-amount"><span class="currency">&yen;</span> 128.50</div>
+          <span style="font-size: 13px; color: var(--text-sec);">当前余额</span>
+        </div>
+
+        <div class="recharge-row">
+          <span style="font-size: 13px; font-weight: 600;">充值操作:</span>
+          <input type="number" class="recharge-input" placeholder="输入充值金额" value="50.00">
+          <button class="recharge-btn">管理员充值</button>
+        </div>
+
+        <div class="modal-section-title" style="font-size: 13px; margin-bottom: 10px;">
+          <span class="icon">&#128221;</span> 余额变动记录
+        </div>
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>类型</th>
+              <th>金额</th>
+              <th>余额</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2026-04-05 14:45</td>
+              <td><span class="tag tag-consume">消费</span></td>
+              <td style="color: var(--secondary);">- &yen; 28.16</td>
+              <td>&yen; 128.50</td>
+              <td>快充 C-01 / REQ_20260405_001</td>
+            </tr>
+            <tr>
+              <td>2026-04-03 09:12</td>
+              <td><span class="tag tag-recharge">充值</span></td>
+              <td style="color: var(--primary);">+ &yen; 100.00</td>
+              <td>&yen; 156.66</td>
+              <td>管理员充值</td>
+            </tr>
+            <tr>
+              <td>2026-04-01 23:50</td>
+              <td><span class="tag tag-consume">消费</span></td>
+              <td style="color: var(--secondary);">- &yen; 19.20</td>
+              <td>&yen; 56.66</td>
+              <td>慢充 C-04 / REQ_20260401_003</td>
+            </tr>
+            <tr>
+              <td>2026-03-28 10:42</td>
+              <td><span class="tag tag-refund">退款</span></td>
+              <td style="color: var(--accent);">+ &yen; 12.50</td>
+              <td>&yen; 75.86</td>
+              <td>取消退款 / REQ_20260328_007</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /modal-body -->
+  </div><!-- /modal -->
+</div><!-- /modal-overlay -->
+
+</body>
+</html>

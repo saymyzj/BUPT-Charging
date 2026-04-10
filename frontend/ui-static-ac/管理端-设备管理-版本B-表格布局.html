@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备管理 - 表格布局 (版本B)</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1, h2, h3, h4 { font-family: Georgia, serif; }
+
+/* Nav */
+.top-nav { background: var(--nav-bg); border-bottom: 1px solid #e6dfd4; padding: 0 24px; display: flex; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; }
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; margin-right: 32px; }
+.nav-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.nav-tabs a { padding: 8px 14px; border-radius: 6px; font-size: 13px; color: var(--text-sec); text-decoration: none; white-space: nowrap; transition: all .2s; }
+.nav-tabs a:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.nav-tabs a.active { background: var(--primary); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 16px; margin-left: auto; font-size: 13px; color: var(--text-sec); white-space: nowrap; }
+.nav-right .badge { background: var(--secondary); color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 11px; margin-left: 2px; }
+
+/* Main */
+.main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+/* Buttons */
+.btn { padding: 8px 18px; border-radius: var(--radius); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a94e34; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: #c09840; }
+.btn-outline { background: transparent; border: 1.5px solid var(--primary); color: var(--primary); }
+.btn-outline:hover { background: rgba(45,106,79,0.06); }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-danger { background: #e74c3c; color: #fff; font-size: 12px; padding: 5px 12px; }
+.btn-danger:hover { background: #c0392b; }
+.btn-ghost { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 12px; padding: 4px 8px; }
+.btn-ghost:hover { text-decoration: underline; }
+
+/* Section */
+.section { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 24px; }
+.section h2 { font-size: 16px; color: var(--primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+/* Top panels row */
+.panels-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+
+.form-inline { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; color: var(--text-sec); font-weight: 600; }
+.form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border: 1.5px solid #e0d9ce; border-radius: 8px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; transition: border-color .2s; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+.form-group textarea { min-height: 80px; font-family: monospace; font-size: 12px; resize: vertical; width: 100%; }
+
+/* Toggle */
+.toggle { position: relative; width: 42px; height: 22px; display: inline-block; vertical-align: middle; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 22px; cursor: pointer; transition: .3s; }
+.toggle .slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; }
+.toggle input:checked + .slider { background: var(--primary); }
+.toggle input:checked + .slider::before { transform: translateX(20px); }
+
+/* Table */
+.table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.table-toolbar h1 { font-size: 22px; color: var(--primary); }
+.table-actions { display: flex; gap: 10px; }
+
+table { width: 100%; border-collapse: collapse; }
+thead th { background: var(--nav-bg); padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 700; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e0d9ce; }
+tbody td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #f0ebe3; vertical-align: middle; }
+tbody tr:hover { background: rgba(45,106,79,0.03); }
+tbody tr.editing td { background: #fffcf5; }
+
+.type-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; }
+.type-fast { background: rgba(196,93,62,0.12); color: var(--secondary); }
+.type-slow { background: rgba(45,106,79,0.12); color: var(--primary); }
+
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.status-online { background: #27ae60; }
+.status-offline { background: #bdc3c7; }
+.status-charging { background: var(--accent); }
+.status-fault { background: #e74c3c; }
+
+/* Inline edit inputs */
+.inline-input { padding: 4px 8px; border: 1.5px solid var(--primary); border-radius: 6px; font-size: 13px; width: 100%; background: #fff; }
+.inline-select { padding: 4px 8px; border: 1.5px solid var(--primary); border-radius: 6px; font-size: 13px; background: #fff; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--card); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,0.15); padding: 28px; width: 420px; max-width: 90vw; }
+.modal h3 { font-size: 18px; color: var(--primary); margin-bottom: 20px; }
+.modal .form-group { margin-bottom: 14px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<!-- Top Nav -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统 &middot; 管理端</div>
+  <div class="nav-tabs">
+    <a href="#">运营总览</a>
+    <a href="#">记录中心</a>
+    <a href="#">系统配置</a>
+    <a href="#">统计分析</a>
+    <a href="#">用户管理</a>
+    <a href="#">异常事件</a>
+    <a href="#" class="active">设备管理</a>
+    <a href="#">报表导出</a>
+  </div>
+  <div class="nav-right">
+    <span>&#128276; 告警<span class="badge">2</span></span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="main">
+  <!-- Top panels: Quick Init + Import -->
+  <div class="panels-row">
+    <div class="section">
+      <h2>&#9889; 场景快速初始化</h2>
+      <div class="form-inline">
+        <div class="form-group">
+          <label>快充数量</label>
+          <input type="number" id="initFastCount" value="2" min="0" style="width:70px;">
+        </div>
+        <div class="form-group">
+          <label>快充功率(kW)</label>
+          <input type="number" id="initFastPower" value="30" min="1" style="width:80px;">
+        </div>
+        <div class="form-group">
+          <label>慢充数量</label>
+          <input type="number" id="initSlowCount" value="3" min="0" style="width:70px;">
+        </div>
+        <div class="form-group">
+          <label>慢充功率(kW)</label>
+          <input type="number" id="initSlowPower" value="7" min="1" style="width:80px;">
+        </div>
+        <button class="btn btn-accent" onclick="quickInit()">生成</button>
+      </div>
+    </div>
+    <div class="section">
+      <h2>&#128229; 导入桩级状态快照</h2>
+      <div class="form-group">
+        <textarea id="importJson" placeholder='[{"station_code":"FAST_01","type":"快充","power":30,"status":"空闲","enabled":true}]' style="min-height:60px;"></textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="importSnapshot()" style="margin-top:8px;">确认导入</button>
+    </div>
+  </div>
+
+  <!-- Table Section -->
+  <div class="section">
+    <div class="table-toolbar">
+      <h1>&#128268; 充电桩设备列表</h1>
+      <div class="table-actions">
+        <button class="btn btn-primary" onclick="openAddModal()">&#43; 新增设备</button>
+        <button class="btn btn-outline" onclick="batchEnable(true)">批量启用</button>
+        <button class="btn btn-outline" onclick="batchEnable(false)">批量停用</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;"><input type="checkbox" id="checkAll" onchange="toggleCheckAll(this.checked)"></th>
+          <th>桩编号</th>
+          <th>类型</th>
+          <th>额定功率</th>
+          <th>当前状态</th>
+          <th>启用/停用</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3>&#43; 新增充电桩</h3>
+    <div class="form-group">
+      <label>桩编号</label>
+      <input type="text" id="addCode" placeholder="例: FAST_03">
+    </div>
+    <div class="form-group">
+      <label>类型</label>
+      <select id="addType">
+        <option value="快充">快充</option>
+        <option value="慢充">慢充</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>额定功率 (kW)</label>
+      <input type="number" id="addPower" value="30" min="1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" onclick="addDevice()">确认新增</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let devices = [
+  { station_code: 'FAST_01', type: '快充', power: 30, status: '空闲', enabled: true, checked: false },
+  { station_code: 'FAST_02', type: '快充', power: 30, status: '充电中', enabled: true, checked: false },
+  { station_code: 'SLOW_01', type: '慢充', power: 7, status: '空闲', enabled: true, checked: false },
+  { station_code: 'SLOW_02', type: '慢充', power: 7, status: '空闲', enabled: true, checked: false },
+  { station_code: 'SLOW_03', type: '慢充', power: 7, status: '故障', enabled: false, checked: false },
+];
+
+let editingIndex = -1;
+const statusMap = { '空闲': 'online', '充电中': 'charging', '故障': 'fault', '离线': 'offline' };
+
+function render() {
+  const body = document.getElementById('tableBody');
+  body.innerHTML = devices.map((d, i) => {
+    if (i === editingIndex) {
+      return `<tr class="editing">
+        <td><input type="checkbox" ${d.checked ? 'checked' : ''} onchange="toggleCheck(${i}, this.checked)"></td>
+        <td><input class="inline-input" id="ie_code" value="${d.station_code}" style="width:120px;"></td>
+        <td><select class="inline-select" id="ie_type"><option value="快充" ${d.type==='快充'?'selected':''}>快充</option><option value="慢充" ${d.type==='慢充'?'selected':''}>慢充</option></select></td>
+        <td><input class="inline-input" type="number" id="ie_power" value="${d.power}" style="width:80px;"> kW</td>
+        <td><span class="status-dot status-${statusMap[d.status]||'offline'}"></span>${d.status}</td>
+        <td><label class="toggle"><input type="checkbox" ${d.enabled?'checked':''} onchange="toggleDevice(${i},this.checked)"><span class="slider"></span></label></td>
+        <td>
+          <button class="btn btn-primary btn-sm" onclick="saveInlineEdit(${i})">保存</button>
+          <button class="btn btn-outline btn-sm" onclick="cancelEdit()">取消</button>
+        </td>
+      </tr>`;
+    }
+    return `<tr>
+      <td><input type="checkbox" ${d.checked ? 'checked' : ''} onchange="toggleCheck(${i}, this.checked)"></td>
+      <td style="font-weight:600;">${d.station_code}</td>
+      <td><span class="type-badge ${d.type==='快充'?'type-fast':'type-slow'}">${d.type}</span></td>
+      <td>${d.power} kW</td>
+      <td><span class="status-dot status-${statusMap[d.status]||'offline'}"></span>${d.status}</td>
+      <td><label class="toggle"><input type="checkbox" ${d.enabled?'checked':''} onchange="toggleDevice(${i},this.checked)"><span class="slider"></span></label></td>
+      <td>
+        <button class="btn-ghost" onclick="startEdit(${i})">编辑</button>
+        <button class="btn-ghost" style="color:var(--secondary);" onclick="deleteDevice(${i})">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function startEdit(i) { editingIndex = i; render(); }
+function cancelEdit() { editingIndex = -1; render(); }
+function saveInlineEdit(i) {
+  devices[i].station_code = document.getElementById('ie_code').value.trim();
+  devices[i].type = document.getElementById('ie_type').value;
+  devices[i].power = parseInt(document.getElementById('ie_power').value);
+  editingIndex = -1;
+  render();
+}
+function deleteDevice(i) { if (confirm('确定删除 ' + devices[i].station_code + '?')) { devices.splice(i, 1); render(); } }
+function toggleDevice(i, val) { devices[i].enabled = val; if (!val) devices[i].status = '离线'; else devices[i].status = '空闲'; render(); }
+function toggleCheck(i, val) { devices[i].checked = val; }
+function toggleCheckAll(val) { devices.forEach(d => d.checked = val); render(); }
+function batchEnable(val) {
+  devices.forEach(d => { if (d.checked) { d.enabled = val; d.status = val ? '空闲' : '离线'; } });
+  render();
+}
+
+function openAddModal() { document.getElementById('addModal').classList.add('show'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('show'); }
+function addDevice() {
+  const code = document.getElementById('addCode').value.trim();
+  const type = document.getElementById('addType').value;
+  const power = parseInt(document.getElementById('addPower').value);
+  if (!code) { alert('请输入桩编号'); return; }
+  devices.push({ station_code: code, type, power, status: '空闲', enabled: true, checked: false });
+  closeAddModal();
+  document.getElementById('addCode').value = '';
+  render();
+}
+
+function quickInit() {
+  const fc = parseInt(document.getElementById('initFastCount').value) || 0;
+  const fp = parseInt(document.getElementById('initFastPower').value) || 30;
+  const sc = parseInt(document.getElementById('initSlowCount').value) || 0;
+  const sp = parseInt(document.getElementById('initSlowPower').value) || 7;
+  devices = [];
+  for (let i = 1; i <= fc; i++) devices.push({ station_code: `FAST_${String(i).padStart(2,'0')}`, type: '快充', power: fp, status: '空闲', enabled: true, checked: false });
+  for (let i = 1; i <= sc; i++) devices.push({ station_code: `SLOW_${String(i).padStart(2,'0')}`, type: '慢充', power: sp, status: '空闲', enabled: true, checked: false });
+  render();
+}
+
+function importSnapshot() {
+  try {
+    const data = JSON.parse(document.getElementById('importJson').value);
+    if (!Array.isArray(data)) throw new Error('需要数组格式');
+    devices = data.map(d => ({
+      station_code: d.station_code || d.code || '',
+      type: d.type || '慢充',
+      power: d.power || 7,
+      status: d.status || '空闲',
+      enabled: d.enabled !== false,
+      checked: false
+    }));
+    render();
+    alert('导入成功，共 ' + devices.length + ' 台设备');
+  } catch (e) { alert('导入失败: ' + e.message); }
+}
+
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+}, 1000);
+
+render();
+</script>
+</body>
+</html>
