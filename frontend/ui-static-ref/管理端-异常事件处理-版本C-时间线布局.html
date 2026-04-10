@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>异常事件处理 - 智能充电桩调度计费系统 · 管理端</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
+}
+h1, h2, h3, h4 { font-family: Georgia, 'Noto Serif SC', serif; font-weight: 700; }
+
+/* NAV */
+.top-nav {
+  background: var(--nav-bg); border-bottom: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 56px; position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 8px 20px; border-radius: 8px 8px 0 0; font-size: 14px; cursor: pointer;
+  border: none; background: transparent; color: var(--text-sec); transition: all 0.2s; font-family: inherit;
+}
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: var(--primary); }
+.nav-tab.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 -2px 0 var(--primary) inset; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 13px; color: var(--text-sec); }
+.nav-alert { position: relative; cursor: pointer; padding: 4px 10px; background: rgba(196,93,62,0.1); border-radius: 6px; color: var(--secondary); font-weight: 600; }
+
+/* MAIN */
+.main-content { padding: 20px 24px; max-width: 1920px; margin: 0 auto; }
+
+/* TOP FILTER BAR */
+.top-bar {
+  background: var(--card); border-radius: var(--radius); padding: 14px 20px;
+  box-shadow: var(--shadow); margin-bottom: 20px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.top-bar label { font-size: 13px; color: var(--text-sec); }
+.top-bar select, .top-bar input {
+  padding: 6px 12px; border: 1px solid #e0d8cc; border-radius: 6px; font-size: 13px;
+  background: var(--bg); color: var(--text); font-family: inherit;
+}
+.top-bar select:focus, .top-bar input:focus { outline: none; border-color: var(--primary); }
+.btn {
+  padding: 7px 16px; border-radius: 6px; font-size: 13px; border: none; cursor: pointer;
+  font-family: inherit; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #235539; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a84d32; }
+.btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+.btn-outline:hover { background: rgba(45,106,79,0.08); }
+.btn-warning { background: var(--accent); color: #fff; }
+.btn-warning:hover { background: #c09840; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+
+/* THREE-COLUMN LAYOUT */
+.three-col { display: grid; grid-template-columns: 220px 1fr 300px; gap: 16px; }
+
+/* LEFT SIDE PANEL - QUICK STATS */
+.side-stats {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.side-stat-card {
+  background: var(--card); border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: var(--shadow); border-left: 4px solid var(--primary);
+  opacity: 0; animation: fadeInUp 0.5s forwards;
+}
+.side-stat-card:nth-child(1) { border-left-color: var(--secondary); animation-delay: 0s; }
+.side-stat-card:nth-child(2) { border-left-color: var(--accent); animation-delay: 0.05s; }
+.side-stat-card:nth-child(3) { border-left-color: var(--primary); animation-delay: 0.10s; }
+.side-stat-card:nth-child(4) { border-left-color: #e67e22; animation-delay: 0.15s; }
+.side-stat-card:nth-child(5) { border-left-color: var(--secondary); animation-delay: 0.20s; }
+.side-stat-card:nth-child(6) { border-left-color: var(--primary); animation-delay: 0.25s; }
+.side-stat-card .label { font-size: 11px; color: var(--text-sec); }
+.side-stat-card .value { font-family: Georgia, serif; font-size: 22px; font-weight: 700; }
+.side-stat-card .sub { font-size: 10px; color: var(--text-sec); }
+
+/* ACTION CARDS in side panel */
+.side-actions {
+  background: var(--card); border-radius: var(--radius); padding: 16px;
+  box-shadow: var(--shadow); margin-top: 4px;
+}
+.side-actions h4 { font-size: 13px; color: var(--primary); margin-bottom: 10px; }
+.side-actions .btn { width: 100%; margin-bottom: 8px; text-align: center; }
+.side-actions .btn:last-child { margin-bottom: 0; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* CENTER - TIMELINE */
+.timeline-center { position: relative; padding: 0 20px; }
+.timeline-line {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(to bottom, var(--primary), var(--accent), var(--secondary));
+  transform: translateX(-50%); border-radius: 2px;
+}
+.tl-event {
+  position: relative; margin-bottom: 24px; display: flex;
+  align-items: flex-start; gap: 0;
+}
+.tl-event:nth-child(odd) { flex-direction: row; }
+.tl-event:nth-child(even) { flex-direction: row-reverse; }
+
+.tl-card {
+  width: calc(50% - 32px); background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px 20px; position: relative;
+  transition: all 0.2s; cursor: pointer;
+  opacity: 0; animation: fadeInUp 0.5s forwards;
+}
+.tl-card:hover { box-shadow: 0 6px 20px rgba(120,80,40,0.14); transform: translateY(-2px); }
+.tl-event:nth-child(1) .tl-card { animation-delay: 0.1s; }
+.tl-event:nth-child(2) .tl-card { animation-delay: 0.2s; }
+.tl-event:nth-child(3) .tl-card { animation-delay: 0.3s; }
+.tl-event:nth-child(4) .tl-card { animation-delay: 0.4s; }
+.tl-event:nth-child(5) .tl-card { animation-delay: 0.5s; }
+.tl-event:nth-child(6) .tl-card { animation-delay: 0.6s; }
+.tl-event:nth-child(7) .tl-card { animation-delay: 0.7s; }
+
+.tl-card.pending { border-left: 4px solid var(--secondary); }
+.tl-card.done { border-left: 4px solid var(--primary); }
+
+.tl-node {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--card);
+  border: 3px solid var(--primary); position: absolute; left: 50%;
+  transform: translateX(-50%); top: 20px; z-index: 2;
+}
+.tl-node.fault { border-color: var(--secondary); background: var(--secondary); }
+.tl-node.recover { border-color: var(--primary); background: var(--primary); }
+.tl-node.miss { border-color: var(--accent); background: var(--accent); }
+.tl-node.cancel { border-color: #636e72; background: #636e72; }
+.tl-node.interrupt { border-color: #e67e22; background: #e67e22; }
+.tl-node.overtime { border-color: #d63031; background: #d63031; }
+.tl-node.pending-node { border-color: var(--secondary); animation: pulse 1.5s infinite; }
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196,93,62,0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(196,93,62,0); }
+}
+
+.tl-spacer { width: 64px; flex-shrink: 0; }
+
+.tl-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.tl-card-time { font-size: 12px; color: var(--text-sec); }
+
+.tl-card-body { font-size: 13px; color: var(--text); line-height: 1.6; }
+.tl-card-body .info-row { display: flex; justify-content: space-between; margin-top: 4px; }
+.tl-card-body .info-label { color: var(--text-sec); font-size: 12px; }
+.tl-card-body .info-value { font-size: 12px; font-weight: 500; }
+
+.tl-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0ece4; }
+
+/* BADGES */
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-miss { background: #ffeaa7; color: #856404; }
+.badge-cancel { background: #dfe6e9; color: #636e72; }
+.badge-interrupt { background: #ffecd2; color: #e67e22; }
+.badge-overtime { background: #fab1a0; color: #d63031; }
+.badge-fault { background: #ff7675; color: #fff; }
+.badge-recover { background: #55efc4; color: #00695c; }
+
+.status-done { color: var(--primary); font-weight: 600; font-size: 11px; }
+.status-pending { color: var(--secondary); font-weight: 600; font-size: 11px; }
+
+/* RIGHT SIDE PANEL */
+.right-side {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.quick-detail {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px 18px; display: none; flex-direction: column; gap: 10px;
+}
+.quick-detail.visible { display: flex; }
+.quick-detail h4 { font-size: 14px; color: var(--primary); padding-bottom: 6px; border-bottom: 1px solid #f0ece4; }
+.qd-row { display: flex; justify-content: space-between; font-size: 12px; }
+.qd-row .label { color: var(--text-sec); }
+.qd-row .value { color: var(--text); font-weight: 500; }
+.qd-timeline { margin-top: 6px; }
+.qd-tl-item { position: relative; padding-left: 16px; margin-bottom: 8px; font-size: 12px; }
+.qd-tl-item::before {
+  content: ''; position: absolute; left: 0; top: 5px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+}
+.qd-tl-item.warn::before { background: var(--secondary); }
+.qd-tl-item .qd-time { color: var(--text-sec); font-size: 11px; }
+
+/* SUMMARY PANEL on right */
+.summary-panel {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px;
+}
+.summary-panel h4 { font-size: 14px; color: var(--primary); margin-bottom: 10px; }
+.summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f8f4ee; }
+.summary-row:last-child { border-bottom: none; }
+.summary-row .s-label { color: var(--text-sec); }
+.summary-row .s-value { font-weight: 600; }
+.summary-row .s-value.red { color: var(--secondary); }
+.summary-row .s-value.green { color: var(--primary); }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <button class="nav-tab">运营总览</button>
+    <button class="nav-tab">记录中心</button>
+    <button class="nav-tab">系统配置</button>
+    <button class="nav-tab">统计分析</button>
+    <button class="nav-tab">用户管理</button>
+    <button class="nav-tab active">异常事件</button>
+    <button class="nav-tab">设备管理</button>
+    <button class="nav-tab">报表导出</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">&#128276; 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="main-content">
+
+  <!-- TOP FILTER BAR -->
+  <div class="top-bar">
+    <label>事件类型</label>
+    <select>
+      <option value="">全部类型</option>
+      <option>用户过号</option><option>用户取消</option><option>用户中断</option>
+      <option>超时未挪车</option><option>充电桩故障</option><option>故障恢复</option>
+    </select>
+    <label>处理状态</label>
+    <select>
+      <option value="">全部</option><option>已处理</option><option>待处理</option>
+    </select>
+    <label>时间</label>
+    <input type="date" value="2026-04-09"> <span style="color:var(--text-sec)">至</span> <input type="date" value="2026-04-09">
+    <button class="btn btn-outline">查询</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-secondary">手动标记故障</button>
+    <button class="btn btn-primary">恢复故障</button>
+  </div>
+
+  <!-- THREE-COLUMN -->
+  <div class="three-col">
+
+    <!-- LEFT: QUICK STATS -->
+    <div class="side-stats">
+      <div class="side-stat-card">
+        <div class="label">用户过号</div>
+        <div class="value">3</div>
+        <div class="sub">今日累计</div>
+      </div>
+      <div class="side-stat-card">
+        <div class="label">用户取消</div>
+        <div class="value">5</div>
+        <div class="sub">今日累计</div>
+      </div>
+      <div class="side-stat-card">
+        <div class="label">用户中断</div>
+        <div class="value">2</div>
+        <div class="sub">今日累计</div>
+      </div>
+      <div class="side-stat-card">
+        <div class="label">超时未挪车</div>
+        <div class="value">1</div>
+        <div class="sub">今日累计</div>
+      </div>
+      <div class="side-stat-card">
+        <div class="label">充电桩故障</div>
+        <div class="value">2</div>
+        <div class="sub">1 待处理</div>
+      </div>
+      <div class="side-stat-card">
+        <div class="label">故障恢复</div>
+        <div class="value">1</div>
+        <div class="sub">今日累计</div>
+      </div>
+      <div class="side-actions">
+        <h4>快捷操作</h4>
+        <button class="btn btn-secondary" style="width:100%;margin-bottom:8px;">手动标记故障</button>
+        <button class="btn btn-primary" style="width:100%;margin-bottom:8px;">恢复故障</button>
+        <button class="btn btn-outline" style="width:100%;">导出报表</button>
+      </div>
+    </div>
+
+    <!-- CENTER: TIMELINE -->
+    <div class="timeline-center">
+      <div class="timeline-line"></div>
+
+      <!-- Event 1: Fault (pending) -->
+      <div class="tl-event">
+        <div class="tl-card pending" onclick="showDetail(0)">
+          <div class="tl-card-header">
+            <span class="badge badge-fault">充电桩故障</span>
+            <span class="tl-card-time">14:12:30</span>
+          </div>
+          <div class="tl-card-body">
+            <strong>C-003</strong> 充电中发生故障，用户 王伟 (U1023) 充电中断
+            <div class="info-row"><span class="info-label">关联请求</span><span class="info-value">REQ-20260409-0087</span></div>
+            <div class="info-row"><span class="info-label">已充电量</span><span class="info-value">15.3 / 40 kWh</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-pending">待处理</span>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();alert('确认处理')">确认处理</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node fault pending-node" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 2: 用户过号 -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(1)">
+          <div class="tl-card-header">
+            <span class="badge badge-miss">用户过号</span>
+            <span class="tl-card-time">13:45:10</span>
+          </div>
+          <div class="tl-card-body">
+            用户 <strong>李娜</strong> (U0856) 叫号后 5 分钟未确认到场
+            <div class="info-row"><span class="info-label">关联桩号</span><span class="info-value">C-007</span></div>
+            <div class="info-row"><span class="info-label">处理结果</span><span class="info-value">自动重选 张丽 (U0901)</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(1)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node miss" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 3: 用户取消 -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(2)">
+          <div class="tl-card-header">
+            <span class="badge badge-cancel">用户取消</span>
+            <span class="tl-card-time">13:20:05</span>
+          </div>
+          <div class="tl-card-body">
+            用户 <strong>赵强</strong> (U0912) 取消排队请求
+            <div class="info-row"><span class="info-label">关联请求</span><span class="info-value">REQ-20260409-0065</span></div>
+            <div class="info-row"><span class="info-label">处理结果</span><span class="info-value">从等待池移除，触发重调度</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(2)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node cancel" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 4: 用户中断 -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(3)">
+          <div class="tl-card-header">
+            <span class="badge badge-interrupt">用户中断</span>
+            <span class="tl-card-time">12:55:42</span>
+          </div>
+          <div class="tl-card-body">
+            用户 <strong>陈明</strong> (U0788) 主动结束充电
+            <div class="info-row"><span class="info-label">关联桩号</span><span class="info-value">C-005 (快充 60kW)</span></div>
+            <div class="info-row"><span class="info-label">实际/目标</span><span class="info-value">22.1 / 35 kWh</span></div>
+            <div class="info-row"><span class="info-label">结算</span><span class="info-value">&#165;28.73</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(3)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node interrupt" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 5: 超时未挪车 -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(4)">
+          <div class="tl-card-header">
+            <span class="badge badge-overtime">超时未挪车</span>
+            <span class="tl-card-time">12:30:00</span>
+          </div>
+          <div class="tl-card-body">
+            用户 <strong>刘洋</strong> (U0654) 充电完成后 30 分钟未挪车
+            <div class="info-row"><span class="info-label">关联桩号</span><span class="info-value">C-001 (快充 120kW)</span></div>
+            <div class="info-row"><span class="info-label">占位费</span><span class="info-value">&#165;15.00</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(4)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node overtime" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 6: 故障恢复 -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(5)">
+          <div class="tl-card-header">
+            <span class="badge badge-recover">故障恢复</span>
+            <span class="tl-card-time">11:50:20</span>
+          </div>
+          <div class="tl-card-body">
+            <strong>C-002</strong> 故障修复，已恢复 IDLE 状态
+            <div class="info-row"><span class="info-label">故障时长</span><span class="info-value">2小时20分钟</span></div>
+            <div class="info-row"><span class="info-label">处理结果</span><span class="info-value">恢复 IDLE，重新参与调度</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(5)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node recover" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+      <!-- Event 7: Fault (idle) -->
+      <div class="tl-event">
+        <div class="tl-card done" onclick="showDetail(6)">
+          <div class="tl-card-header">
+            <span class="badge badge-fault">充电桩故障</span>
+            <span class="tl-card-time">09:30:00</span>
+          </div>
+          <div class="tl-card-body">
+            <strong>C-002</strong> 空闲状态下发生故障
+            <div class="info-row"><span class="info-label">影响用户</span><span class="info-value">无</span></div>
+            <div class="info-row"><span class="info-label">处理结果</span><span class="info-value">标记 FAULT，排除调度</span></div>
+          </div>
+          <div class="tl-card-footer">
+            <span class="status-done">已处理</span>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showDetail(6)">查看</button>
+          </div>
+        </div>
+        <div class="tl-spacer"></div>
+        <div class="tl-node fault" style="position:relative;left:auto;transform:none;top:auto;margin-top:20px;"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: SUMMARY + DETAIL -->
+    <div class="right-side">
+
+      <div class="summary-panel">
+        <h4>今日汇总</h4>
+        <div class="summary-row"><span class="s-label">异常事件总数</span><span class="s-value">14</span></div>
+        <div class="summary-row"><span class="s-label">已处理</span><span class="s-value green">13</span></div>
+        <div class="summary-row"><span class="s-label">待处理</span><span class="s-value red">1</span></div>
+        <div class="summary-row"><span class="s-label">故障桩数</span><span class="s-value red">1</span></div>
+        <div class="summary-row"><span class="s-label">FAULT_REQUEUE</span><span class="s-value">1</span></div>
+        <div class="summary-row"><span class="s-label">占位费收入</span><span class="s-value">&#165;15.00</span></div>
+        <div class="summary-row"><span class="s-label">中断结算</span><span class="s-value">&#165;28.73</span></div>
+      </div>
+
+      <!-- Quick Detail Panel -->
+      <div class="quick-detail visible" id="quickDetail">
+        <h4 id="qdTitle">充电桩故障 - C-003</h4>
+        <div id="qdContent">
+          <div class="qd-row"><span class="label">事件类型</span><span class="value">充电桩故障</span></div>
+          <div class="qd-row"><span class="label">发生时间</span><span class="value">14:12:30</span></div>
+          <div class="qd-row"><span class="label">关联请求</span><span class="value">REQ-0087</span></div>
+          <div class="qd-row"><span class="label">关联桩号</span><span class="value">C-003</span></div>
+          <div class="qd-row"><span class="label">影响用户</span><span class="value">王伟 (U1023)</span></div>
+          <div class="qd-row"><span class="label">已充/目标</span><span class="value">15.3/40 kWh</span></div>
+          <div class="qd-row"><span class="label">状态</span><span class="value" style="color:var(--secondary)">待处理</span></div>
+          <div class="qd-timeline" style="margin-top:10px;">
+            <div style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:6px;">处理时间线</div>
+            <div class="qd-tl-item warn"><div class="qd-time">14:12:30</div>检测到硬件故障</div>
+            <div class="qd-tl-item"><div class="qd-time">14:12:31</div>中断会话，记录 15.3 kWh</div>
+            <div class="qd-tl-item"><div class="qd-time">14:12:32</div>创建 FAULT_REQUEUE</div>
+            <div class="qd-tl-item"><div class="qd-time">14:12:32</div>补偿优先级 +10</div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:6px;">
+            <button class="btn btn-primary btn-sm" onclick="alert('确认处理')">确认处理</button>
+            <button class="btn btn-outline btn-sm">详情</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const details = [
+  {
+    title: '充电桩故障 - C-003',
+    rows: [['事件类型','充电桩故障'],['发生时间','14:12:30'],['关联请求','REQ-0087'],['关联桩号','C-003'],['影响用户','王伟 (U1023)'],['已充/目标','15.3/40 kWh'],['状态','<span style="color:var(--secondary)">待处理</span>']],
+    timeline: [{t:'14:12:30',text:'检测到硬件故障',w:true},{t:'14:12:31',text:'中断会话，记录 15.3 kWh',w:false},{t:'14:12:32',text:'创建 FAULT_REQUEUE',w:false},{t:'14:12:32',text:'补偿优先级 +10',w:false}],
+    showConfirm: true
+  },
+  {
+    title: '用户过号 - 李娜',
+    rows: [['事件类型','用户过号'],['发生时间','13:45:10'],['关联请求','REQ-0072'],['关联桩号','C-007'],['影响用户','李娜 (U0856)'],['超时','5分10秒'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'13:40:00',text:'系统叫号通知',w:false},{t:'13:45:10',text:'超时未确认',w:true},{t:'13:45:11',text:'自动重选 张丽',w:false}],
+    showConfirm: false
+  },
+  {
+    title: '用户取消 - 赵强',
+    rows: [['事件类型','用户取消'],['发生时间','13:20:05'],['关联请求','REQ-0065'],['排队位置','第 4 位'],['影响用户','赵强 (U0912)'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'13:05:00',text:'提交充电请求',w:false},{t:'13:20:05',text:'用户主动取消',w:true},{t:'13:20:06',text:'移除并重调度',w:false}],
+    showConfirm: false
+  },
+  {
+    title: '用户中断 - 陈明',
+    rows: [['事件类型','用户中断'],['发生时间','12:55:42'],['关联桩号','C-005'],['影响用户','陈明 (U0788)'],['实际/目标','22.1/35 kWh'],['结算','&#165;28.73'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'12:10:00',text:'开始充电',w:false},{t:'12:55:42',text:'用户主动结束',w:true},{t:'12:55:43',text:'按量结算 &#165;28.73',w:false},{t:'12:55:44',text:'释放桩 C-005',w:false}],
+    showConfirm: false
+  },
+  {
+    title: '超时未挪车 - 刘洋',
+    rows: [['事件类型','超时未挪车'],['发生时间','12:30:00'],['关联桩号','C-001'],['影响用户','刘洋 (U0654)'],['超时时长','30 分钟'],['占位费','&#165;15.00'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'12:00:00',text:'充电完成',w:false},{t:'12:15:00',text:'第二次提醒',w:true},{t:'12:30:00',text:'计入占位费 &#165;15',w:true}],
+    showConfirm: false
+  },
+  {
+    title: '故障恢复 - C-002',
+    rows: [['事件类型','故障恢复'],['发生时间','11:50:20'],['关联桩号','C-002'],['故障时长','2h20m'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'09:30:00',text:'C-002 故障',w:true},{t:'11:50:20',text:'修复完成',w:false},{t:'11:50:21',text:'恢复 IDLE，重调度',w:false}],
+    showConfirm: false
+  },
+  {
+    title: '充电桩故障 - C-002 (空闲)',
+    rows: [['事件类型','充电桩故障'],['发生时间','09:30:00'],['关联桩号','C-002'],['桩状态','空闲 (IDLE)'],['影响用户','无'],['状态','<span style="color:var(--primary)">已处理</span>']],
+    timeline: [{t:'09:30:00',text:'空闲时检测到故障',w:true},{t:'09:30:01',text:'标记 FAULT',w:false},{t:'09:30:02',text:'通知维修',w:false}],
+    showConfirm: false
+  }
+];
+
+function showDetail(idx) {
+  const d = details[idx];
+  const panel = document.getElementById('quickDetail');
+  panel.classList.add('visible');
+  document.getElementById('qdTitle').textContent = d.title;
+
+  let html = '';
+  d.rows.forEach(([l,v]) => {
+    html += `<div class="qd-row"><span class="label">${l}</span><span class="value">${v}</span></div>`;
+  });
+  html += '<div class="qd-timeline" style="margin-top:10px;"><div style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:6px;">处理时间线</div>';
+  d.timeline.forEach(t => {
+    html += `<div class="qd-tl-item ${t.w?'warn':''}"><div class="qd-time">${t.t}</div>${t.text}</div>`;
+  });
+  html += '</div>';
+  html += '<div style="margin-top:12px;display:flex;gap:6px;">';
+  if (d.showConfirm) html += '<button class="btn btn-primary btn-sm" onclick="alert(\'确认处理\')">确认处理</button>';
+  html += '<button class="btn btn-outline btn-sm">详情</button></div>';
+  document.getElementById('qdContent').innerHTML = html;
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+}
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

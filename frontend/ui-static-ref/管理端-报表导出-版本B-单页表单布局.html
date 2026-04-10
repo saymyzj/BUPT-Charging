@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报表导出 - 单页表单布局 | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1, h2, h3, h4 { font-family: Georgia, serif; }
+
+/* Nav */
+.top-nav { background: var(--nav-bg); border-bottom: 1px solid #e8e0d4; padding: 0 24px; display: flex; align-items: center; height: 56px; gap: 24px; }
+.nav-brand { font-family: Georgia, serif; font-size: 15px; color: var(--primary); font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.nav-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.nav-tabs a { padding: 8px 14px; font-size: 13px; color: var(--text-sec); text-decoration: none; border-radius: 6px; white-space: nowrap; transition: all .2s; }
+.nav-tabs a:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.nav-tabs a.active { background: var(--primary); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-sec); white-space: nowrap; flex-shrink: 0; }
+.nav-right .badge { background: var(--secondary); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 2px; }
+
+/* Layout */
+.page { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
+.page-title { font-size: 22px; color: var(--primary); margin-bottom: 24px; }
+.split-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+
+/* Card */
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; margin-bottom: 20px; }
+.card-title { font-size: 16px; color: var(--primary); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #f0ebe3; }
+
+/* Form */
+label { display: block; font-size: 13px; color: var(--text-sec); margin-bottom: 6px; font-weight: 500; }
+input[type="date"], select {
+  width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 14px; color: var(--text); background: #fff; transition: border .2s;
+}
+input:focus, select:focus { outline: none; border-color: var(--primary); }
+.form-row { display: flex; gap: 16px; margin-bottom: 20px; }
+.form-row > * { flex: 1; }
+.form-group { margin-bottom: 20px; }
+
+.quick-presets { display: flex; gap: 8px; margin-bottom: 20px; }
+.quick-presets button {
+  padding: 6px 16px; border: 1px solid #ddd; background: #fff; border-radius: 20px;
+  font-size: 13px; color: var(--text-sec); cursor: pointer; transition: all .2s;
+}
+.quick-presets button:hover, .quick-presets button.active { border-color: var(--primary); background: rgba(45,106,79,0.06); color: var(--primary); }
+
+.section-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+
+/* Radio group */
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-option {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border: 1px solid #e8e0d4; border-radius: 8px; cursor: pointer; transition: all .2s;
+}
+.radio-option:hover { border-color: var(--accent); }
+.radio-option.selected { border-color: var(--primary); background: rgba(45,106,79,0.03); }
+.radio-option input[type="radio"] { accent-color: var(--primary); width: 16px; height: 16px; }
+.radio-option .ro-text .ro-title { font-size: 14px; font-weight: 600; }
+.radio-option .ro-text .ro-desc { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+
+/* Format toggle */
+.format-toggle { display: flex; gap: 0; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+.format-toggle button {
+  flex: 1; padding: 10px; border: none; background: #fff; font-size: 14px; cursor: pointer;
+  color: var(--text-sec); font-weight: 500; transition: all .2s;
+}
+.format-toggle button.active { background: var(--primary); color: #fff; }
+
+/* Buttons */
+.btn { padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; width: 100%; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Preview panel */
+.preview-section { margin-bottom: 20px; }
+.preview-section .ps-title { font-size: 12px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+.preview-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.stat-box { background: var(--bg); padding: 14px; border-radius: 8px; text-align: center; }
+.stat-box .sv { font-size: 22px; font-weight: 700; color: var(--primary); font-family: Georgia, serif; }
+.stat-box .sl { font-size: 11px; color: var(--text-sec); margin-top: 4px; }
+
+/* Sample data */
+.sample-data { background: #f8f6f2; border-radius: 8px; padding: 16px; font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; line-height: 1.6; color: var(--text); overflow-x: auto; max-height: 260px; overflow-y: auto; }
+.sample-data .key { color: var(--primary); }
+.sample-data .str { color: var(--secondary); }
+.sample-data .num { color: var(--accent); }
+
+/* Fields list */
+.fields-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.field-tag { padding: 3px 10px; background: rgba(45,106,79,0.07); color: var(--primary); border-radius: 12px; font-size: 11px; font-family: monospace; }
+
+/* Progress */
+.progress-container { margin-top: 16px; display: none; }
+.progress-bar-bg { width: 100%; height: 8px; background: #e8e0d4; border-radius: 4px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: 4px; width: 0%; transition: width 0.5s ease; }
+.progress-text { font-size: 12px; color: var(--text-sec); margin-top: 6px; text-align: center; }
+
+/* History */
+.history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.history-table th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-sec); font-weight: 600; border-bottom: 1px solid #e8e0d4; }
+.history-table td { padding: 10px 12px; border-bottom: 1px solid #f0ebe3; }
+.status-tag { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.status-success { background: rgba(45,106,79,0.1); color: var(--primary); }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid #f0ebe3; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <a href="#">运营总览</a><a href="#">记录中心</a><a href="#">系统配置</a>
+    <a href="#">统计分析</a><a href="#">用户管理</a><a href="#">异常事件</a>
+    <a href="#">设备管理</a><a href="#" class="active">报表导出</a>
+  </div>
+  <div class="nav-right">
+    <span>🔔 告警<span class="badge">2</span></span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="page">
+  <h2 class="page-title">报表导出</h2>
+
+  <div class="split-layout">
+    <!-- Left: Configuration Form -->
+    <div>
+      <div class="card">
+        <h3 class="card-title">导出配置</h3>
+
+        <div class="section-label">快速选择时间</div>
+        <div class="quick-presets">
+          <button onclick="setPreset('today', this)">今天</button>
+          <button onclick="setPreset('week', this)">本周</button>
+          <button class="active" onclick="setPreset('month', this)">本月</button>
+        </div>
+
+        <div class="form-row">
+          <div><label>开始日期</label><input type="date" id="startDate" value="2026-04-01" onchange="updatePreview()"></div>
+          <div><label>结束日期</label><input type="date" id="endDate" value="2026-04-09" onchange="updatePreview()"></div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section-label">导出类型</div>
+        <div class="radio-group" id="typeGroup">
+          <div class="radio-option selected" onclick="selectType(this, 'detail')">
+            <input type="radio" name="exportType" checked>
+            <div class="ro-text"><div class="ro-title">📋 详单导出</div><div class="ro-desc">充电请求详细记录 — 19个字段</div></div>
+          </div>
+          <div class="radio-option" onclick="selectType(this, 'bill')">
+            <input type="radio" name="exportType">
+            <div class="ro-text"><div class="ro-title">💰 账单导出</div><div class="ro-desc">计费账单记录 — 9个字段</div></div>
+          </div>
+          <div class="radio-option" onclick="selectType(this, 'stats')">
+            <input type="radio" name="exportType">
+            <div class="ro-text"><div class="ro-title">📊 统计报表导出</div><div class="ro-desc">统计分析结果 — 8项指标</div></div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section-label">导出格式</div>
+        <div class="format-toggle">
+          <button class="active" onclick="selectFormat(this, 'json')">JSON（主要格式）</button>
+          <button onclick="selectFormat(this, 'csv')">CSV（可选）</button>
+        </div>
+
+        <hr class="divider">
+
+        <button class="btn btn-primary" id="exportBtn" onclick="startExport()">确认导出</button>
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+          <div class="progress-text" id="progressText">准备导出...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Preview Panel -->
+    <div>
+      <div class="card">
+        <h3 class="card-title">导出预览</h3>
+
+        <div class="preview-stats">
+          <div class="stat-box"><div class="sv" id="pvCount">1,247</div><div class="sl">预计记录数</div></div>
+          <div class="stat-box"><div class="sv" id="pvSize">2.3 MB</div><div class="sl">预计文件大小</div></div>
+          <div class="stat-box"><div class="sv" id="pvDays">9</div><div class="sl">涵盖天数</div></div>
+          <div class="stat-box"><div class="sv" id="pvFields">19</div><div class="sl">包含字段数</div></div>
+        </div>
+
+        <div class="preview-section">
+          <div class="ps-title">导出字段</div>
+          <div class="fields-list" id="fieldsList">
+            <span class="field-tag">request_id</span>
+            <span class="field-tag">charge_mode</span>
+            <span class="field-tag">request_energy</span>
+            <span class="field-tag">actual_energy</span>
+            <span class="field-tag">request_time</span>
+            <span class="field-tag">queue_enter_time</span>
+            <span class="field-tag">called_time</span>
+            <span class="field-tag">arrival_confirm_time</span>
+            <span class="field-tag">charge_start_time</span>
+            <span class="field-tag">charge_end_time</span>
+            <span class="field-tag">leave_notify_time</span>
+            <span class="field-tag">final_leave_time</span>
+            <span class="field-tag">station_id</span>
+            <span class="field-tag">final_status</span>
+            <span class="field-tag">is_no_show</span>
+            <span class="field-tag">is_cancelled</span>
+            <span class="field-tag">is_interrupted</span>
+            <span class="field-tag">is_fault_requeue</span>
+            <span class="field-tag">is_leave_timeout</span>
+          </div>
+        </div>
+
+        <div class="preview-section">
+          <div class="ps-title">数据样例</div>
+          <div class="sample-data" id="sampleData">
+{
+  <span class="key">"request_id"</span>: <span class="str">"REQ-20260401-0001"</span>,
+  <span class="key">"charge_mode"</span>: <span class="str">"fast"</span>,
+  <span class="key">"request_energy"</span>: <span class="num">35.5</span>,
+  <span class="key">"actual_energy"</span>: <span class="num">34.8</span>,
+  <span class="key">"request_time"</span>: <span class="str">"2026-04-01T08:23:15"</span>,
+  <span class="key">"queue_enter_time"</span>: <span class="str">"2026-04-01T08:23:18"</span>,
+  <span class="key">"called_time"</span>: <span class="str">"2026-04-01T08:35:42"</span>,
+  <span class="key">"charge_start_time"</span>: <span class="str">"2026-04-01T08:40:10"</span>,
+  <span class="key">"charge_end_time"</span>: <span class="str">"2026-04-01T09:25:33"</span>,
+  <span class="key">"station_id"</span>: <span class="str">"CS-F-01"</span>,
+  <span class="key">"final_status"</span>: <span class="str">"completed"</span>,
+  <span class="key">"is_no_show"</span>: <span class="num">false</span>,
+  <span class="key">"is_cancelled"</span>: <span class="num">false</span>,
+  ...
+}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export History -->
+  <div class="card">
+    <h3 class="card-title">导出历史</h3>
+    <table class="history-table">
+      <thead><tr><th>导出时间</th><th>类型</th><th>时间范围</th><th>格式</th><th>记录数</th><th>文件大小</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr><td>2026-04-09 10:15:32</td><td>详单导出</td><td>04-01 ~ 04-08</td><td>JSON</td><td>856</td><td>1.6 MB</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-08 16:42:11</td><td>账单导出</td><td>04-01 ~ 04-07</td><td>CSV</td><td>423</td><td>0.3 MB</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-07 09:05:48</td><td>统计报表</td><td>03-01 ~ 03-31</td><td>JSON</td><td>8</td><td>8 KB</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-05 14:30:00</td><td>详单导出</td><td>03-15 ~ 04-05</td><td>JSON</td><td>2,104</td><td>3.9 MB</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+        <tr><td>2026-04-03 11:20:15</td><td>账单导出</td><td>03-01 ~ 03-31</td><td>JSON</td><td>1,580</td><td>1.2 MB</td><td><span class="status-tag status-success">已完成</span></td><td><a href="#" style="color:var(--primary);font-size:13px;">下载</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let selectedType = 'detail';
+let selectedFormat = 'json';
+
+const detailFields = ['request_id','charge_mode','request_energy','actual_energy','request_time','queue_enter_time','called_time','arrival_confirm_time','charge_start_time','charge_end_time','leave_notify_time','final_leave_time','station_id','final_status','is_no_show','is_cancelled','is_interrupted','is_fault_requeue','is_leave_timeout'];
+const billFields = ['request_id','billing_mode','request_energy','billing_energy','energy_fee','time_fee','occupancy_fee','total_fee','payment_status'];
+const statsFields = ['平均等待时间','平均完成时间','总完成时间','最大等待时间','充电桩利用率','吞吐量','完成用户数','异常事件数'];
+
+const typeCounts = { detail: '1,247', bill: '632', stats: '8' };
+const typeSizesJSON = { detail: '2.3 MB', bill: '0.9 MB', stats: '12 KB' };
+const typeSizesCSV = { detail: '1.8 MB', bill: '0.6 MB', stats: '5 KB' };
+
+const sampleDetail = `{
+  <span class="key">"request_id"</span>: <span class="str">"REQ-20260401-0001"</span>,
+  <span class="key">"charge_mode"</span>: <span class="str">"fast"</span>,
+  <span class="key">"request_energy"</span>: <span class="num">35.5</span>,
+  <span class="key">"actual_energy"</span>: <span class="num">34.8</span>,
+  <span class="key">"request_time"</span>: <span class="str">"2026-04-01T08:23:15"</span>,
+  <span class="key">"queue_enter_time"</span>: <span class="str">"2026-04-01T08:23:18"</span>,
+  <span class="key">"called_time"</span>: <span class="str">"2026-04-01T08:35:42"</span>,
+  <span class="key">"charge_start_time"</span>: <span class="str">"2026-04-01T08:40:10"</span>,
+  <span class="key">"charge_end_time"</span>: <span class="str">"2026-04-01T09:25:33"</span>,
+  <span class="key">"station_id"</span>: <span class="str">"CS-F-01"</span>,
+  <span class="key">"final_status"</span>: <span class="str">"completed"</span>,
+  <span class="key">"is_no_show"</span>: <span class="num">false</span>,
+  <span class="key">"is_cancelled"</span>: <span class="num">false</span>,
+  ...
+}`;
+
+const sampleBill = `{
+  <span class="key">"request_id"</span>: <span class="str">"REQ-20260401-0001"</span>,
+  <span class="key">"billing_mode"</span>: <span class="str">"fast"</span>,
+  <span class="key">"request_energy"</span>: <span class="num">35.5</span>,
+  <span class="key">"billing_energy"</span>: <span class="num">34.8</span>,
+  <span class="key">"energy_fee"</span>: <span class="num">27.84</span>,
+  <span class="key">"time_fee"</span>: <span class="num">6.75</span>,
+  <span class="key">"occupancy_fee"</span>: <span class="num">0.00</span>,
+  <span class="key">"total_fee"</span>: <span class="num">34.59</span>,
+  <span class="key">"payment_status"</span>: <span class="str">"paid"</span>
+}`;
+
+const sampleStats = `{
+  <span class="key">"平均等待时间"</span>: <span class="str">"12分32秒"</span>,
+  <span class="key">"平均完成时间"</span>: <span class="str">"45分18秒"</span>,
+  <span class="key">"总完成时间"</span>: <span class="str">"942小时15分"</span>,
+  <span class="key">"最大等待时间"</span>: <span class="str">"58分04秒"</span>,
+  <span class="key">"充电桩利用率"</span>: <span class="num">0.73</span>,
+  <span class="key">"吞吐量"</span>: <span class="num">138.6</span>,
+  <span class="key">"完成用户数"</span>: <span class="num">1189</span>,
+  <span class="key">"异常事件数"</span>: <span class="num">23</span>
+}`;
+
+const sampleDetailCSV = `request_id,charge_mode,request_energy,actual_energy,request_time,...
+REQ-20260401-0001,fast,35.5,34.8,2026-04-01T08:23:15,...
+REQ-20260401-0002,slow,50.0,49.2,2026-04-01T08:45:30,...
+REQ-20260401-0003,fast,20.0,20.0,2026-04-01T09:12:05,...`;
+
+const sampleBillCSV = `request_id,billing_mode,request_energy,billing_energy,energy_fee,time_fee,occupancy_fee,total_fee,payment_status
+REQ-20260401-0001,fast,35.5,34.8,27.84,6.75,0.00,34.59,paid
+REQ-20260401-0002,slow,50.0,49.2,29.52,12.30,0.00,41.82,paid
+REQ-20260401-0003,fast,20.0,20.0,16.00,3.75,0.00,19.75,paid`;
+
+const sampleStatsCSV = `指标名称,数值
+平均等待时间,12分32秒
+平均完成时间,45分18秒
+总完成时间,942小时15分
+最大等待时间,58分04秒
+充电桩利用率,0.73
+吞吐量,138.6
+完成用户数,1189
+异常事件数,23`;
+
+function setPreset(preset, el) {
+  document.querySelectorAll('.quick-presets button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const today = new Date('2026-04-09');
+  let start;
+  if (preset === 'today') start = new Date('2026-04-09');
+  else if (preset === 'week') start = new Date('2026-04-06');
+  else start = new Date('2026-04-01');
+  document.getElementById('startDate').value = start.toISOString().slice(0, 10);
+  document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+  updatePreview();
+}
+
+function selectType(el, type) {
+  document.querySelectorAll('.radio-option').forEach(o => { o.classList.remove('selected'); o.querySelector('input').checked = false; });
+  el.classList.add('selected');
+  el.querySelector('input').checked = true;
+  selectedType = type;
+  updatePreview();
+}
+
+function selectFormat(el, fmt) {
+  document.querySelectorAll('.format-toggle button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  selectedFormat = fmt;
+  updatePreview();
+}
+
+function updatePreview() {
+  const start = document.getElementById('startDate').value;
+  const end = document.getElementById('endDate').value;
+  const days = Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000) + 1);
+
+  document.getElementById('pvCount').textContent = typeCounts[selectedType];
+  document.getElementById('pvSize').textContent = selectedFormat === 'json' ? typeSizesJSON[selectedType] : typeSizesCSV[selectedType];
+  document.getElementById('pvDays').textContent = days;
+
+  let fields;
+  if (selectedType === 'detail') fields = detailFields;
+  else if (selectedType === 'bill') fields = billFields;
+  else fields = statsFields;
+
+  document.getElementById('pvFields').textContent = fields.length;
+  document.getElementById('fieldsList').innerHTML = fields.map(f => `<span class="field-tag">${f}</span>`).join('');
+
+  let sample;
+  if (selectedFormat === 'json') {
+    if (selectedType === 'detail') sample = sampleDetail;
+    else if (selectedType === 'bill') sample = sampleBill;
+    else sample = sampleStats;
+  } else {
+    if (selectedType === 'detail') sample = sampleDetailCSV;
+    else if (selectedType === 'bill') sample = sampleBillCSV;
+    else sample = sampleStatsCSV;
+  }
+  document.getElementById('sampleData').innerHTML = sample;
+}
+
+function startExport() {
+  const container = document.getElementById('progressContainer');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const btn = document.getElementById('exportBtn');
+  container.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = '导出中...';
+  let progress = 0;
+  const timer = setInterval(() => {
+    progress += Math.random() * 15 + 5;
+    if (progress >= 100) {
+      progress = 100;
+      clearInterval(timer);
+      text.textContent = '导出完成！文件已准备好下载';
+      btn.textContent = '确认导出';
+      btn.disabled = false;
+      fill.style.background = 'linear-gradient(90deg, var(--accent), var(--primary))';
+    } else {
+      text.textContent = '正在导出... ' + Math.round(progress) + '%';
+    }
+    fill.style.width = progress + '%';
+  }, 300);
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

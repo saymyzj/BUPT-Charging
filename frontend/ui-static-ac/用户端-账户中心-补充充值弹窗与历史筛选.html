@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 账户中心(增强版)</title>
+<style>
+:root {
+  --bg: #faf8f5;
+  --card: #ffffff;
+  --primary: #2d6a4f;
+  --secondary: #c45d3e;
+  --accent: #d4a853;
+  --text: #2c2c2c;
+  --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --nav-bg: #f5f0e8;
+  --radius: 10px;
+  --border: #e8e2d9;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+h1,h2,h3,h4,h5 { font-family: Georgia, serif; }
+
+/* ========== TOP NAV ========== */
+.top-nav {
+  background: var(--nav-bg);
+  border-bottom: 3px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.nav-center { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 8px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--text-sec);
+  transition: all .2s;
+  text-decoration: none;
+}
+.nav-tab:hover { color: var(--text); background: rgba(45,106,79,.06); }
+.nav-tab.active { color: var(--primary); font-weight: 600; background: rgba(45,106,79,.1); }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--text-sec); white-space: nowrap; }
+.nav-right span { cursor: pointer; transition: color .2s; }
+.nav-right span:hover { color: var(--text); }
+.nav-right .logout { color: var(--secondary); }
+
+/* ========== LAYOUT ========== */
+.main-wrap {
+  display: flex;
+  gap: 24px;
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.account-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+.top-row { display: flex; gap: 24px; }
+.top-row .card { flex: 1; }
+
+/* ========== BADGE: 新增 ========== */
+.badge-new {
+  display: inline-block;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-family: -apple-system, sans-serif;
+  background: var(--secondary);
+  color: #fff;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-weight: 600;
+  letter-spacing: .5px;
+}
+
+/* ========== PROFILE CARD ========== */
+.profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.avatar {
+  width: 64px; height: 64px;
+  background: var(--primary); color: #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-family: Georgia, serif;
+}
+.user-info h3 { font-size: 20px; color: var(--primary); margin-bottom: 6px; }
+.user-info p { font-size: 13px; color: var(--text-sec); margin-bottom: 6px; }
+.tag {
+  display: inline-block; padding: 2px 8px;
+  background: rgba(45,106,79,.1); color: var(--primary);
+  border-radius: 4px; font-size: 12px;
+}
+.profile-details {
+  background: var(--bg); padding: 16px; border-radius: 8px; margin-bottom: 20px;
+}
+.detail-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+.detail-item:last-child { margin-bottom: 0; }
+.detail-item span { color: var(--text-sec); }
+
+/* ========== WALLET CARD ========== */
+.wallet-card h4 { font-size: 18px; color: var(--text-sec); margin-bottom: 12px; }
+.balance-display { color: var(--secondary); margin-bottom: 24px; }
+.balance-display .currency { font-size: 24px; font-weight: bold; }
+.balance-display .amount { font-size: 48px; font-weight: bold; font-family: Georgia, serif; }
+.wallet-stats {
+  display: flex; gap: 24px; margin-bottom: 24px;
+  border-top: 1px solid var(--border); padding-top: 16px;
+}
+.stat { display: flex; flex-direction: column; gap: 4px; }
+.stat .label { font-size: 13px; color: var(--text-sec); }
+.stat .val { font-size: 16px; font-weight: bold; color: var(--text); }
+
+/* Payment failure hint */
+.payment-hint {
+  background: #fef3e8;
+  border: 1px solid #f5cfa5;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--secondary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ========== BUTTONS ========== */
+.card-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn {
+  padding: 8px 16px; border-radius: 6px; font-size: 14px;
+  cursor: pointer; transition: all .2s; border: none;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #22523c; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a34830; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { background: var(--bg); border-color: #d0c8b8; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: #c09840; }
+.btn-sm { padding: 5px 12px; font-size: 13px; }
+
+/* ========== MODAL OVERLAY ========== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  width: 440px;
+  padding: 32px;
+  position: relative;
+}
+.modal-box h3 {
+  font-size: 20px;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+.modal-box .modal-sub {
+  font-size: 13px;
+  color: var(--text-sec);
+  margin-bottom: 24px;
+}
+.modal-close {
+  position: absolute; top: 16px; right: 18px;
+  background: none; border: none; font-size: 22px;
+  color: var(--text-sec); cursor: pointer; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+
+.preset-amounts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.preset-btn {
+  padding: 14px 0;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all .2s;
+  text-align: center;
+}
+.preset-btn:hover { border-color: var(--primary); color: var(--primary); }
+.preset-btn.selected {
+  border-color: var(--primary);
+  background: rgba(45,106,79,.08);
+  color: var(--primary);
+}
+.custom-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.custom-input-row label {
+  font-size: 14px;
+  color: var(--text-sec);
+  white-space: nowrap;
+}
+.custom-input-row input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color .2s;
+}
+.custom-input-row input:focus { border-color: var(--primary); }
+.modal-confirm {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+}
+.modal-confirm:hover { background: #22523c; }
+
+/* ========== FILTER BAR ========== */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-group label {
+  font-size: 13px;
+  color: var(--text-sec);
+  white-space: nowrap;
+}
+.filter-group input[type="date"],
+.filter-group select,
+.filter-group input[type="text"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: var(--card);
+}
+.filter-group input[type="date"]:focus,
+.filter-group select:focus,
+.filter-group input[type="text"]:focus {
+  border-color: var(--primary);
+}
+.filter-group .sep {
+  color: var(--text-sec);
+  font-size: 13px;
+}
+
+/* ========== HISTORY TABLE ========== */
+.history-card { margin-bottom: 40px; }
+.card-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+}
+.card-header h4 { font-size: 18px; color: var(--primary); }
+.header-actions { display: flex; gap: 12px; align-items: center; }
+.table-container { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+  background: var(--bg); color: var(--text-sec); font-weight: normal;
+  text-align: left; padding: 12px 16px; border-bottom: 2px solid var(--border);
+}
+td { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--bg); }
+.gold-text { color: var(--accent); font-weight: bold; }
+.status-badge {
+  padding: 4px 8px; border-radius: 4px; font-size: 12px;
+  background: #f1f1f1; color: var(--text-sec);
+}
+.status-badge.success { background: rgba(45,106,79,.1); color: var(--primary); }
+.status-badge.cancelled { background: #fef3e8; color: var(--secondary); }
+.status-badge.interrupted { background: #fff3cd; color: #856404; }
+.status-badge.full { background: #d4edda; color: #155724; }
+.status-badge.unpaid { background: #f8d7da; color: #721c24; }
+
+.expand-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; color: var(--primary); padding: 2px 6px;
+  border-radius: 4px; transition: background .2s;
+}
+.expand-btn:hover { background: rgba(45,106,79,.08); }
+
+/* ========== EXPANDED DETAIL ========== */
+.expanded-row td {
+  padding: 0;
+  background: var(--bg);
+}
+.expanded-detail {
+  padding: 20px 24px;
+  display: flex;
+  gap: 24px;
+}
+.detail-section {
+  flex: 1;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.detail-section h5 {
+  font-size: 14px;
+  color: var(--primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.detail-grid .dg-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.detail-grid .dg-item .dg-label { color: var(--text-sec); }
+.detail-grid .dg-item .dg-value { color: var(--text); font-weight: 500; }
+.detail-grid .dg-item .dg-value.accent { color: var(--accent); }
+.detail-grid .dg-item .dg-value.danger { color: var(--secondary); font-weight: 600; }
+
+.detail-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ========== PAGINATION ========== */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-sec);
+}
+.page-btns { display: flex; gap: 4px; }
+.page-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.page-btn:hover { border-color: var(--primary); color: var(--primary); }
+.page-btn.active {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.page-btn.disabled {
+  opacity: .4; cursor: default;
+}
+
+/* ========== SECTION ANNOTATION ========== */
+.section-note {
+  font-size: 12px;
+  color: var(--text-sec);
+  font-style: italic;
+  margin-top: 4px;
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== TOP NAV ==================== -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统</div>
+  <div class="nav-center">
+    <a class="nav-tab" href="#">工作台</a>
+    <a class="nav-tab" href="#">当前任务</a>
+    <a class="nav-tab" href="#">通知中心</a>
+    <a class="nav-tab active" href="#">账户中心</a>
+  </div>
+  <div class="nav-right">
+    <span>&#128276; 通知(3)</span>
+    <span>用户: 张三</span>
+    <span class="logout">退出</span>
+  </div>
+</nav>
+
+<!-- ==================== MAIN CONTENT ==================== -->
+<div class="main-wrap">
+  <div class="account-content">
+
+    <!-- ========== TOP ROW: Profile + Wallet ========== -->
+    <div class="top-row">
+
+      <!-- Profile Card (existing) -->
+      <div class="card profile-card">
+        <div class="profile-header">
+          <div class="avatar">张</div>
+          <div class="user-info">
+            <h3>张三 (Zhang San)</h3>
+            <p>普通用户 | ID: UID-8839201</p>
+            <span class="tag">正常状态</span>
+          </div>
+        </div>
+        <div class="profile-details">
+          <div class="detail-item"><span>车辆型号：</span><strong>Tesla Model 3</strong></div>
+          <div class="detail-item"><span>电池容量：</span><strong>60 kWh</strong></div>
+          <div class="detail-item"><span>注册时间：</span><strong>2026-01-15</strong></div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-outline">修改密码</button>
+          <button class="btn btn-outline">车辆管理</button>
+        </div>
+      </div>
+
+      <!-- Wallet Card (enhanced) -->
+      <div class="card wallet-card">
+        <h4>账户余额</h4>
+        <div class="balance-display">
+          <span class="currency">&yen;</span>
+          <span class="amount">128.50</span>
+        </div>
+        <div class="wallet-stats">
+          <div class="stat">
+            <span class="label">累计充值</span>
+            <span class="val">&yen; 500.00</span>
+          </div>
+          <div class="stat">
+            <span class="label">累计消费</span>
+            <span class="val">&yen; 371.50</span>
+          </div>
+        </div>
+
+        <!-- NEW: 余额不足支付失败提示 -->
+        <div class="payment-hint">
+          <span class="badge-new">新增</span>
+          &#9888;&#65039; 您有 1 笔账单因余额不足支付失败，请充值后重试或手动支付。
+        </div>
+
+        <div class="card-actions">
+          <button class="btn btn-primary" onclick="document.getElementById('rechargeModal').style.display='flex'">立即充值</button>
+          <button class="btn btn-secondary btn-sm">支付待处理账单<span class="badge-new">新增</span></button>
+          <button class="btn btn-outline">账单明细</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========== HISTORY RECORDS (enhanced) ========== -->
+    <div class="card history-card">
+      <div class="card-header">
+        <h4>历史充电详单</h4>
+        <div class="header-actions">
+          <button class="btn btn-outline btn-sm">导出PDF</button>
+        </div>
+      </div>
+
+      <!-- NEW: Enhanced Filter Bar (F-U11) -->
+      <div class="filter-bar">
+        <span class="badge-new">新增</span>
+        <div class="filter-group">
+          <label>时间范围：</label>
+          <input type="date" value="2026-03-01">
+          <span class="sep">至</span>
+          <input type="date" value="2026-03-31">
+        </div>
+        <div class="filter-group">
+          <label>充电模式：</label>
+          <select>
+            <option>全部</option>
+            <option>快充</option>
+            <option>慢充</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>状态：</label>
+          <select>
+            <option>全部</option>
+            <option>已完成</option>
+            <option>已取消</option>
+            <option>已中断</option>
+            <option>提前充满</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>搜索：</label>
+          <input type="text" placeholder="按请求编号搜索..." style="width:160px">
+        </div>
+        <button class="btn btn-primary btn-sm">查询</button>
+        <button class="btn btn-outline btn-sm">重置</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px"></th>
+              <th>详单号</th>
+              <th>充电桩号</th>
+              <th>开始时间</th>
+              <th>结束时间</th>
+              <th>充电量 (度)</th>
+              <th>总费用 (元)</th>
+              <th>状态</th>
+              <th>支付状态</th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- Row 1: expanded (demo) -->
+            <tr style="background:rgba(45,106,79,.03)">
+              <td><button class="expand-btn" title="收起详情">&#9660;</button></td>
+              <td>REQ-20260330-001</td>
+              <td>A-01 (快充)</td>
+              <td>2026-03-30 14:22</td>
+              <td>2026-03-30 15:30</td>
+              <td>45.2</td>
+              <td class="gold-text">&yen; 67.80</td>
+              <td><span class="status-badge success">已完成</span></td>
+              <td><span class="status-badge success">已支付</span></td>
+            </tr>
+
+            <!-- NEW: Expanded Detail Row (F-U10 + F-U11) -->
+            <tr class="expanded-row">
+              <td colspan="9">
+                <div class="expanded-detail">
+
+                  <!-- 详单信息 -->
+                  <div class="detail-section">
+                    <h5>详单信息 <span class="badge-new">新增</span></h5>
+                    <div class="detail-grid">
+                      <div class="dg-item"><span class="dg-label">请求编号</span><span class="dg-value">REQ-20260330-001</span></div>
+                      <div class="dg-item"><span class="dg-label">充电模式</span><span class="dg-value">快充 (T)</span></div>
+                      <div class="dg-item"><span class="dg-label">请求充电量</span><span class="dg-value">50.0 度</span></div>
+                      <div class="dg-item"><span class="dg-label">实际充电量</span><span class="dg-value">45.2 度</span></div>
+                      <div class="dg-item"><span class="dg-label">提交时间</span><span class="dg-value">2026-03-30 14:00</span></div>
+                      <div class="dg-item"><span class="dg-label">入队时间</span><span class="dg-value">2026-03-30 14:01</span></div>
+                      <div class="dg-item"><span class="dg-label">叫号时间</span><span class="dg-value">2026-03-30 14:15</span></div>
+                      <div class="dg-item"><span class="dg-label">到达确认时间</span><span class="dg-value">2026-03-30 14:20</span></div>
+                      <div class="dg-item"><span class="dg-label">开始充电</span><span class="dg-value">2026-03-30 14:22</span></div>
+                      <div class="dg-item"><span class="dg-label">结束充电</span><span class="dg-value">2026-03-30 15:30</span></div>
+                      <div class="dg-item"><span class="dg-label">充电桩编号</span><span class="dg-value">A-01</span></div>
+                      <div class="dg-item"><span class="dg-label">最终状态</span><span class="dg-value">COMPLETED</span></div>
+                    </div>
+                  </div>
+
+                  <!-- 账单信息 -->
+                  <div class="detail-section">
+                    <h5>账单信息 <span class="badge-new">新增</span></h5>
+                    <div class="detail-grid">
+                      <div class="dg-item"><span class="dg-label">计费模式</span><span class="dg-value">峰谷电价</span></div>
+                      <div class="dg-item"><span class="dg-label">计费电量</span><span class="dg-value">45.2 度</span></div>
+                      <div class="dg-item"><span class="dg-label">电费</span><span class="dg-value accent">&yen; 52.30</span></div>
+                      <div class="dg-item"><span class="dg-label">服务费</span><span class="dg-value accent">&yen; 15.50</span></div>
+                      <div class="dg-item"><span class="dg-label">超时占位费</span><span class="dg-value">&yen; 0.00</span></div>
+                      <div class="dg-item"><span class="dg-label">总费用</span><span class="dg-value accent">&yen; 67.80</span></div>
+                      <div class="dg-item"><span class="dg-label">支付状态</span><span class="dg-value" style="color:var(--primary)">PAID</span></div>
+                    </div>
+                  </div>
+
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 2: collapsed -->
+            <tr>
+              <td><button class="expand-btn" title="展开详情">&#9654;</button></td>
+              <td>REQ-20260328-003</td>
+              <td>B-03 (慢充)</td>
+              <td>2026-03-28 09:05</td>
+              <td>2026-03-28 17:00</td>
+              <td>22.5</td>
+              <td class="gold-text">&yen; 15.75</td>
+              <td><span class="status-badge success">已完成</span></td>
+              <td><span class="status-badge success">已支付</span></td>
+            </tr>
+
+            <!-- Row 3: collapsed -->
+            <tr>
+              <td><button class="expand-btn" title="展开详情">&#9654;</button></td>
+              <td>REQ-20260325-007</td>
+              <td>A-02 (快充)</td>
+              <td>2026-03-25 18:32</td>
+              <td>2026-03-25 19:15</td>
+              <td>30.0</td>
+              <td class="gold-text">&yen; 45.00</td>
+              <td><span class="status-badge full">提前充满</span></td>
+              <td><span class="status-badge success">已支付</span></td>
+            </tr>
+
+            <!-- Row 4: UNPAID (demo for payment action) -->
+            <tr style="background:rgba(196,93,62,.03)">
+              <td><button class="expand-btn" title="展开详情">&#9660;</button></td>
+              <td>REQ-20260322-012</td>
+              <td>C-05 (慢充)</td>
+              <td>2026-03-22 20:10</td>
+              <td>2026-03-22 23:45</td>
+              <td>18.6</td>
+              <td class="gold-text">&yen; 13.02</td>
+              <td><span class="status-badge success">已完成</span></td>
+              <td><span class="status-badge unpaid">未支付</span></td>
+            </tr>
+
+            <!-- Expanded detail for UNPAID row -->
+            <tr class="expanded-row">
+              <td colspan="9">
+                <div class="expanded-detail">
+                  <div class="detail-section">
+                    <h5>详单信息</h5>
+                    <div class="detail-grid">
+                      <div class="dg-item"><span class="dg-label">请求编号</span><span class="dg-value">REQ-20260322-012</span></div>
+                      <div class="dg-item"><span class="dg-label">充电模式</span><span class="dg-value">慢充 (F)</span></div>
+                      <div class="dg-item"><span class="dg-label">请求充电量</span><span class="dg-value">20.0 度</span></div>
+                      <div class="dg-item"><span class="dg-label">实际充电量</span><span class="dg-value">18.6 度</span></div>
+                      <div class="dg-item"><span class="dg-label">提交时间</span><span class="dg-value">2026-03-22 20:00</span></div>
+                      <div class="dg-item"><span class="dg-label">入队时间</span><span class="dg-value">2026-03-22 20:02</span></div>
+                      <div class="dg-item"><span class="dg-label">叫号时间</span><span class="dg-value">2026-03-22 20:05</span></div>
+                      <div class="dg-item"><span class="dg-label">到达确认时间</span><span class="dg-value">2026-03-22 20:08</span></div>
+                      <div class="dg-item"><span class="dg-label">开始充电</span><span class="dg-value">2026-03-22 20:10</span></div>
+                      <div class="dg-item"><span class="dg-label">结束充电</span><span class="dg-value">2026-03-22 23:45</span></div>
+                      <div class="dg-item"><span class="dg-label">充电桩编号</span><span class="dg-value">C-05</span></div>
+                      <div class="dg-item"><span class="dg-label">最终状态</span><span class="dg-value">COMPLETED</span></div>
+                    </div>
+                  </div>
+                  <div class="detail-section">
+                    <h5>账单信息</h5>
+                    <div class="detail-grid">
+                      <div class="dg-item"><span class="dg-label">计费模式</span><span class="dg-value">峰谷电价</span></div>
+                      <div class="dg-item"><span class="dg-label">计费电量</span><span class="dg-value">18.6 度</span></div>
+                      <div class="dg-item"><span class="dg-label">电费</span><span class="dg-value accent">&yen; 9.30</span></div>
+                      <div class="dg-item"><span class="dg-label">服务费</span><span class="dg-value accent">&yen; 3.72</span></div>
+                      <div class="dg-item"><span class="dg-label">超时占位费</span><span class="dg-value">&yen; 0.00</span></div>
+                      <div class="dg-item"><span class="dg-label">总费用</span><span class="dg-value accent">&yen; 13.02</span></div>
+                      <div class="dg-item"><span class="dg-label">支付状态</span><span class="dg-value danger">UNPAID</span></div>
+                    </div>
+                    <!-- NEW: 立即支付 button for unpaid bills -->
+                    <div class="detail-actions">
+                      <button class="btn btn-secondary btn-sm">立即支付 &yen;13.02</button>
+                      <span class="badge-new">新增</span>
+                      <span style="font-size:12px;color:var(--text-sec);margin-left:8px">余额不足时将提示充值</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 5: cancelled -->
+            <tr>
+              <td><button class="expand-btn" title="展开详情">&#9654;</button></td>
+              <td>REQ-20260320-019</td>
+              <td>A-03 (快充)</td>
+              <td>2026-03-20 08:30</td>
+              <td>2026-03-20 08:45</td>
+              <td>0.0</td>
+              <td>&yen; 0.00</td>
+              <td><span class="status-badge cancelled">已取消</span></td>
+              <td><span style="color:var(--text-sec);font-size:13px">--</span></td>
+            </tr>
+
+            <!-- Row 6: interrupted -->
+            <tr>
+              <td><button class="expand-btn" title="展开详情">&#9654;</button></td>
+              <td>REQ-20260318-025</td>
+              <td>B-01 (慢充)</td>
+              <td>2026-03-18 11:00</td>
+              <td>2026-03-18 13:20</td>
+              <td>8.4</td>
+              <td class="gold-text">&yen; 5.88</td>
+              <td><span class="status-badge interrupted">已中断</span></td>
+              <td><span class="status-badge success">已支付</span></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+      <!-- NEW: Pagination (F-U11) -->
+      <div class="pagination">
+        <span>共 23 条记录，第 1/4 页 <span class="badge-new">新增</span></span>
+        <div class="page-btns">
+          <button class="page-btn disabled">&laquo;</button>
+          <button class="page-btn disabled">&lsaquo;</button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn">4</button>
+          <button class="page-btn">&rsaquo;</button>
+          <button class="page-btn">&raquo;</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== RECHARGE MODAL (F-U13, always visible for reference) ==================== -->
+<div class="modal-overlay" id="rechargeModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('rechargeModal').style.display='none'">&times;</button>
+    <h3>账户充值 <span class="badge-new">新增</span></h3>
+    <p class="modal-sub">模拟支付 - 选择或输入充值金额 (F-U13)</p>
+
+    <div class="preset-amounts">
+      <button class="preset-btn">&yen;50</button>
+      <button class="preset-btn selected">&yen;100</button>
+      <button class="preset-btn">&yen;200</button>
+      <button class="preset-btn">&yen;500</button>
+    </div>
+
+    <div class="custom-input-row">
+      <label>自定义金额：</label>
+      <input type="text" placeholder="请输入充值金额 (元)" value="">
+    </div>
+
+    <button class="modal-confirm">确认充值 &yen;100.00</button>
+
+    <p style="text-align:center;margin-top:14px;font-size:12px;color:var(--text-sec)">
+      充值将即时到账，模拟支付无需真实扣款
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
