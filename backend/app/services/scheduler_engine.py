@@ -25,6 +25,7 @@ DEFAULT_CONFIRM_TIMEOUT_SECONDS = 180
 DEFAULT_LEAVE_DELAY_SECONDS = 120
 DEFAULT_VIRTUAL_REQUEST_ENERGY = 20.0
 ENERGY_PRICE = 1.5
+ALLOW_AUTO_REQUEUE_ON_NO_SHOW = False
 
 
 @dataclass
@@ -75,10 +76,37 @@ def parse_datetime(value: Any, fallback: Optional[datetime] = None) -> datetime:
     return datetime.now()
 
 
+def parse_optional_datetime(value: Any) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    try:
+        return parse_datetime(value)
+    except Exception:
+        return None
+
+
 def format_datetime(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
     return value.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _current_timestamp_string() -> str:
+    return format_datetime(datetime.now()) or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _next_request_id() -> str:
+    row = query_db("SELECT COUNT(*) AS cnt FROM charge_request", one=True)
+    next_index = int(row["cnt"] or 0) + 1 if row else 1
+    return f"REQ{next_index:03d}"
+
+
+def _effective_charge_energy(request_row: Dict[str, Any]) -> float:
+    request_energy = float(request_row.get("request_energy") or 0.0)
+    battery_limit = float(request_row.get("battery_limit_energy") or request_energy)
+    if battery_limit <= 0:
+        return request_energy
+    return max(0.0, min(request_energy, battery_limit))
 
 
 def service_seconds_for_request(request_energy: float, charge_mode: str, power_kw: Optional[float] = None) -> int:
@@ -586,12 +614,240 @@ def _release_station(station_id: Optional[int], available_time: datetime) -> Non
     )
 
 
+def _create_followup_request(
+    original_request: Dict[str, Any],
+    *,
+    request_energy: float,
+    submit_time: datetime,
+    retry_count: int,
+    no_show_count: int,
+    fault_requeue_flag: bool,
+) -> Optional[str]:
+    if request_energy <= 0:
+        return None
+
+    request_id = _next_request_id()
+    waiting_pool_type = waiting_pool_for_mode(original_request["charge_mode"])
+    estimated_service_seconds = service_seconds_for_request(
+        request_energy,
+        original_request["charge_mode"],
+    )
+    timestamp = format_datetime(submit_time)
+
+    execute_db(
+        """
+        INSERT INTO charge_request (
+            request_id, user_id, charge_mode, request_energy, remaining_energy,
+            actual_energy, battery_limit_energy, status, waiting_pool_type, scenario_id,
+            submit_time, estimated_wait_seconds, estimated_start_time, estimated_finish_time,
+            estimated_service_seconds, assigned_station_id, actual_service_seconds,
+            priority_score, retry_count, no_show_count, fault_requeue_flag,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 'WAITING', ?, ?, ?, 0, ?, ?, ?, NULL, 0, 0.0, ?, ?, ?, ?, ?)
+        """,
+        [
+            request_id,
+            original_request.get("user_id"),
+            original_request["charge_mode"],
+            request_energy,
+            request_energy,
+            original_request.get("battery_limit_energy") or request_energy,
+            waiting_pool_type,
+            original_request.get("scenario_id"),
+            timestamp,
+            timestamp,
+            timestamp,
+            estimated_service_seconds,
+            retry_count,
+            no_show_count,
+            1 if fault_requeue_flag else 0,
+            timestamp,
+            timestamp,
+        ],
+    )
+    return request_id
+
+
+def _create_no_show_retry_request(original_request: Dict[str, Any], event_time: datetime) -> Optional[str]:
+    if not ALLOW_AUTO_REQUEUE_ON_NO_SHOW:
+        return None
+    return _create_followup_request(
+        original_request,
+        request_energy=float(original_request.get("request_energy") or 0.0),
+        submit_time=event_time,
+        retry_count=int(original_request.get("retry_count") or 0) + 1,
+        no_show_count=int(original_request.get("no_show_count") or 0),
+        fault_requeue_flag=False,
+    )
+
+
+def create_fault_requeue_request(
+    original_request: Dict[str, Any],
+    *,
+    actual_energy: float,
+    event_time: datetime,
+) -> Optional[str]:
+    remaining_energy = max(0.0, float(original_request.get("request_energy") or 0.0) - float(actual_energy))
+    return _create_followup_request(
+        original_request,
+        request_energy=remaining_energy,
+        submit_time=event_time,
+        retry_count=int(original_request.get("retry_count") or 0),
+        no_show_count=int(original_request.get("no_show_count") or 0),
+        fault_requeue_flag=True,
+    )
+
+
+def handle_station_fault(station_ref: Any, event_time: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    处理充电桩故障的最终态内部逻辑。
+
+    规则：
+    1. 原请求保留故障中断记录
+    2. 剩余电量以新请求重新入池
+    3. 新请求仅通过 `fault_requeue_flag` 标识来源，正式状态仍为 `WAITING`
+    """
+    fault_time = event_time or datetime.now()
+    station_field = "id" if isinstance(station_ref, int) else "station_code"
+    station = query_db(
+        f"SELECT * FROM charging_station WHERE {station_field} = ?",
+        [station_ref],
+        one=True,
+    )
+    if not station:
+        return {"success": False, "reason": "station_not_found"}
+
+    station = dict(station)
+    active_request = None
+    if station.get("current_request_id"):
+        active_request = query_db(
+            "SELECT * FROM charge_request WHERE id = ?",
+            [station["current_request_id"]],
+            one=True,
+        )
+        active_request = dict(active_request) if active_request else None
+
+    execute_db(
+        """
+        UPDATE charging_station
+        SET status = 'FAULT',
+            current_request_id = NULL,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        [
+            format_datetime(fault_time),
+            station["id"],
+        ],
+    )
+
+    followup_request_id = None
+    original_request_id = active_request["request_id"] if active_request else None
+    if active_request and active_request["status"] in (
+        RequestStatus.CONFIRMED.value,
+        RequestStatus.CHARGING.value,
+    ):
+        session = query_db(
+            """
+            SELECT * FROM charging_session
+            WHERE request_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            [active_request["id"]],
+            one=True,
+        )
+        session = dict(session) if session else None
+        if session and session.get("start_time"):
+            start_time = parse_datetime(session["start_time"], fallback=fault_time)
+            actual_service_seconds = max(0, int((fault_time - start_time).total_seconds()))
+        else:
+            actual_service_seconds = 0
+        actual_energy = round(float(station["power_kw"]) * actual_service_seconds / 3600, 2)
+        actual_energy = min(actual_energy, _effective_charge_energy(active_request))
+
+        execute_db(
+            """
+            UPDATE charge_request
+            SET status = 'INTERRUPTED',
+                actual_energy = ?,
+                actual_service_seconds = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            [
+                actual_energy,
+                actual_service_seconds,
+                format_datetime(fault_time),
+                active_request["id"],
+            ],
+        )
+        if session:
+            execute_db(
+                """
+                UPDATE charging_session
+                SET end_time = ?,
+                    actual_energy = ?,
+                    status = 'INTERRUPTED',
+                    interrupt_reason = 'STATION_FAULT'
+                WHERE id = ?
+                """,
+                [
+                    format_datetime(fault_time),
+                    actual_energy,
+                    session["id"],
+                ],
+            )
+        followup_request_id = create_fault_requeue_request(
+            active_request,
+            actual_energy=actual_energy,
+            event_time=fault_time,
+        )
+
+    if station.get("scenario_id"):
+        trigger_reschedule_for_event(
+            station["scenario_id"],
+            EventType.STATION_FAULT,
+            format_datetime(fault_time),
+        )
+        if followup_request_id:
+            trigger_reschedule_for_event(
+                station["scenario_id"],
+                EventType.NEW_REQUEST,
+                format_datetime(fault_time),
+            )
+
+    return {
+        "success": True,
+        "station_code": station["station_code"],
+        "original_request_id": original_request_id,
+        "followup_request_id": followup_request_id,
+    }
+
+
+def _resolve_actual_charge_plan(request_row: Dict[str, Any], start_time: datetime) -> Tuple[datetime, float, int, str]:
+    target_energy = _effective_charge_energy(request_row)
+    service_seconds = service_seconds_for_request(
+        target_energy,
+        request_row["charge_mode"],
+    )
+    finish_time = start_time + timedelta(seconds=service_seconds)
+    final_status = (
+        RequestStatus.COMPLETED_EARLY.value
+        if target_energy < float(request_row.get("request_energy") or 0.0)
+        else RequestStatus.COMPLETED.value
+    )
+    return finish_time, target_energy, service_seconds, final_status
+
+
 def advance_request_state_for_status_view(request_ref: Any, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     """
-    供状态查询使用的最小状态推进器。
+    供路由层调用的内部事件同步器。
 
-    目前保留 04-02 联调阶段所需的简化自动推进行为，但收口到服务层，
-    方便后续逐步替换为更完整的叫号/充电状态机，而不把逻辑散落在路由里。
+    该函数保持现有调用方式不变，但内部语义已收口为最终态：
+    - 叫号、过号、开始充电、完成充电统一由服务层推进
+    - 开始充电不新增公开接口
+    - 提前充满与待挪车链路在这里统一落地
     """
     now = now or datetime.now()
 
@@ -615,8 +871,8 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
 
     current = dict(current)
     status = current["status"]
-    estimated_start_dt = parse_datetime(current.get("estimated_start_time"))
-    estimated_finish_dt = parse_datetime(current.get("estimated_finish_time"))
+    estimated_start_dt = parse_optional_datetime(current.get("estimated_start_time"))
+    estimated_finish_dt = parse_optional_datetime(current.get("estimated_finish_time"))
 
     if status == RequestStatus.WAITING.value and current.get("assigned_station_id") and estimated_start_dt:
         called_at = max(now, estimated_start_dt - timedelta(seconds=_call_ahead_seconds()))
@@ -649,6 +905,7 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
     if current["status"] == RequestStatus.CALLED.value and current.get("last_called_at"):
         called_at = parse_datetime(current["last_called_at"], fallback=now)
         if now >= called_at + timedelta(seconds=_confirm_timeout_seconds()):
+            retry_request_id = _create_no_show_retry_request(current, now)
             execute_db(
                 """
                 UPDATE charge_request
@@ -669,71 +926,112 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
                     EventType.NO_SHOW,
                     format_datetime(now),
                 )
+                if retry_request_id:
+                    trigger_reschedule_for_event(
+                        current["scenario_id"],
+                        EventType.NEW_REQUEST,
+                        format_datetime(now),
+                    )
             current["status"] = RequestStatus.NO_SHOW.value
 
-    if current["status"] == RequestStatus.CONFIRMED.value and current.get("assigned_station_id") and estimated_start_dt and now >= estimated_start_dt:
+    if current["status"] == RequestStatus.CONFIRMED.value and current.get("assigned_station_id") and estimated_start_dt:
+        confirmed_at = parse_optional_datetime(current.get("confirmed_at")) or estimated_start_dt
+        actual_start_dt = max(estimated_start_dt, confirmed_at)
+        actual_finish_dt, actual_target_energy, actual_service_seconds, _ = _resolve_actual_charge_plan(current, actual_start_dt)
+        if now >= actual_start_dt:
+            session = query_db(
+                """
+                SELECT id
+                FROM charging_session
+                WHERE request_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                [current["id"]],
+                one=True,
+            )
+            if not session:
+                execute_db(
+                    """
+                    INSERT INTO charging_session (
+                        request_id, station_id, start_time, status, actual_energy
+                    ) VALUES (?, ?, ?, 'CHARGING', 0.0)
+                    """,
+                    [
+                        current["id"],
+                        current["assigned_station_id"],
+                        format_datetime(actual_start_dt),
+                    ],
+                )
+
+            execute_db(
+                """
+                UPDATE charge_request
+                SET status = 'CHARGING',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                [
+                    format_datetime(now),
+                    current["id"],
+                ],
+            )
+            execute_db(
+                """
+                UPDATE charging_station
+                SET status = 'CHARGING',
+                    current_request_id = ?,
+                    available_time = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                [
+                    current["id"],
+                    format_datetime(actual_finish_dt),
+                    format_datetime(now),
+                    current["assigned_station_id"],
+                ],
+            )
+            if current.get("scenario_id"):
+                trigger_reschedule_for_event(
+                    current["scenario_id"],
+                    EventType.CHARGE_START,
+                    format_datetime(actual_start_dt),
+                )
+            current["status"] = RequestStatus.CHARGING.value
+            current["estimated_finish_time"] = format_datetime(actual_finish_dt)
+            current["actual_energy"] = actual_target_energy
+            current["actual_service_seconds"] = actual_service_seconds
+            estimated_finish_dt = actual_finish_dt
+
+    if current["status"] == RequestStatus.CHARGING.value and current.get("assigned_station_id"):
         session = query_db(
             """
-            SELECT id
-            FROM charging_session
-            WHERE request_id = ?
+            SELECT * FROM charging_session
+            WHERE request_id = ? AND status = 'CHARGING'
             ORDER BY id DESC
             LIMIT 1
             """,
             [current["id"]],
             one=True,
         )
-        if not session:
-            execute_db(
-                """
-                INSERT INTO charging_session (
-                    request_id, station_id, start_time, status, actual_energy
-                ) VALUES (?, ?, ?, 'CHARGING', 0.0)
-                """,
-                [
-                    current["id"],
-                    current["assigned_station_id"],
-                    format_datetime(estimated_start_dt),
-                ],
+        session = dict(session) if session else None
+        if session and session.get("start_time"):
+            actual_start_dt = parse_datetime(session["start_time"], fallback=now)
+        else:
+            actual_start_dt = estimated_start_dt
+        if actual_start_dt:
+            actual_finish_dt, actual_target_energy, actual_service_seconds, final_status = _resolve_actual_charge_plan(
+                current,
+                actual_start_dt,
             )
+        else:
+            actual_finish_dt = estimated_finish_dt
+            actual_target_energy = _effective_charge_energy(current)
+            actual_service_seconds = int(current.get("estimated_service_seconds") or 0)
+            final_status = RequestStatus.COMPLETED.value
 
-        execute_db(
-            """
-            UPDATE charge_request
-            SET status = 'CHARGING',
-                updated_at = ?
-            WHERE id = ?
-            """,
-            [
-                format_datetime(now),
-                current["id"],
-            ],
-        )
-        execute_db(
-            """
-            UPDATE charging_station
-            SET status = 'CHARGING',
-                current_request_id = ?,
-                available_time = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            [
-                current["id"],
-                format_datetime(estimated_finish_dt or estimated_start_dt),
-                format_datetime(now),
-                current["assigned_station_id"],
-            ],
-        )
-        if current.get("scenario_id"):
-            trigger_reschedule_for_event(
-                current["scenario_id"],
-                EventType.CHARGE_START,
-                format_datetime(now),
-            )
-        current["status"] = RequestStatus.CHARGING.value
-
-    if current["status"] == RequestStatus.CHARGING.value and current.get("assigned_station_id") and estimated_finish_dt and now >= estimated_finish_dt:
+    if current["status"] == RequestStatus.CHARGING.value and current.get("assigned_station_id") and actual_finish_dt and now >= actual_finish_dt:
         session = query_db(
             """
             SELECT * FROM charging_session
@@ -752,25 +1050,26 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
                 WHERE id = ?
                 """,
                 [
-                    format_datetime(estimated_finish_dt),
-                    current["request_energy"],
+                    format_datetime(actual_finish_dt),
+                    actual_target_energy,
                     session["id"],
                 ],
             )
 
-        leave_deadline = estimated_finish_dt + timedelta(seconds=_leave_buffer_seconds())
+        leave_deadline = actual_finish_dt + timedelta(seconds=_leave_buffer_seconds())
         execute_db(
             """
             UPDATE charge_request
-            SET status = 'COMPLETED',
+            SET status = ?,
                 actual_energy = ?,
                 actual_service_seconds = ?,
                 updated_at = ?
             WHERE id = ?
             """,
             [
-                current["request_energy"],
-                current.get("estimated_service_seconds") or 0,
+                final_status,
+                actual_target_energy,
+                actual_service_seconds,
                 format_datetime(now),
                 current["id"],
             ],
@@ -806,8 +1105,9 @@ def advance_request_state_for_status_view(request_ref: Any, now: Optional[dateti
             trigger_reschedule_for_event(
                 current["scenario_id"],
                 EventType.CHARGE_END,
-                format_datetime(now),
+                format_datetime(actual_finish_dt),
             )
+        current["status"] = final_status
 
     refreshed = query_db(
         "SELECT * FROM charge_request WHERE id = ?",
@@ -1154,12 +1454,18 @@ def simulate_batch_case(
         interrupt_time = parse_datetime(user.get("interrupt_time"), fallback=estimated_finish_time) if interrupt_charge else None
 
         actual_start_time = estimated_start_time
-        actual_finish_time = estimated_finish_time
-        actual_energy = request_energy
-        final_status = RequestStatus.COMPLETED.value
+        effective_energy = min(request_energy, float(user.get("battery_limit_energy") or request_energy))
+        actual_service_seconds = service_seconds_for_request(effective_energy, charge_mode, chosen_station.power_kw)
+        actual_finish_time = actual_start_time + timedelta(seconds=actual_service_seconds)
+        actual_energy = effective_energy
+        final_status = (
+            RequestStatus.COMPLETED_EARLY.value
+            if effective_energy < request_energy
+            else RequestStatus.COMPLETED.value
+        )
 
         if interrupt_charge and interrupt_time > actual_start_time:
-            actual_finish_time = min(interrupt_time, estimated_finish_time)
+            actual_finish_time = min(interrupt_time, actual_finish_time)
             actual_service_seconds = max(0, int((actual_finish_time - actual_start_time).total_seconds()))
             actual_energy = round(chosen_station.power_kw * actual_service_seconds / 3600, 2)
             final_status = RequestStatus.INTERRUPTED.value

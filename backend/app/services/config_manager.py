@@ -366,14 +366,28 @@ def can_accept_request(charge_mode: ChargeMode) -> tuple[bool, str]:
     if not config:
         return False, "没有激活的场景配置"
     
-    # 统计当前等待人数
+    # 统计当前等待人数。运行时唯一容量约束是共享等待区容量。
     waiting_count = query_db("""
         SELECT COUNT(*) as cnt 
         FROM charge_request 
-        WHERE scenario_id = ? AND status = 'WAITING'
+        WHERE scenario_id = ? AND status IN ('WAITING', 'FAULT_REQUEUE')
     """, [config.id], one=True)
     
     if waiting_count['cnt'] >= config.waiting_area_capacity:
         return False, f"等待区已满（{waiting_count['cnt']}/{config.waiting_area_capacity}）"
+
+    available_station = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charging_station
+        WHERE scenario_id = ?
+          AND station_type = ?
+          AND status != 'FAULT'
+        """,
+        [config.id, charge_mode.value],
+        one=True,
+    )
+    if not available_station or int(available_station["cnt"] or 0) <= 0:
+        return False, "当前对应类型充电桩全部故障，暂不接受新的充电请求"
     
     return True, "可以接收请求"
