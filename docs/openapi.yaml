@@ -1,0 +1,1775 @@
+openapi: 3.1.0
+info:
+  title: 智能充电桩调度计费系统冻结接口
+  version: 3.0.0
+  summary: 基于当前冻结文档整理的最终版 OpenAPI 附件
+  description: |
+    本文件是 `docs/冻结接口文档.md` 的机器可读补充件，用于接口冻结、前后端联调、代码实现和后续测试工具接入。
+    与 `冻结接口文档.md` 字段保持同步；如出现冲突，以 Markdown 文件为准。
+
+    使用规则：
+    - Markdown 主文档仍是冻结语义和业务解释的主依据。
+    - 本 YAML 负责冻结公开接口的路径、方法、字段、枚举、统一响应结构和主要约束。
+    - 对于主文档未展开但已属于公共能力范围的接口，本 YAML 也一并纳入冻结：
+      - `GET /health`
+      - `POST /api/batch/simulate`
+security:
+  - bearerAuth: []
+servers:
+  - url: https://{host}
+    description: 单域名同源 HTTPS 正式环境
+    variables:
+      host:
+        default: charging.example.com
+tags:
+  - name: Health
+    description: 健康检查与连通性验证
+  - name: Auth
+    description: 用户认证接口
+  - name: UserRequest
+    description: 用户端充电请求与详单接口
+  - name: Admin
+    description: 管理端配置、设备控制与报表接口
+  - name: AdminUser
+    description: 管理端用户与车辆信息维护接口（F-A07）
+  - name: BatchSimulate
+    description: 系统验收与批量测试接口
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: 健康检查
+      description: 用于服务可用性检查、公网访问验证和上线后基础监控。
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: 健康检查成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      status: ok
+                      timestamp: '2026-04-19T10:00:00'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: 注册用户
+      description: 创建用户账号并登记车辆电池容量。
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              basic:
+                value:
+                  username: user01
+                  password: '123456'
+                  battery_capacity: 60.0
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRegisterResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      user_id: U001
+                      username: user01
+                      battery_capacity: 60.0
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: 登录
+      description: 用户或管理员登录，返回访问 token。
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              basic:
+                value:
+                  username: user01
+                  password: '123456'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+              examples:
+                user:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      token: bearer-token-example
+                      user_id: U001
+                      username: user01
+                      role: USER
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/create:
+    post:
+      tags: [UserRequest]
+      summary: 创建充电请求
+      description: |
+        用户在等候区创建充电请求。
+        成功后系统分配 `F/T` 排队号，并返回本模式前车等待数量。
+      operationId: createChargeRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequest'
+            examples:
+              fast:
+                value:
+                  request_time: '2026-04-19T10:00:00'
+                  charge_mode: FAST
+                  request_energy: 20.0
+      responses:
+        '200':
+          description: 请求创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateChargeRequestResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      queue_number: F1
+                      request_status: WAITING_AREA
+                      front_waiting_count: 0
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/status/{request_id}:
+    get:
+      tags: [UserRequest]
+      summary: 查询请求状态
+      description: |
+        查询用户请求当前状态、排队号、前车数量、目标桩与预估时间。
+      operationId: getRequestStatus
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 状态查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatusResponse'
+              examples:
+                waitingArea:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      queue_number: F3
+                      charge_mode: FAST
+                      request_energy: 20.0
+                      request_status: WAITING_AREA
+                      front_waiting_count: 2
+                      station_code: null
+                      station_queue_position: null
+                      estimated_wait_seconds: 900
+                      estimated_start_time: '2026-04-19T10:15:00'
+                      estimated_finish_time: '2026-04-19T10:55:00'
+                queued:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      queue_number: F3
+                      charge_mode: FAST
+                      request_energy: 20.0
+                      request_status: QUEUED
+                      front_waiting_count: 0
+                      station_code: FAST_02
+                      station_queue_position: 2
+                      estimated_wait_seconds: 600
+                      estimated_start_time: '2026-04-19T10:10:00'
+                      estimated_finish_time: '2026-04-19T10:50:00'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/mode:
+    put:
+      tags: [UserRequest]
+      summary: 等候区修改充电模式
+      description: |
+        仅允许在 `WAITING_AREA` 状态下修改。
+        修改后重新生成 `F/T` 排队号，并插入新模式队尾。
+      operationId: updateRequestMode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequestModeRequest'
+            examples:
+              switchToSlow:
+                value:
+                  request_id: REQ0001
+                  charge_mode: SLOW
+      responses:
+        '200':
+          description: 模式修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateModeResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      queue_number: T4
+                      request_status: WAITING_AREA
+                      front_waiting_count: 3
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/energy:
+    put:
+      tags: [UserRequest]
+      summary: 等候区修改请求电量
+      description: |
+        仅允许在 `WAITING_AREA` 状态下修改。
+        修改后保留原排队号不变。
+      operationId: updateRequestEnergy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequestEnergyRequest'
+            examples:
+              updateEnergy:
+                value:
+                  request_id: REQ0001
+                  request_energy: 25.0
+      responses:
+        '200':
+          description: 电量修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateEnergyResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      queue_number: F3
+                      request_energy: 25.0
+                      request_status: WAITING_AREA
+                      front_waiting_count: 2
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/cancel:
+    post:
+      tags: [UserRequest]
+      summary: 取消等候区请求
+      description: 仅允许在 `WAITING_AREA` 状态下取消请求。
+      operationId: cancelRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestIdBody'
+            examples:
+              cancel:
+                value:
+                  request_id: REQ0001
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasicRequestOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      request_status: CANCELLED
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/stop:
+    post:
+      tags: [UserRequest]
+      summary: 提前结束当前充电
+      description: |
+        仅允许在 `CHARGING` 状态下调用。
+        按已充电量立即结算，状态进入 `COMPLETED_EARLY`。
+      operationId: stopChargingRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestIdBody'
+            examples:
+              stop:
+                value:
+                  request_id: REQ0001
+      responses:
+        '200':
+          description: 提前结束并结算成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasicRequestOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      request_id: REQ0001
+                      request_status: COMPLETED_EARLY
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/request/detail/{request_id}:
+    get:
+      tags: [UserRequest]
+      summary: 查询详单
+      description: 查询单次充电详单及费用信息。
+      operationId: getRequestDetail
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 查询详单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDetailResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      detail_id: DETAIL0001
+                      detail_generated_at: '2026-04-19T11:00:00'
+                      station_code: FAST_02
+                      actual_energy: 18.5
+                      charge_duration_seconds: 2220
+                      start_time: '2026-04-19T10:20:00'
+                      stop_time: '2026-04-19T10:57:00'
+                      charge_fee: 18.5
+                      service_fee: 14.8
+                      total_fee: 33.3
+                      request_status: COMPLETED_EARLY
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/system/config:
+    get:
+      tags: [Admin]
+      summary: 查看系统配置
+      description: 管理员查看当前系统参数、调度模式和故障策略。
+      operationId: getSystemConfig
+      responses:
+        '200':
+          description: 查询系统配置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfigResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      fast_station_count: 3
+                      slow_station_count: 2
+                      waiting_area_capacity: 6
+                      charging_queue_len: 2
+                      dispatch_mode: NORMAL
+                      fault_dispatch_mode: TIME_ORDER
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/system/dispatch-mode:
+    put:
+      tags: [Admin]
+      summary: 更新系统调度模式
+      description: 管理员运行时切换 `NORMAL / EXT_SINGLE_BATCH / EXT_FULL_BATCH`。
+      operationId: updateDispatchMode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDispatchModeRequest'
+            examples:
+              setSingleBatch:
+                value:
+                  dispatch_mode: EXT_SINGLE_BATCH
+      responses:
+        '200':
+          description: 调度模式更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemModeOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      dispatch_mode: EXT_SINGLE_BATCH
+                      updated: true
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/system/fault-dispatch-mode:
+    put:
+      tags: [Admin]
+      summary: 更新故障调度策略
+      description: 管理员运行时切换 `PRIORITY / TIME_ORDER`。
+      operationId: updateFaultDispatchMode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFaultDispatchModeRequest'
+            examples:
+              setPriority:
+                value:
+                  fault_dispatch_mode: PRIORITY
+      responses:
+        '200':
+          description: 故障策略更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemModeOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      fault_dispatch_mode: PRIORITY
+                      updated: true
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations:
+    get:
+      tags: [Admin]
+      summary: 查看全部充电桩状态
+      description: 管理员查看所有充电桩的运行状态、当前队列长度和累计指标。
+      operationId: listStations
+      responses:
+        '200':
+          description: 查询桩状态成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationListResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      - station_code: FAST_01
+                        charge_mode: FAST
+                        station_status: RUNNING
+                        current_request_id: REQ0008
+                        queue_length: 2
+                        total_charge_count: 18
+                        total_charge_seconds: 32000
+                        total_charge_energy: 266.5
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations/{station_code}/start:
+    post:
+      tags: [Admin]
+      summary: 启动充电桩
+      description: 将指定充电桩置为可运行状态。
+      operationId: startStation
+      parameters:
+        - $ref: '#/components/parameters/StationCode'
+      responses:
+        '200':
+          description: 启动成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      station_code: SLOW_02
+                      station_status: RUNNING
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations/{station_code}/shutdown:
+    post:
+      tags: [Admin]
+      summary: 关闭充电桩
+      description: |
+        仅允许在该桩空闲且队列为空时执行。
+        若存在正在充电车辆或排队车辆，应返回错误。
+      operationId: shutdownStation
+      parameters:
+        - $ref: '#/components/parameters/StationCode'
+      responses:
+        '200':
+          description: 关闭成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      station_code: SLOW_03
+                      station_status: SHUTDOWN
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations/{station_code}/fault:
+    post:
+      tags: [Admin]
+      summary: 标记故障
+      description: 将指定充电桩标记为故障，并触发故障重调度。
+      operationId: faultStation
+      parameters:
+        - $ref: '#/components/parameters/StationCode'
+      responses:
+        '200':
+          description: 标记故障成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      station_code: FAST_02
+                      station_status: FAULT
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations/{station_code}/recover:
+    post:
+      tags: [Admin]
+      summary: 故障恢复
+      description: 故障恢复后，若仍存在其它同类型未开始充电车辆，应触发时间顺序重排。
+      operationId: recoverStation
+      parameters:
+        - $ref: '#/components/parameters/StationCode'
+      responses:
+        '200':
+          description: 恢复成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationOperationResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      station_code: FAST_02
+                      station_status: RUNNING
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/stations/{station_code}/queue:
+    get:
+      tags: [Admin]
+      summary: 查看单桩队列
+      description: 查看指定充电桩队列中等待车辆的公开信息。
+      operationId: getStationQueue
+      parameters:
+        - $ref: '#/components/parameters/StationCode'
+      responses:
+        '200':
+          description: 查询单桩队列成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationQueueResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      station_code: FAST_01
+                      queue:
+                        - user_id: U010
+                          battery_capacity: 60.0
+                          request_energy: 20.0
+                          queue_number: F8
+                          queue_wait_seconds: 300
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/reports:
+    get:
+      tags: [Admin]
+      summary: 查看报表
+      description: 按日、周、月粒度查询报表。
+      operationId: getReports
+      parameters:
+        - name: granularity
+          in: query
+          required: true
+          description: 报表粒度
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: 查询报表成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      - time_key: '2026-04-19'
+                        station_code: FAST_01
+                        total_charge_count: 12
+                        total_charge_seconds: 24000
+                        total_charge_energy: 180.0
+                        total_charge_fee: 162.0
+                        total_service_fee: 144.0
+                        total_fee: 306.0
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/users:
+    get:
+      tags: [AdminUser]
+      summary: 查看用户列表
+      description: 管理员查看所有用户基本信息与车辆电池容量。
+      operationId: listUsers
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 查询用户列表成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      total: 2
+                      users:
+                        - user_id: U001
+                          username: user01
+                          battery_capacity: 60.0
+                          role: USER
+                          created_at: '2026-04-10T08:00:00'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/users/{user_id}:
+    get:
+      tags: [AdminUser]
+      summary: 查看单个用户详情
+      description: 管理员查看指定用户信息及其历史详单列表。
+      operationId: getUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 查询用户详情成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      user_id: U001
+                      username: user01
+                      battery_capacity: 60.0
+                      role: USER
+                      created_at: '2026-04-10T08:00:00'
+                      details:
+                        - detail_id: DETAIL0001
+                          station_code: FAST_01
+                          actual_energy: 20.0
+                          total_fee: 36.0
+                          request_status: COMPLETED
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/admin/users/{user_id}/battery-capacity:
+    put:
+      tags: [AdminUser]
+      summary: 修改用户车辆电池容量
+      description: |
+        管理员修改指定用户的车辆电池总容量。
+        仅在该用户无活跃请求（无未终态请求）时允许修改。
+      operationId: updateUserBatteryCapacity
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBatteryCapacityRequest'
+            examples:
+              update:
+                value:
+                  battery_capacity: 80.0
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateBatteryCapacityResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      user_id: U001
+                      battery_capacity: 80.0
+                      updated: true
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/batch/simulate:
+    post:
+      tags: [BatchSimulate]
+      summary: 批量模拟/系统验收回放
+      description: |
+        用于系统验收、批量测试和场景回放。
+        当前冻结为公共接口，允许免认证调用，便于验收工具和测试脚本直接使用。
+      operationId: batchSimulate
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSimulateRequest'
+            examples:
+              normalMode:
+                value:
+                  test_case_id: CASE_001
+                  scenario:
+                    fast_station_count: 3
+                    slow_station_count: 2
+                    waiting_area_capacity: 6
+                    charging_queue_len: 2
+                    dispatch_mode: NORMAL
+                    fault_dispatch_mode: TIME_ORDER
+                  users:
+                    - user_id: U001
+                      request_time: '2026-04-19T10:00:00'
+                      charge_mode: FAST
+                      request_energy: 20.0
+      responses:
+        '200':
+          description: 批量模拟成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSimulateResponse'
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: success
+                    data:
+                      test_case_id: CASE_001
+                      summary:
+                        total_users: 1
+                        completed_users: 1
+                        avg_wait_seconds: 0
+                        avg_finish_seconds: 2400
+                        total_finish_seconds: 2400
+                        station_utilization: 0.5
+                      results:
+                        - user_id: U001
+                          request_id: REQ0001
+                          queue_number: F1
+                          final_status: COMPLETED
+                          detail:
+                            detail_id: DETAIL0001
+                            detail_generated_at: '2026-04-19T10:40:00'
+                            station_code: FAST_01
+                            actual_energy: 20.0
+                            charge_duration_seconds: 2400
+                            start_time: '2026-04-19T10:00:00'
+                            stop_time: '2026-04-19T10:40:00'
+                            charge_fee: 20.0
+                            service_fee: 16.0
+                            total_fee: 36.0
+                            request_status: COMPLETED
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    RequestId:
+      name: request_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: REQ0001
+    StationCode:
+      name: station_code
+      in: path
+      required: true
+      schema:
+        type: string
+        example: FAST_01
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: U001
+
+  responses:
+    ErrorResponse:
+      description: 统一错误响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            invalidParams:
+              value:
+                code: 1001
+                message: 参数错误
+                data:
+                  reason: invalid request body
+
+  schemas:
+    ChargeMode:
+      type: string
+      enum: [FAST, SLOW]
+    DispatchMode:
+      type: string
+      enum: [NORMAL, EXT_SINGLE_BATCH, EXT_FULL_BATCH]
+    FaultDispatchMode:
+      type: string
+      enum: [PRIORITY, TIME_ORDER]
+    RequestStatus:
+      type: string
+      enum:
+        - WAITING_AREA
+        - QUEUED
+        - CHARGING
+        - COMPLETED
+        - COMPLETED_EARLY
+        - CANCELLED
+        - FAULT_INTERRUPTED
+    StationStatus:
+      type: string
+      enum: [RUNNING, SHUTDOWN, FAULT]
+    UserRole:
+      type: string
+      enum: [USER, ADMIN]
+    ReportGranularity:
+      type: string
+      enum: [day, week, month]
+
+    SuccessEnvelopeBase:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: integer
+          const: 0
+        message:
+          type: string
+          const: success
+        data: {}
+
+    ErrorEnvelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          enum: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1099]
+        message:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+
+    HealthData:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          const: ok
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HealthData'
+
+    RegisterRequest:
+      type: object
+      required: [username, password, battery_capacity]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+        battery_capacity:
+          type: number
+          format: float
+          minimum: 0
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+
+    AuthRegisterData:
+      type: object
+      required: [user_id, username, battery_capacity]
+      properties:
+        user_id:
+          type: string
+          example: U001
+        username:
+          type: string
+        battery_capacity:
+          type: number
+          format: float
+
+    AuthLoginData:
+      type: object
+      required: [token, user_id, username, role]
+      properties:
+        token:
+          type: string
+        user_id:
+          type: string
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    AuthRegisterResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthRegisterData'
+
+    AuthLoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthLoginData'
+
+    CreateRequest:
+      type: object
+      required: [request_time, charge_mode, request_energy]
+      properties:
+        request_time:
+          type: string
+          format: date-time
+        charge_mode:
+          $ref: '#/components/schemas/ChargeMode'
+        request_energy:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+          maximum: 300
+
+    CreateChargeRequestData:
+      type: object
+      required: [request_id, queue_number, request_status, front_waiting_count]
+      properties:
+        request_id:
+          type: string
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+        front_waiting_count:
+          type: integer
+          minimum: 0
+
+    CreateChargeRequestResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CreateChargeRequestData'
+
+    RequestStatusData:
+      type: object
+      required:
+        - request_id
+        - queue_number
+        - charge_mode
+        - request_energy
+        - request_status
+        - front_waiting_count
+      properties:
+        request_id:
+          type: string
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        charge_mode:
+          $ref: '#/components/schemas/ChargeMode'
+        request_energy:
+          type: number
+          format: float
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+        front_waiting_count:
+          type: integer
+          minimum: 0
+        station_code:
+          type: string
+          nullable: true
+        station_queue_position:
+          type: integer
+          nullable: true
+          minimum: 1
+        estimated_wait_seconds:
+          type: integer
+          nullable: true
+          minimum: 0
+        estimated_start_time:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_finish_time:
+          type: string
+          format: date-time
+          nullable: true
+
+    RequestStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RequestStatusData'
+
+    UpdateRequestModeRequest:
+      type: object
+      required: [request_id, charge_mode]
+      properties:
+        request_id:
+          type: string
+        charge_mode:
+          $ref: '#/components/schemas/ChargeMode'
+
+    UpdateRequestEnergyRequest:
+      type: object
+      required: [request_id, request_energy]
+      properties:
+        request_id:
+          type: string
+        request_energy:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+
+    RequestIdBody:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+
+    BasicRequestOperationData:
+      type: object
+      required: [request_id, request_status]
+      properties:
+        request_id:
+          type: string
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+
+    UpdateModeData:
+      type: object
+      required: [request_id, queue_number, request_status, front_waiting_count]
+      properties:
+        request_id:
+          type: string
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+        front_waiting_count:
+          type: integer
+          minimum: 0
+
+    UpdateEnergyData:
+      type: object
+      required: [request_id, queue_number, request_energy, request_status, front_waiting_count]
+      properties:
+        request_id:
+          type: string
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        request_energy:
+          type: number
+          format: float
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+        front_waiting_count:
+          type: integer
+          minimum: 0
+
+    UpdateModeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UpdateModeData'
+
+    UpdateEnergyResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UpdateEnergyData'
+
+    BasicRequestOperationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BasicRequestOperationData'
+
+    RequestDetailData:
+      type: object
+      required:
+        - detail_id
+        - detail_generated_at
+        - station_code
+        - actual_energy
+        - charge_duration_seconds
+        - start_time
+        - stop_time
+        - charge_fee
+        - service_fee
+        - total_fee
+        - request_status
+      properties:
+        detail_id:
+          type: string
+        detail_generated_at:
+          type: string
+          format: date-time
+        station_code:
+          type: string
+        actual_energy:
+          type: number
+          format: float
+          minimum: 0
+        charge_duration_seconds:
+          type: integer
+          minimum: 0
+        start_time:
+          type: string
+          format: date-time
+        stop_time:
+          type: string
+          format: date-time
+        charge_fee:
+          type: number
+          format: float
+          minimum: 0
+        service_fee:
+          type: number
+          format: float
+          minimum: 0
+        total_fee:
+          type: number
+          format: float
+          minimum: 0
+        request_status:
+          $ref: '#/components/schemas/RequestStatus'
+
+    RequestDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RequestDetailData'
+
+    SystemConfigData:
+      type: object
+      required:
+        - fast_station_count
+        - slow_station_count
+        - waiting_area_capacity
+        - charging_queue_len
+        - dispatch_mode
+        - fault_dispatch_mode
+      properties:
+        fast_station_count:
+          type: integer
+          minimum: 0
+        slow_station_count:
+          type: integer
+          minimum: 0
+        waiting_area_capacity:
+          type: integer
+          minimum: 0
+        charging_queue_len:
+          type: integer
+          minimum: 1
+        dispatch_mode:
+          $ref: '#/components/schemas/DispatchMode'
+        fault_dispatch_mode:
+          $ref: '#/components/schemas/FaultDispatchMode'
+
+    SystemConfigResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SystemConfigData'
+
+    UpdateDispatchModeRequest:
+      type: object
+      required: [dispatch_mode]
+      properties:
+        dispatch_mode:
+          $ref: '#/components/schemas/DispatchMode'
+
+    UpdateFaultDispatchModeRequest:
+      type: object
+      required: [fault_dispatch_mode]
+      properties:
+        fault_dispatch_mode:
+          $ref: '#/components/schemas/FaultDispatchMode'
+
+    SystemModeOperationData:
+      type: object
+      properties:
+        dispatch_mode:
+          $ref: '#/components/schemas/DispatchMode'
+        fault_dispatch_mode:
+          $ref: '#/components/schemas/FaultDispatchMode'
+        updated:
+          type: boolean
+          const: true
+
+    SystemModeOperationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SystemModeOperationData'
+
+    StationItem:
+      type: object
+      required:
+        - station_code
+        - charge_mode
+        - station_status
+        - queue_length
+        - total_charge_count
+        - total_charge_seconds
+        - total_charge_energy
+      properties:
+        station_code:
+          type: string
+        charge_mode:
+          $ref: '#/components/schemas/ChargeMode'
+        station_status:
+          $ref: '#/components/schemas/StationStatus'
+        current_request_id:
+          type: string
+          nullable: true
+        queue_length:
+          type: integer
+          minimum: 0
+        total_charge_count:
+          type: integer
+          minimum: 0
+        total_charge_seconds:
+          type: integer
+          minimum: 0
+        total_charge_energy:
+          type: number
+          format: float
+          minimum: 0
+
+    StationListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/StationItem'
+
+    StationOperationData:
+      type: object
+      required: [station_code, station_status]
+      properties:
+        station_code:
+          type: string
+        station_status:
+          $ref: '#/components/schemas/StationStatus'
+
+    StationOperationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StationOperationData'
+
+    StationQueueEntry:
+      type: object
+      required: [user_id, battery_capacity, request_energy, queue_number, queue_wait_seconds]
+      properties:
+        user_id:
+          type: string
+        battery_capacity:
+          type: number
+          format: float
+          minimum: 0
+        request_energy:
+          type: number
+          format: float
+          minimum: 0
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        queue_wait_seconds:
+          type: integer
+          minimum: 0
+
+    StationQueueData:
+      type: object
+      required: [station_code, queue]
+      properties:
+        station_code:
+          type: string
+        queue:
+          type: array
+          items:
+            $ref: '#/components/schemas/StationQueueEntry'
+
+    StationQueueResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StationQueueData'
+
+    ReportItem:
+      type: object
+      required:
+        - time_key
+        - station_code
+        - total_charge_count
+        - total_charge_seconds
+        - total_charge_energy
+        - total_charge_fee
+        - total_service_fee
+        - total_fee
+      properties:
+        time_key:
+          type: string
+        station_code:
+          type: string
+        total_charge_count:
+          type: integer
+          minimum: 0
+        total_charge_seconds:
+          type: integer
+          minimum: 0
+        total_charge_energy:
+          type: number
+          format: float
+          minimum: 0
+        total_charge_fee:
+          type: number
+          format: float
+          minimum: 0
+        total_service_fee:
+          type: number
+          format: float
+          minimum: 0
+        total_fee:
+          type: number
+          format: float
+          minimum: 0
+
+    ReportsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportItem'
+
+    BatchScenario:
+      type: object
+      required:
+        - fast_station_count
+        - slow_station_count
+        - waiting_area_capacity
+        - charging_queue_len
+        - dispatch_mode
+        - fault_dispatch_mode
+      properties:
+        fast_station_count:
+          type: integer
+          minimum: 0
+        slow_station_count:
+          type: integer
+          minimum: 0
+        waiting_area_capacity:
+          type: integer
+          minimum: 0
+        charging_queue_len:
+          type: integer
+          minimum: 1
+        dispatch_mode:
+          $ref: '#/components/schemas/DispatchMode'
+        fault_dispatch_mode:
+          $ref: '#/components/schemas/FaultDispatchMode'
+
+    BatchUser:
+      type: object
+      required: [user_id, request_time, charge_mode, request_energy]
+      properties:
+        user_id:
+          type: string
+        request_time:
+          type: string
+          format: date-time
+        charge_mode:
+          $ref: '#/components/schemas/ChargeMode'
+        request_energy:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+
+    BatchSimulateRequest:
+      type: object
+      required: [test_case_id, scenario, users]
+      properties:
+        test_case_id:
+          type: string
+        scenario:
+          $ref: '#/components/schemas/BatchScenario'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchUser'
+
+    BatchSummary:
+      type: object
+      required:
+        - total_users
+        - completed_users
+        - avg_wait_seconds
+        - avg_finish_seconds
+        - total_finish_seconds
+        - station_utilization
+      properties:
+        total_users:
+          type: integer
+          minimum: 0
+        completed_users:
+          type: integer
+          minimum: 0
+        avg_wait_seconds:
+          type: number
+          format: float
+          minimum: 0
+        avg_finish_seconds:
+          type: number
+          format: float
+          minimum: 0
+        total_finish_seconds:
+          type: integer
+          minimum: 0
+        station_utilization:
+          type: number
+          format: float
+          minimum: 0
+
+    BatchResultItem:
+      type: object
+      required: [user_id, request_id, queue_number, final_status, detail]
+      properties:
+        user_id:
+          type: string
+        request_id:
+          type: string
+        queue_number:
+          type: string
+          pattern: '^[FT][1-9][0-9]*$'
+        final_status:
+          $ref: '#/components/schemas/RequestStatus'
+        detail:
+          $ref: '#/components/schemas/RequestDetailData'
+
+    BatchSimulateData:
+      type: object
+      required: [test_case_id, summary, results]
+      properties:
+        test_case_id:
+          type: string
+        summary:
+          $ref: '#/components/schemas/BatchSummary'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchResultItem'
+
+    BatchSimulateResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BatchSimulateData'
+
+    UserItem:
+      type: object
+      required: [user_id, username, battery_capacity, role, created_at]
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        battery_capacity:
+          type: number
+          format: float
+          minimum: 0
+        role:
+          $ref: '#/components/schemas/UserRole'
+        created_at:
+          type: string
+          format: date-time
+
+    UserListData:
+      type: object
+      required: [total, users]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserItem'
+
+    UserListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserListData'
+
+    UserDetailData:
+      type: object
+      required: [user_id, username, battery_capacity, role, created_at, details]
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        battery_capacity:
+          type: number
+          format: float
+          minimum: 0
+        role:
+          $ref: '#/components/schemas/UserRole'
+        created_at:
+          type: string
+          format: date-time
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestDetailData'
+
+    UserDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserDetailData'
+
+    UpdateBatteryCapacityRequest:
+      type: object
+      required: [battery_capacity]
+      properties:
+        battery_capacity:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+
+    UpdateBatteryCapacityData:
+      type: object
+      required: [user_id, battery_capacity, updated]
+      properties:
+        user_id:
+          type: string
+        battery_capacity:
+          type: number
+          format: float
+        updated:
+          type: boolean
+          const: true
+
+    UpdateBatteryCapacityResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UpdateBatteryCapacityData'
