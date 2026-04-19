@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备管理 - 卡片布局 (版本A)</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); }
+h1, h2, h3, h4 { font-family: Georgia, serif; }
+
+/* Nav */
+.nav { background: var(--nav-bg); padding: 0 24px; display: flex; align-items: center; height: 56px; box-shadow: var(--shadow); position: sticky; top: 0; z-index: 100; }
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; margin-right: 32px; }
+.nav-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.nav-tab { padding: 8px 14px; border-radius: 6px; font-size: 13px; color: var(--text-sec); cursor: pointer; white-space: nowrap; transition: all 0.2s; text-decoration: none; }
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.nav-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-sec); white-space: nowrap; margin-left: 16px; }
+.nav-alert { color: var(--secondary); font-weight: 600; }
+
+/* Main */
+.main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.page-title { font-size: 22px; color: var(--primary); }
+.action-bar { display: flex; gap: 10px; }
+
+/* Buttons */
+.btn { padding: 8px 18px; border-radius: var(--radius); border: none; font-size: 13px; cursor: pointer; font-weight: 600; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a94e34; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: #bf9745; }
+.btn-outline { background: transparent; border: 1.5px solid var(--primary); color: var(--primary); }
+.btn-outline:hover { background: var(--primary); color: #fff; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-danger { background: #dc3545; color: #fff; }
+.btn-danger:hover { background: #c82333; }
+
+/* Cards Grid */
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-bottom: 32px; }
+.device-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; position: relative; transition: transform 0.15s, box-shadow 0.15s; }
+.device-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(120,80,40,0.12); }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+.card-code { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--text); }
+.card-type { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+.type-fast { background: rgba(196,93,62,0.12); color: var(--secondary); }
+.type-slow { background: rgba(45,106,79,0.12); color: var(--primary); }
+.card-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.card-info-row { display: flex; justify-content: space-between; font-size: 13px; }
+.card-info-label { color: var(--text-sec); }
+.card-info-value { font-weight: 600; }
+.card-status { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 14px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.online { background: #28a745; }
+.status-dot.offline { background: #aaa; }
+.status-dot.charging { background: var(--accent); animation: pulse 1.5s infinite; }
+.status-dot.fault { background: var(--secondary); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.card-actions { display: flex; gap: 8px; }
+
+/* Toggle */
+.toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+.toggle input { display: none; }
+.toggle-slider { position: absolute; inset: 0; background: #ccc; border-radius: 11px; transition: 0.3s; }
+.toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: 0.3s; }
+.toggle input:checked + .toggle-slider { background: var(--primary); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+/* Sections */
+.section { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 24px; }
+.section-title { font-size: 16px; color: var(--primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.form-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; color: var(--text-sec); font-weight: 600; }
+.form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border: 1.5px solid #e0dcd5; border-radius: 8px; font-size: 13px; background: var(--bg); outline: none; transition: border-color 0.2s; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+.form-group textarea { min-height: 120px; font-family: monospace; font-size: 12px; resize: vertical; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; justify-content: center; align-items: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--card); border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,0.15); padding: 28px; width: 420px; max-width: 90vw; }
+.modal-title { font-family: Georgia, serif; font-size: 18px; color: var(--primary); margin-bottom: 20px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+/* Stats bar */
+.stats-bar { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.stat-chip { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 20px; display: flex; align-items: center; gap: 10px; }
+.stat-num { font-family: Georgia, serif; font-size: 22px; font-weight: 700; }
+.stat-label { font-size: 12px; color: var(--text-sec); }
+.stat-num.fast { color: var(--secondary); }
+.stat-num.slow { color: var(--primary); }
+.stat-num.total { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="#">运营总览</a>
+    <a class="nav-tab" href="#">记录中心</a>
+    <a class="nav-tab" href="#">系统配置</a>
+    <a class="nav-tab" href="#">统计分析</a>
+    <a class="nav-tab" href="#">用户管理</a>
+    <a class="nav-tab" href="#">异常事件</a>
+    <a class="nav-tab active" href="#">设备管理</a>
+    <a class="nav-tab" href="#">报表导出</a>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">🔔 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="main">
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">充电桩设备管理</h1>
+    <div class="action-bar">
+      <button class="btn btn-accent" onclick="openQuickInit()">⚙ 快速初始化</button>
+      <button class="btn btn-primary" onclick="openAddModal()">+ 新增设备</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-chip"><div><div class="stat-num total" id="statTotal">5</div><div class="stat-label">设备总数</div></div></div>
+    <div class="stat-chip"><div><div class="stat-num fast" id="statFast">2</div><div class="stat-label">快充桩</div></div></div>
+    <div class="stat-chip"><div><div class="stat-num slow" id="statSlow">3</div><div class="stat-label">慢充桩</div></div></div>
+    <div class="stat-chip"><div><div class="stat-num" style="color:#28a745" id="statOnline">4</div><div class="stat-label">在线</div></div></div>
+  </div>
+
+  <!-- Device Cards -->
+  <div class="cards-grid" id="cardsGrid"></div>
+
+  <!-- Quick Init Section -->
+  <div class="section" id="quickInitSection" style="display:none;">
+    <h3 class="section-title">⚙ 场景快速初始化</h3>
+    <p style="font-size:13px;color:var(--text-sec);margin-bottom:14px;">根据场景快速生成充电桩配置，将替换当前列表。</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>快充桩数量</label>
+        <input type="number" id="initFastCount" value="2" min="0" style="width:100px">
+      </div>
+      <div class="form-group">
+        <label>快充功率 (kW)</label>
+        <input type="number" id="initFastPower" value="30" min="1" style="width:100px">
+      </div>
+      <div class="form-group">
+        <label>慢充桩数量</label>
+        <input type="number" id="initSlowCount" value="3" min="0" style="width:100px">
+      </div>
+      <div class="form-group">
+        <label>慢充功率 (kW)</label>
+        <input type="number" id="initSlowPower" value="7" min="1" style="width:100px">
+      </div>
+      <button class="btn btn-accent" onclick="quickInit()">生成配置</button>
+      <button class="btn btn-outline" onclick="document.getElementById('quickInitSection').style.display='none'">取消</button>
+    </div>
+  </div>
+
+  <!-- Import Snapshot Section -->
+  <div class="section">
+    <h3 class="section-title">📥 导入验收快照</h3>
+    <p style="font-size:13px;color:var(--text-sec);margin-bottom:14px;">粘贴 JSON 格式的桩级初始状态快照，用于验收导入。</p>
+    <div class="form-group" style="margin-bottom:14px;">
+      <textarea id="snapshotJson" placeholder='[{"station_code":"FAST_01","type":"快充","power":30,"status":"空闲","enabled":true}]'></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="importSnapshot()">导入快照</button>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3 class="modal-title">新增充电桩</h3>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>桩编号</label>
+      <input type="text" id="addCode" placeholder="例: FAST_03">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>类型</label>
+      <select id="addType"><option value="快充">快充</option><option value="慢充">慢充</option></select>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>额定功率 (kW)</label>
+      <input type="number" id="addPower" value="30" min="1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('addModal')">取消</button>
+      <button class="btn btn-primary" onclick="addDevice()">确认新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3 class="modal-title">编辑充电桩</h3>
+    <input type="hidden" id="editIndex">
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>桩编号</label>
+      <input type="text" id="editCode">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>类型</label>
+      <select id="editType"><option value="快充">快充</option><option value="慢充">慢充</option></select>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>额定功率 (kW)</label>
+      <input type="number" id="editPower" min="1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('editModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveEdit()">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let devices = [
+  { station_code: 'FAST_01', type: '快充', power: 30, status: '空闲', enabled: true },
+  { station_code: 'FAST_02', type: '快充', power: 30, status: '充电中', enabled: true },
+  { station_code: 'SLOW_01', type: '慢充', power: 7, status: '空闲', enabled: true },
+  { station_code: 'SLOW_02', type: '慢充', power: 7, status: '空闲', enabled: true },
+  { station_code: 'SLOW_03', type: '慢充', power: 7, status: '离线', enabled: false },
+];
+
+const statusMap = { '空闲': 'online', '充电中': 'charging', '离线': 'offline', '故障': 'fault' };
+const statusLabel = { '空闲': '空闲待机', '充电中': '正在充电', '离线': '已离线', '故障': '设备故障' };
+
+function render() {
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = devices.map((d, i) => `
+    <div class="device-card">
+      <div class="card-header">
+        <span class="card-code">${d.station_code}</span>
+        <span class="card-type ${d.type === '快充' ? 'type-fast' : 'type-slow'}">${d.type}</span>
+      </div>
+      <div class="card-info">
+        <div class="card-info-row"><span class="card-info-label">额定功率</span><span class="card-info-value">${d.power} kW</span></div>
+      </div>
+      <div class="card-status">
+        <span class="status-dot ${statusMap[d.status] || 'offline'}"></span>
+        <span>${statusLabel[d.status] || d.status}</span>
+      </div>
+      <div class="card-actions" style="justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="openEditModal(${i})">编辑</button>
+        </div>
+        <label class="toggle" title="${d.enabled ? '点击停用' : '点击启用'}">
+          <input type="checkbox" ${d.enabled ? 'checked' : ''} onchange="toggleDevice(${i})">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('statTotal').textContent = devices.length;
+  document.getElementById('statFast').textContent = devices.filter(d => d.type === '快充').length;
+  document.getElementById('statSlow').textContent = devices.filter(d => d.type === '慢充').length;
+  document.getElementById('statOnline').textContent = devices.filter(d => d.enabled && d.status !== '离线').length;
+}
+
+function openAddModal() { document.getElementById('addModal').classList.add('active'); }
+function openQuickInit() { document.getElementById('quickInitSection').style.display = 'block'; }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function addDevice() {
+  const code = document.getElementById('addCode').value.trim();
+  const type = document.getElementById('addType').value;
+  const power = parseInt(document.getElementById('addPower').value);
+  if (!code) { alert('请输入桩编号'); return; }
+  devices.push({ station_code: code, type, power, status: '空闲', enabled: true });
+  closeModal('addModal');
+  document.getElementById('addCode').value = '';
+  render();
+}
+
+function openEditModal(i) {
+  document.getElementById('editIndex').value = i;
+  document.getElementById('editCode').value = devices[i].station_code;
+  document.getElementById('editType').value = devices[i].type;
+  document.getElementById('editPower').value = devices[i].power;
+  document.getElementById('editModal').classList.add('active');
+}
+
+function saveEdit() {
+  const i = parseInt(document.getElementById('editIndex').value);
+  devices[i].station_code = document.getElementById('editCode').value.trim();
+  devices[i].type = document.getElementById('editType').value;
+  devices[i].power = parseInt(document.getElementById('editPower').value);
+  closeModal('editModal');
+  render();
+}
+
+function toggleDevice(i) {
+  devices[i].enabled = !devices[i].enabled;
+  if (!devices[i].enabled) devices[i].status = '离线';
+  else devices[i].status = '空闲';
+  render();
+}
+
+function quickInit() {
+  const fc = parseInt(document.getElementById('initFastCount').value) || 0;
+  const fp = parseInt(document.getElementById('initFastPower').value) || 30;
+  const sc = parseInt(document.getElementById('initSlowCount').value) || 0;
+  const sp = parseInt(document.getElementById('initSlowPower').value) || 7;
+  devices = [];
+  for (let i = 1; i <= fc; i++) devices.push({ station_code: `FAST_${String(i).padStart(2,'0')}`, type: '快充', power: fp, status: '空闲', enabled: true });
+  for (let i = 1; i <= sc; i++) devices.push({ station_code: `SLOW_${String(i).padStart(2,'0')}`, type: '慢充', power: sp, status: '空闲', enabled: true });
+  document.getElementById('quickInitSection').style.display = 'none';
+  render();
+}
+
+function importSnapshot() {
+  const raw = document.getElementById('snapshotJson').value.trim();
+  if (!raw) { alert('请粘贴 JSON 数据'); return; }
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) throw new Error('格式错误');
+    devices = data.map(d => ({
+      station_code: d.station_code || d.code || '',
+      type: d.type || '慢充',
+      power: d.power || 7,
+      status: d.status || '空闲',
+      enabled: d.enabled !== false
+    }));
+    render();
+    alert('导入成功，共 ' + devices.length + ' 台设备');
+  } catch (e) { alert('JSON 解析失败: ' + e.message); }
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+
+render();
+</script>
+</body>
+</html>

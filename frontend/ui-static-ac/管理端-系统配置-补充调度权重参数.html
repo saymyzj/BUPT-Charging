@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统配置 - 补充调度权重参数 | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5;
+  --card: #ffffff;
+  --primary: #2d6a4f;
+  --secondary: #c45d3e;
+  --accent: #d4a853;
+  --text: #2c2c2c;
+  --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08);
+  --nav-bg: #f5f0e8;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(circle, rgba(160,140,110,0.06) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+body > * { position: relative; z-index: 1; }
+h1, h2, h3, h4 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ===== NAV ===== */
+.topnav {
+  background: var(--nav-bg);
+  border-bottom: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topnav-brand {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.topnav-tabs {
+  display: flex;
+  gap: 0;
+  height: 100%;
+}
+.topnav-tab {
+  padding: 0 20px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-sec);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.topnav-tab:hover {
+  color: var(--primary);
+  background: rgba(45,106,79,0.05);
+}
+.topnav-tab.active {
+  color: var(--primary);
+  font-weight: 600;
+  border-bottom-color: var(--primary);
+}
+
+/* ===== LAYOUT ===== */
+.page-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+.page-title {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.page-subtitle {
+  color: var(--text-sec);
+  font-size: 14px;
+  margin-bottom: 28px;
+}
+
+/* ===== CARD ===== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 32px;
+  margin-bottom: 24px;
+}
+.card-title {
+  font-size: 17px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-title .icon {
+  font-size: 20px;
+}
+
+/* ===== NEW badge & highlight ===== */
+.card-new {
+  border: 2px dashed var(--primary);
+  position: relative;
+}
+.badge-new {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+.section-new {
+  border: 2px dashed var(--primary);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-top: 16px;
+  position: relative;
+}
+.section-new-label {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+/* ===== FORM ROWS ===== */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 32px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.form-label .unit {
+  font-weight: 400;
+  color: var(--text-sec);
+  font-size: 12px;
+}
+.form-desc {
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-bottom: 2px;
+}
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fafafa;
+  color: var(--text);
+  transition: border-color 0.2s;
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #fff;
+}
+
+/* ===== SLIDER ROW ===== */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.slider-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+  height: 6px;
+}
+.slider-row input[type="number"] {
+  width: 72px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+  background: #fafafa;
+}
+.slider-row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #fff;
+}
+
+/* ===== WEIGHT PARAM ROW ===== */
+.weight-param {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 8px 16px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0ece6;
+}
+.weight-param:last-child { border-bottom: none; }
+.weight-symbol {
+  font-family: Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  text-align: center;
+  line-height: 1.4;
+}
+.weight-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.weight-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.weight-desc {
+  font-size: 12px;
+  color: var(--text-sec);
+}
+
+/* ===== FORMULA ===== */
+.formula-box {
+  background: #f8f6f1;
+  border: 1px solid #e8e2d8;
+  border-left: 4px solid var(--primary);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  color: var(--text);
+  overflow-x: auto;
+  line-height: 1.8;
+}
+.formula-box .label {
+  font-family: -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-sec);
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6px;
+}
+.formula-box .var-a { color: #2d6a4f; font-weight: 700; }
+.formula-box .var-b { color: #3a7ca5; font-weight: 700; }
+.formula-box .var-c { color: #c45d3e; font-weight: 700; }
+.formula-box .var-d { color: #d4a853; font-weight: 700; }
+.formula-box .var-e { color: #8b5e3c; font-weight: 700; }
+
+/* ===== TABLE ===== */
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.log-table thead th {
+  background: #f8f6f1;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-sec);
+  border-bottom: 2px solid #e8e2d8;
+}
+.log-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0ece6;
+  color: var(--text);
+}
+.log-table tbody tr:hover {
+  background: #faf8f4;
+}
+.log-tag {
+  display: inline-block;
+  background: rgba(45,106,79,0.1);
+  color: var(--primary);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* ===== TOOLTIP ===== */
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #eee;
+  color: var(--text-sec);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+  position: relative;
+}
+.tooltip-icon:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 10;
+  max-width: 280px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* ===== BUTTON ===== */
+.btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 10px 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-save:hover { background: #245a42; }
+.action-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+}
+.btn-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid #ddd;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.btn-reset:hover { border-color: var(--secondary); color: var(--secondary); }
+
+/* ===== PRICING TABLE ===== */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.pricing-cell {
+  background: #faf8f4;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+.pricing-cell .period {
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-bottom: 4px;
+}
+.pricing-cell .time {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.pricing-cell .price {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.pricing-cell .price .unit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-sec);
+}
+.pricing-cell.peak { border-left: 3px solid var(--secondary); }
+.pricing-cell.normal { border-left: 3px solid var(--accent); }
+.pricing-cell.valley { border-left: 3px solid var(--primary); }
+</style>
+</head>
+<body>
+
+<!-- ===== TOP NAV ===== -->
+<nav class="topnav">
+  <div class="topnav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="topnav-tabs">
+    <div class="topnav-tab">运营总览</div>
+    <div class="topnav-tab">记录中心</div>
+    <div class="topnav-tab active">系统配置</div>
+    <div class="topnav-tab">统计分析</div>
+    <div class="topnav-tab">用户管理</div>
+    <div class="topnav-tab">异常事件</div>
+    <div class="topnav-tab">设备管理</div>
+    <div class="topnav-tab">报表导出</div>
+  </div>
+</nav>
+
+<div class="page-container">
+  <h1 class="page-title">系统配置</h1>
+  <p class="page-subtitle">管理充电桩硬件、调度算法、队列策略和计费参数。标注 <span class="badge-new">新增</span> 的区域为本次补充的调度权重参数（F-A02）。</p>
+
+  <!-- ============================== -->
+  <!-- 1. 充电桩硬件配置 (EXISTING)    -->
+  <!-- ============================== -->
+  <div class="card">
+    <h3 class="card-title"><span class="icon">🔌</span> 充电桩硬件配置</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">快充桩数量</label>
+        <input class="form-input" type="number" value="2" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">慢充桩数量</label>
+        <input class="form-input" type="number" value="3" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">快充功率 <span class="unit">(kW)</span></label>
+        <input class="form-input" type="number" value="120" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">慢充功率 <span class="unit">(kW)</span></label>
+        <input class="form-input" type="number" value="7" min="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 2. 调度与队列参数 (EXISTING → 升级为F-A02完整参数)             -->
+  <!-- 原页面仅有: 等候区最大容量(6), 叫号无响应超时(5min), 故障重试(3) -->
+  <!-- 本次补充: 统一为F-A02规范参数名, 并新增缺失的时间阈值与容量参数  -->
+  <!-- ============================================================ -->
+  <div class="card">
+    <h3 class="card-title"><span class="icon">📋</span> 调度与队列参数</h3>
+
+    <!-- 原有字段: 故障相关(保留) -->
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">故障自动重试次数</label>
+        <input class="form-input" type="number" value="3" min="0">
+      </div>
+    </div>
+
+    <!-- NEW: 替换原"等候区最大容量"为F-A02规范的容量参数组 -->
+    <div class="section-new" style="margin-top: 24px;">
+      <div class="section-new-label">新增(替换原"等候区最大容量")</div>
+      <h4 style="font-size: 15px; margin-bottom: 6px; margin-top: 4px;">等待区容量参数</h4>
+      <p class="form-desc" style="margin-bottom: 14px;">waiting_area_capacity 为系统全局等候区容量，由快充等待池和慢充等待池共享。原页面"等候区最大容量"字段升级为此处两个参数。</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">waiting_area_capacity <span class="tooltip-icon" data-tip="快充池和慢充池共享的等待区车位总容量">?</span></label>
+          <div class="form-desc">等待区车位总容量（快充池+慢充池共享）</div>
+          <input class="form-input" type="number" value="10" min="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">station_queue_capacity <span class="tooltip-icon" data-tip="每个充电桩前可排队的车辆数，可选参数">?</span></label>
+          <div class="form-desc">每个桩统一排队容量（可选）</div>
+          <input class="form-input" type="number" value="3" min="0">
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW: 替换原"叫号无响应超时"为F-A02规范的完整时间阈值参数组 -->
+    <div class="section-new" style="margin-top: 24px;">
+      <div class="section-new-label">新增(替换原"叫号无响应超时")</div>
+      <h4 style="font-size: 15px; margin-bottom: 6px; margin-top: 4px;">时间阈值参数</h4>
+      <p class="form-desc" style="margin-bottom: 14px;">原页面仅有"叫号无响应超时"一个字段，现按F-A02规范展开为完整的5个时间阈值参数。</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">T_call <span class="unit">(分钟)</span> <span class="tooltip-icon" data-tip="预计充电完成前多久开始叫号下一位用户">?</span></label>
+          <div class="form-desc">提前叫号阈值</div>
+          <input class="form-input" type="number" value="5" min="0" step="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">confirm_timeout <span class="unit">(分钟)</span> <span class="tooltip-icon" data-tip="叫号后用户需在此时间内确认，否则视为过号">?</span></label>
+          <div class="form-desc">确认超时时间（原"叫号无响应超时"）</div>
+          <input class="form-input" type="number" value="3" min="1" step="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">arrival_timeout <span class="unit">(分钟)</span> <span class="tooltip-icon" data-tip="确认后用户需在此时间内到达充电桩，否则释放桩位">?</span></label>
+          <div class="form-desc">到场超时时间</div>
+          <input class="form-input" type="number" value="5" min="1" step="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">leave_buffer <span class="unit">(分钟)</span> <span class="tooltip-icon" data-tip="充电完成后用户挪车的缓冲时间，超时开始计占位费">?</span></label>
+          <div class="form-desc">挪车缓冲时间</div>
+          <input class="form-input" type="number" value="10" min="0" step="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">setup_time <span class="unit">(分钟)</span> <span class="tooltip-icon" data-tip="用户到达桩位后插枪、刷卡等固定接入时间常数">?</span></label>
+          <div class="form-desc">固定接入时间常数</div>
+          <input class="form-input" type="number" value="1" min="0" step="0.5">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 3. 计费策略配置 (EXISTING)       -->
+  <!-- ============================== -->
+  <div class="card">
+    <h3 class="card-title"><span class="icon">💰</span> 计费策略配置</h3>
+    <div class="pricing-grid">
+      <div class="pricing-cell peak">
+        <div class="period">峰时段</div>
+        <div class="time">10:00 - 15:00, 18:00 - 21:00</div>
+        <div class="price">1.0 <span class="unit">元/度</span></div>
+      </div>
+      <div class="pricing-cell normal">
+        <div class="period">平时段</div>
+        <div class="time">07:00 - 10:00, 15:00 - 18:00, 21:00 - 23:00</div>
+        <div class="price">0.7 <span class="unit">元/度</span></div>
+      </div>
+      <div class="pricing-cell valley">
+        <div class="period">谷时段</div>
+        <div class="time">23:00 - 07:00</div>
+        <div class="price">0.4 <span class="unit">元/度</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 4. 调度算法权重参数 (NEW)        -->
+  <!-- ============================== -->
+  <div class="card card-new">
+    <h3 class="card-title">
+      <span class="icon">⚙️</span> 调度算法权重参数
+      <span class="badge-new">新增</span>
+    </h3>
+
+    <!-- Formula -->
+    <div class="formula-box">
+      <span class="label">调度优先级公式 (F-A02)</span>
+      priority(u) = <span class="var-a">a</span> * wait_time + <span class="var-b">b</span> * retry_bonus + <span class="var-c">c</span> * fault_bonus - <span class="var-d">d</span> * service_time - <span class="var-e">e</span> * no_show_penalty
+    </div>
+
+    <!-- Weight: a -->
+    <div class="weight-param">
+      <div class="weight-symbol">a</div>
+      <div class="weight-content">
+        <div class="weight-name">等待时间权重 <span class="tooltip-icon" data-tip="用户在等待区等待的时间越长，优先级越高">?</span></div>
+        <div class="weight-desc">wait_time 系数，值越大则等待越久的用户优先级越高</div>
+        <div class="slider-row">
+          <input type="range" min="0" max="3" step="0.1" value="1.0" oninput="this.nextElementSibling.value=this.value">
+          <input type="number" min="0" max="3" step="0.1" value="1.0" oninput="this.previousElementSibling.value=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- Weight: b -->
+    <div class="weight-param">
+      <div class="weight-symbol">b</div>
+      <div class="weight-content">
+        <div class="weight-name">重试补偿权重 <span class="tooltip-icon" data-tip="因充电桩故障被迫重新排队的用户获得额外优先级补偿">?</span></div>
+        <div class="weight-desc">retry_bonus 系数，补偿因桩故障重试的用户</div>
+        <div class="slider-row">
+          <input type="range" min="0" max="3" step="0.1" value="0.5" oninput="this.nextElementSibling.value=this.value">
+          <input type="number" min="0" max="3" step="0.1" value="0.5" oninput="this.previousElementSibling.value=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- Weight: c -->
+    <div class="weight-param">
+      <div class="weight-symbol">c</div>
+      <div class="weight-content">
+        <div class="weight-name">故障补偿权重 <span class="tooltip-icon" data-tip="充电过程中遭遇桩故障的用户获得的优先补偿系数">?</span></div>
+        <div class="weight-desc">fault_bonus 系数，补偿充电中遇到故障的用户</div>
+        <div class="slider-row">
+          <input type="range" min="0" max="3" step="0.1" value="1.0" oninput="this.nextElementSibling.value=this.value">
+          <input type="number" min="0" max="3" step="0.1" value="1.0" oninput="this.previousElementSibling.value=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- Weight: d -->
+    <div class="weight-param">
+      <div class="weight-symbol">d</div>
+      <div class="weight-content">
+        <div class="weight-name">服务时间权重 <span class="tooltip-icon" data-tip="预估充电服务时间越长，优先级适当降低，避免长时间占桩">?</span></div>
+        <div class="weight-desc">service_time 系数（负向），减少长服务时间用户的优先级</div>
+        <div class="slider-row">
+          <input type="range" min="0" max="3" step="0.1" value="0.8" oninput="this.nextElementSibling.value=this.value">
+          <input type="number" min="0" max="3" step="0.1" value="0.8" oninput="this.previousElementSibling.value=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- Weight: e -->
+    <div class="weight-param">
+      <div class="weight-symbol">e</div>
+      <div class="weight-content">
+        <div class="weight-name">过号惩罚权重 <span class="tooltip-icon" data-tip="用户曾经过号（叫号未响应）则降低其优先级，防止反复占位">?</span></div>
+        <div class="weight-desc">no_show_penalty 系数（负向），惩罚过号用户</div>
+        <div class="slider-row">
+          <input type="range" min="0" max="3" step="0.1" value="0.3" oninput="this.nextElementSibling.value=this.value">
+          <input type="number" min="0" max="3" step="0.1" value="0.3" oninput="this.previousElementSibling.value=this.value">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 5. 参数变更日志 (NEW)           -->
+  <!-- ============================== -->
+  <div class="card card-new">
+    <h3 class="card-title">
+      <span class="icon">📝</span> 参数变更日志
+      <span class="badge-new">新增</span>
+    </h3>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>参数名称</th>
+          <th>旧值</th>
+          <th>新值</th>
+          <th>操作人</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-04-09 14:32:10</td>
+          <td><span class="log-tag">a (等待时间权重)</span></td>
+          <td>0.8</td>
+          <td>1.0</td>
+          <td>admin</td>
+        </tr>
+        <tr>
+          <td>2026-04-09 14:32:10</td>
+          <td><span class="log-tag">d (服务时间权重)</span></td>
+          <td>0.5</td>
+          <td>0.8</td>
+          <td>admin</td>
+        </tr>
+        <tr>
+          <td>2026-04-08 09:15:43</td>
+          <td><span class="log-tag">confirm_timeout</span></td>
+          <td>5</td>
+          <td>3</td>
+          <td>admin</td>
+        </tr>
+        <tr>
+          <td>2026-04-07 16:20:01</td>
+          <td><span class="log-tag">waiting_area_capacity</span></td>
+          <td>6</td>
+          <td>10</td>
+          <td>admin</td>
+        </tr>
+        <tr>
+          <td>2026-04-06 11:05:30</td>
+          <td><span class="log-tag">leave_buffer</span></td>
+          <td>15</td>
+          <td>10</td>
+          <td>admin</td>
+        </tr>
+        <tr>
+          <td>2026-04-05 08:45:12</td>
+          <td><span class="log-tag">e (过号惩罚权重)</span></td>
+          <td>0.5</td>
+          <td>0.3</td>
+          <td>admin</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== ACTION BAR ===== -->
+  <div class="action-bar">
+    <button class="btn-reset">重置为默认值</button>
+    <button class="btn-save">💾 保存配置</button>
+  </div>
+</div>
+
+</body>
+</html>

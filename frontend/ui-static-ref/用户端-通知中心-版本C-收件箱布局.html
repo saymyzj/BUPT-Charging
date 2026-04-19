@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通知中心 - 收件箱布局 (版本C)</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1,h2,h3,h4,h5 { font-family: Georgia, serif; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 56px; }
+.nav-brand { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab { padding: 8px 22px; border-radius: 8px; font-size: 15px; color: var(--text-sec); cursor: pointer; transition: all 0.2s; text-decoration: none; }
+.nav-tab:hover { color: var(--text); background: rgba(45,106,79,0.06); }
+.nav-tab.active { color: var(--primary); font-weight: 600; background: rgba(45,106,79,0.1); }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--text-sec); }
+.nav-right .logout { color: var(--secondary); cursor: pointer; }
+
+/* INBOX LAYOUT */
+.inbox-layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+
+/* LEFT: Message List */
+.msg-list-panel { width: 400px; min-width: 340px; background: var(--card); border-right: 1px solid #e8e0d8; display: flex; flex-direction: column; }
+.msg-list-header { padding: 16px 20px; border-bottom: 1px solid #ebe6de; }
+.msg-list-header h3 { font-size: 18px; color: var(--primary); margin-bottom: 12px; }
+.msg-toolbar { display: flex; gap: 8px; align-items: center; }
+.filter-tab { padding: 5px 14px; border-radius: 16px; font-size: 12px; border: 1px solid #ddd; background: var(--card); cursor: pointer; color: var(--text-sec); transition: all 0.2s; white-space: nowrap; }
+.filter-tab:hover { border-color: var(--primary); color: var(--primary); }
+.filter-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-tab .count { font-size: 10px; opacity: 0.8; margin-left: 2px; }
+.msg-batch-actions { margin-left: auto; display: flex; gap: 8px; }
+.batch-btn { padding: 5px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 11px; background: var(--card); cursor: pointer; color: var(--text-sec); transition: all 0.2s; }
+.batch-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+.msg-list { flex: 1; overflow-y: auto; }
+.msg-list::-webkit-scrollbar { width: 4px; }
+.msg-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+
+.msg-item { padding: 14px 20px; cursor: pointer; border-bottom: 1px solid #f5f0e8; transition: background 0.15s; display: flex; gap: 12px; border-left: 3px solid transparent; }
+.msg-item:hover { background: #faf6f0; }
+.msg-item.selected { background: rgba(45,106,79,0.05); border-left-color: var(--primary); }
+.msg-item.unread { background: #fffcf5; }
+.msg-item.unread .msg-title { font-weight: 700; }
+
+.msg-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.msg-dot.unread { background: var(--accent); }
+.msg-dot.read { background: transparent; }
+
+.msg-body { flex: 1; min-width: 0; }
+.msg-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.msg-title { font-size: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.msg-time { font-size: 11px; color: var(--text-sec); white-space: nowrap; }
+.msg-preview { font-size: 12px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+.msg-type-badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.msg-type-badge.call { background: rgba(212,168,83,0.15); color: #b8922e; }
+.msg-type-badge.done { background: rgba(45,106,79,0.1); color: var(--primary); }
+.msg-type-badge.warn { background: rgba(196,93,62,0.1); color: var(--secondary); }
+.msg-type-badge.move { background: rgba(100,100,200,0.1); color: #555; }
+.msg-type-badge.noshow { background: #fce4ec; color: #c62828; }
+.msg-type-badge.update { background: #e3f2fd; color: #1565c0; }
+
+/* RIGHT: Detail */
+.msg-detail-panel { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.msg-detail-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-sec); font-size: 15px; }
+
+.msg-detail { padding: 32px 40px; }
+.detail-top { margin-bottom: 28px; }
+.detail-type-badge { display: inline-block; font-size: 12px; padding: 4px 12px; border-radius: 14px; font-weight: 600; margin-bottom: 12px; }
+.detail-title { font-size: 22px; color: var(--text); margin-bottom: 8px; }
+.detail-meta { font-size: 13px; color: var(--text-sec); display: flex; gap: 20px; }
+
+.detail-content { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 20px; }
+.detail-content p { font-size: 14px; line-height: 1.8; margin-bottom: 12px; }
+.detail-content p:last-child { margin-bottom: 0; }
+
+.detail-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #ebe6de; }
+.detail-info-item { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; }
+.detail-info-item .label { color: var(--text-sec); }
+.detail-info-item .value { font-weight: 600; }
+
+.detail-actions { display: flex; gap: 10px; }
+.action-btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.action-btn.primary { background: var(--primary); color: #fff; }
+.action-btn.primary:hover { background: #245a42; }
+.action-btn.outline { background: transparent; border: 1px solid #ddd; color: var(--text); }
+.action-btn.outline:hover { border-color: var(--primary); color: var(--primary); }
+.action-btn.danger { background: transparent; border: 1px solid var(--secondary); color: var(--secondary); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统</div>
+  <div class="nav-tabs">
+    <span class="nav-tab">工作台</span>
+    <span class="nav-tab">当前任务</span>
+    <span class="nav-tab active">通知中心</span>
+    <span class="nav-tab">账户中心</span>
+  </div>
+  <div class="nav-right">
+    <span>🔔 通知(6)</span>
+    <span>用户: 张三</span>
+    <span class="logout">退出</span>
+    <span style="font-weight:600;color:var(--primary)">14:23:45</span>
+  </div>
+</nav>
+
+<!-- INBOX LAYOUT -->
+<div class="inbox-layout">
+  <!-- LEFT: Compact Message List -->
+  <div class="msg-list-panel">
+    <div class="msg-list-header">
+      <h3>通知收件箱</h3>
+      <div class="msg-toolbar">
+        <span class="filter-tab active">全部 <span class="count">10</span></span>
+        <span class="filter-tab">叫号 <span class="count">2</span></span>
+        <span class="filter-tab">充电 <span class="count">3</span></span>
+        <span class="filter-tab">异常 <span class="count">2</span></span>
+        <span class="filter-tab">系统 <span class="count">3</span></span>
+        <div class="msg-batch-actions">
+          <span class="batch-btn">全部已读</span>
+        </div>
+      </div>
+    </div>
+    <div class="msg-list">
+      <!-- Unread: 叫号提醒 (selected) -->
+      <div class="msg-item unread selected">
+        <div class="msg-dot unread"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">叫号提醒 - FAST_01</span>
+            <span class="msg-time">14:23</span>
+          </div>
+          <div class="msg-preview">您的请求 REQ-0042 已被叫号，请在3分钟内确认到场</div>
+          <span class="msg-type-badge call">叫号提醒</span>
+        </div>
+      </div>
+
+      <!-- Unread: 挪车提醒 -->
+      <div class="msg-item unread">
+        <div class="msg-dot unread"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">挪车提醒 - SLOW_02</span>
+            <span class="msg-time">14:18</span>
+          </div>
+          <div class="msg-preview">充电已完成，请在10分钟内挪车，超时将计收占位费</div>
+          <span class="msg-type-badge move">挪车提醒</span>
+        </div>
+      </div>
+
+      <!-- Unread: 异常提醒 -->
+      <div class="msg-item unread">
+        <div class="msg-dot unread"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">充电桩故障通知</span>
+            <span class="msg-time">14:10</span>
+          </div>
+          <div class="msg-preview">SLOW_03 发生故障，您的请求已自动重新排队，优先级已补偿</div>
+          <span class="msg-type-badge warn">异常提醒</span>
+        </div>
+      </div>
+
+      <!-- Read: 充满提醒 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">充电完成 - FAST_01</span>
+            <span class="msg-time">13:55</span>
+          </div>
+          <div class="msg-preview">请求 REQ-0038 充电完成，实际充电 28.5 kWh，请查看账单</div>
+          <span class="msg-type-badge done">充满提醒</span>
+        </div>
+      </div>
+
+      <!-- Read: 等待时间变更 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">等待时间更新</span>
+            <span class="msg-time">13:42</span>
+          </div>
+          <div class="msg-preview">因系统重调度，您的预计等待时间更新为约12分钟</div>
+          <span class="msg-type-badge update">时间变更</span>
+        </div>
+      </div>
+
+      <!-- Read: 过号提醒 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">过号通知</span>
+            <span class="msg-time">12:30</span>
+          </div>
+          <div class="msg-preview">请求 REQ-0035 因确认超时已标记为过号 (NO_SHOW)</div>
+          <span class="msg-type-badge noshow">过号提醒</span>
+        </div>
+      </div>
+
+      <!-- Read: 叫号提醒 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">叫号提醒 - SLOW_01</span>
+            <span class="msg-time">12:25</span>
+          </div>
+          <div class="msg-preview">您的请求 REQ-0035 已被叫号，请前往 SLOW_01</div>
+          <span class="msg-type-badge call">叫号提醒</span>
+        </div>
+      </div>
+
+      <!-- Read: 充满提醒 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">提前充满 - FAST_02</span>
+            <span class="msg-time">11:45</span>
+          </div>
+          <div class="msg-preview">请求 REQ-0031 提前充满 (COMPLETED_EARLY)，实际 22/30 kWh</div>
+          <span class="msg-type-badge done">充满提醒</span>
+        </div>
+      </div>
+
+      <!-- Read: 等待时间变更 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">等待时间更新</span>
+            <span class="msg-time">11:20</span>
+          </div>
+          <div class="msg-preview">因FAST_02提前释放，您的预计等待时间缩短至5分钟</div>
+          <span class="msg-type-badge update">时间变更</span>
+        </div>
+      </div>
+
+      <!-- Read: 异常提醒 -->
+      <div class="msg-item">
+        <div class="msg-dot read"></div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-title">故障恢复通知</span>
+            <span class="msg-time">10:50</span>
+          </div>
+          <div class="msg-preview">SLOW_03 已恢复正常运行，重新参与调度</div>
+          <span class="msg-type-badge warn">异常提醒</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Selected Message Detail -->
+  <div class="msg-detail-panel">
+    <div class="msg-detail">
+      <div class="detail-top">
+        <span class="detail-type-badge" style="background:rgba(212,168,83,0.15);color:#b8922e;">叫号提醒</span>
+        <div class="detail-title">叫号提醒 - FAST_01 已就绪</div>
+        <div class="detail-meta">
+          <span>时间: 2026-04-10 14:23:00</span>
+          <span>状态: 未读</span>
+          <span>关联请求: REQ-0042</span>
+        </div>
+      </div>
+
+      <div class="detail-content">
+        <p>您的充电请求 <strong>REQ-0042</strong> 已被系统叫号。充电桩 <strong>FAST_01</strong>（快充 30kW）即将可用，请在 <strong>3 分钟</strong>内确认到场。</p>
+        <p>如未在规定时间内确认，系统将自动判定为过号 (NO_SHOW)，并将机会分配给下一位等待用户。</p>
+        <p>请按照站内导航指引前往 FAST_01 所在位置，到达后在系统中点击"确认到场"完成确认。</p>
+
+        <div class="detail-info-grid">
+          <div class="detail-info-item">
+            <span class="label">请求编号</span>
+            <span class="value">REQ-0042</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">充电模式</span>
+            <span class="value">快充 (FAST)</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">分配桩号</span>
+            <span class="value" style="color:var(--primary)">FAST_01</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">申报电量</span>
+            <span class="value">30 kWh</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">叫号时间</span>
+            <span class="value">14:23:00</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">确认截止</span>
+            <span class="value" style="color:var(--secondary)">14:26:00 (剩余 2:45)</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">当前状态</span>
+            <span class="value">CALLED（已叫号）</span>
+          </div>
+          <div class="detail-info-item">
+            <span class="label">请求状态</span>
+            <span class="value">等待用户确认到场</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-actions">
+        <button class="action-btn primary">确认到场</button>
+        <button class="action-btn outline">标记已读</button>
+        <button class="action-btn danger">取消排队</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

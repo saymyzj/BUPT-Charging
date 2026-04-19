@@ -5,10 +5,11 @@
 本项目当前已经从“联合验收”口径切换到“最终验收 / 系统验收”口径，核心设计围绕以下目标展开：
 
 - 支持快充 / 慢充两类请求
-- 充电桩数量作为验收时可灵活设置的超参数
-- 支持等待区容量、队列参数、桩级初始状态快照等场景化输入
-- 内部采用中央等待池 + 动态调度
-- 对外兼容两种“充电桩排队队列长度”解释
+- 支持 `fast_station_count`、`slow_station_count`、`waiting_area_capacity`、`charging_queue_len` 等场景化参数
+- 正式运行模型为“等候区 + 充电区 + 每桩固定长度队列”
+- 普通调度遵循“同模式等候区头车优先 + 同模式最短完成时长分配”
+- 支持 `NORMAL`、`EXT_SINGLE_BATCH`、`EXT_FULL_BATCH` 三种调度模式
+- 支持 `PRIORITY`、`TIME_ORDER` 两种故障策略
 - 输出统一详单、账单与评测指标
 
 技术栈当前定稿为：
@@ -16,7 +17,7 @@
 - 前端：Vue
 - 后端：Python + Flask
 - 数据库：SQLite
-- 通信：HTTP + JSON
+- 通信：HTTPS + JSON
 
 ---
 
@@ -29,33 +30,33 @@
 1. 快充桩数量、慢充桩数量是可配置超参数
 2. 一般调度目标是让单个用户本次总时长最短
 3. 扩展调度目标是让多台车辆总时长尽量最短
-4. 测试用例会给出快慢充桩数量、等待区车位容量、以及“充电桩排队队列长度”相关描述
+4. 测试用例会给出快慢充桩数量、等待区容量、每桩固定队列长度以及调度模式相关场景参数
 5. 不再进行多组联合验收
 
 ### 2. 当前系统设计选择
 
 当前项目内部采用：
 
-- `FAST_POOL`：快充等待池
-- `SLOW_POOL`：慢充等待池
-- 动态分配最终桩号
-- 事件驱动重调度
+- 等候区
+- 充电区
+- 每个充电桩一条固定长度为 `charging_queue_len` 的队列
+- 等候区按快充 / 慢充分别维护 `F/T` 排队号顺序
+- 事件驱动调度与重调度
 
-同时，对外输入兼容两种队列描述：
+当前 README 只保留 V3.0 冻结后的正式口径：
 
-1. `UNIFORM_CAPACITY`
-说明：题目给出统一“队列长度”，解释为每个桩的统一排队容量上限
-
-2. `STATION_SNAPSHOT`
-说明：题目直接给出某个桩正在充电、有几人排队、某个桩空闲等状态快照
+1. 不再以“中央等待池 + 动态分配”作为正式模型
+2. `charging_queue_len` 包含队首正在充电的位置
+3. 普通模式下先取同模式等候区头车，再在同模式桩中选完成时间最短的目标桩
+4. 故障恢复统一按时间顺序重排
 
 ### 3. 等候区容量口径
 
 当前文档已经统一为：
 
 - `waiting_area_capacity` 表示系统全局等候区总容量
-- 快充等待池和慢充等待池共享该容量
-- 不是快充池和慢充池分别独立拥有一个容量
+- 快充 / 慢充请求共享该容量，但分别维护 `F/T` 排队顺序
+- 不是快充区和慢充区分别独立拥有一个等待区容量
 
 ---
 
@@ -69,7 +70,11 @@
 4. [系统验收接口与测试输入规范说明](./docs/系统验收接口与测试输入规范说明.md)
 5. [冻结接口文档](./docs/冻结接口文档.md)
 6. [小组分工指南](./docs/小组分工指南.md)
-7. [智能充电桩调度计费系统_增量模型前提条件确认文档_V4](./docs/智能充电桩调度计费系统_增量模型前提条件确认文档_V4.md)
+7. [需求调整与重构冻结说明](./docs/需求调整与重构冻结说明.md)
+8. [增量设计](./docs/增量设计.md)
+9. [调度模块输入输出约定](./docs/调度模块输入输出约定.md)
+10. [故障与扩展场景指南](./docs/故障与扩展场景指南.md)
+11. [部署上线手册](./docs/部署上线手册.md)
 
 ---
 
@@ -79,8 +84,8 @@
 
 当前静态参考稿主要放在：
 
-- `front/ui-static-ac/`
-- `front/ui-static-ref/`
+- `frontend/ui-static-ac/`
+- `frontend/ui-static-ref/`
 
 它们的用途是：
 
@@ -117,9 +122,29 @@
 
 当前阶段约定：
 
-- `main` 和 `develop` 应保持一致
+- `main` 只保留稳定里程碑与最终答辩版本
+- `develop` 作为唯一公共集成基线
 - 个人开发在各自 `feature/*` 分支进行
-- 稳定后统一合并回 `develop` 和 `main`
+- 自测通过后先合并回 `develop`，再由组长统一收口到 `main`
+
+---
+
+## 当前实现状态
+
+当前建议结合以下 5 份文档理解“当前正式口径 + 当前实现现状”：
+
+1. [需求调整与重构冻结说明](./docs/需求调整与重构冻结说明.md)
+2. [根目录 README](./README.md)
+3. [后端 README](./backend/README.md)
+4. [后端实现版文档](./backend/冻结接口文档_服务端实现版.md)
+5. [前端 README](./frontend/README.md)
+
+其中：
+
+- 根目录 `README.md` 负责说明项目总体口径、协作方式和 Prompt
+- `docs/` 下文档负责冻结后的正式需求、接口、算法、验收和部署口径
+- `backend/` 下文档负责说明后端当前真实实现与联调状态
+- `frontend/` 下文档负责说明前端当前真实实现与联调状态
 
 ---
 
@@ -175,15 +200,18 @@ git push origin <自己的分支名>
 你必须优先阅读以下内容：
 
 1. README.md
-2. docs/小组分工指南.md
-3. docs/冻结接口文档.md
-4. docs/系统验收接口与测试输入规范说明.md
-5. docs/功能设计.md
-6. docs/架构设计.md
-7. docs/调度算法.md
-8. docs/智能充电桩调度计费系统_增量模型前提条件确认文档_V4.md
-9. front/ui-static-ac/
-10. front/ui-static-ref/
+2. docs/需求调整与重构冻结说明.md
+3. docs/小组分工指南.md
+4. docs/冻结接口文档.md
+5. docs/系统验收接口与测试输入规范说明.md
+6. docs/功能设计.md
+7. docs/架构设计.md
+8. docs/调度算法.md
+9. docs/调度模块输入输出约定.md
+10. docs/故障与扩展场景指南.md
+11. docs/部署上线手册.md
+12. frontend/ui-static-ac/
+13. frontend/ui-static-ref/
 
 我的身份是“成员A / 组长”，我的固定职责是：
 
@@ -194,19 +222,20 @@ git push origin <自己的分支名>
 
 当前项目必须遵守以下关键口径：
 
-- 当前是最终验收，不再是多组联合验收
-- 快充桩数量和慢充桩数量是可配置超参数
-- waiting_area_capacity 是系统全局等候区容量，快充池和慢充池共享
-- 内部实现采用 FAST_POOL 和 SLOW_POOL 两个中央等待池
-- 对外输入必须兼容两种队列解释：
-  1. UNIFORM_CAPACITY
-  2. STATION_SNAPSHOT
-- 一般目标是单用户本次总时长最短
-- 扩展目标是多用户总完成时长尽量最短
+- 当前以 V3.0 冻结文档为唯一依据，不再回退旧文档
+- 快充桩数量、慢充桩数量、等候区容量、每桩固定队列长度是可配置参数
+- 正式运行模型是“等候区 + 每桩固定队列”，不是中央等待池
+- 快充使用 `F` 号、慢充使用 `T` 号，排队号单调递增且是顺序依据
+- 普通模式下先取同模式等候区头车，再选同模式完成时间最短的桩
+- 调度模式为 `NORMAL / EXT_SINGLE_BATCH / EXT_FULL_BATCH`
+- 故障策略为 `PRIORITY / TIME_ORDER`，故障恢复统一按时间顺序重排
+- 充电区取消 / 提前结束统一进入 `COMPLETED_EARLY`
+- 计费口径统一为 `charge_fee / service_fee / total_fee`
 
 我的工作边界是：
 
 - 主导调度算法、状态机、指标定义、输入解释规则
+- 主导部署上线口径、验收口径和答辩展示口径
 - 提供给成员C静态 HTML 参考页
 - 审查成员C提交的完整页面
 - 提出页面优化意见
@@ -247,13 +276,15 @@ git push origin <自己的分支名>
 你必须优先阅读以下内容：
 
 1. README.md
-2. docs/小组分工指南.md
-3. docs/冻结接口文档.md
-4. docs/系统验收接口与测试输入规范说明.md
-5. docs/功能设计.md
-6. docs/架构设计.md
-7. docs/调度算法.md
-8. docs/智能充电桩调度计费系统_增量模型前提条件确认文档_V4.md
+2. docs/需求调整与重构冻结说明.md
+3. docs/小组分工指南.md
+4. docs/冻结接口文档.md
+5. docs/系统验收接口与测试输入规范说明.md
+6. docs/功能设计.md
+7. docs/架构设计.md
+8. docs/调度算法.md
+9. docs/调度模块输入输出约定.md
+10. docs/故障与扩展场景指南.md
 
 我的身份是“成员B”，我的固定职责是：
 
@@ -264,14 +295,12 @@ git push origin <自己的分支名>
 当前项目必须遵守以下关键口径：
 
 - 当前是最终验收，不再是多组联合验收
-- 批量模拟输入使用 scenario + users 结构
-- waiting_area_capacity 是系统全局等候区容量，快充池和慢充池共享
-- 系统内部使用 FAST_POOL 和 SLOW_POOL 两个等待池
-- 对外输入必须兼容：
-  1. UNIFORM_CAPACITY
-  2. STATION_SNAPSHOT
-- 需要支持 fast_station_count、slow_station_count、waiting_area_capacity、station_queue_capacity 等场景参数
-- summary 至少输出 avg_wait_seconds、avg_finish_seconds、station_utilization，并建议输出 total_finish_seconds
+- 批量模拟输入使用 `test_case_id + scenario + users (+ events)` 结构
+- `waiting_area_capacity` 是系统全局等候区容量，`charging_queue_len` 是每桩固定队列长度且包含充电位
+- 系统内部正式模型是“等候区 + 每桩固定队列”，不是 FAST_POOL / SLOW_POOL 中央等待池
+- 需要支持 `fast_station_count`、`slow_station_count`、`waiting_area_capacity`、`charging_queue_len`、`dispatch_mode`、`fault_dispatch_mode`
+- 请求状态、错误码、详单字段、报表字段以冻结接口文档为准
+- 报表只支持 `day / week / month`
 
 我的工作边界是：
 
@@ -291,8 +320,8 @@ git push origin <自己的分支名>
    每个阶段都要尽量细化到接口、模块和输出物
 3. 当前批量模拟输入结构应该如何实现
 4. 场景参数初始化应该怎么做
-5. 两种队列解释该如何在服务端兼容
-6. 详单、账单、summary 应该怎么生成
+5. 等候区、桩队列、请求状态机该如何落地
+6. 详单、账单、报表该怎么生成
 7. 当前最应该优先完成的接口和模块
 8. 现在最容易出错的状态流转有哪些
 9. Git 上我每天应该怎么操作
@@ -315,14 +344,16 @@ git push origin <自己的分支名>
 你必须优先阅读以下内容：
 
 1. README.md
-2. docs/小组分工指南.md
-3. docs/冻结接口文档.md
-4. docs/系统验收接口与测试输入规范说明.md
-5. docs/功能设计.md
-6. docs/架构设计.md
-7. docs/调度算法.md
-8. front/ui-static-ac/  （已经通过审查的静态 HTML 参考页）
-9. front/ui-static-ref/ （被归档的但可做参考的静态 HTML 参考页）
+2. docs/需求调整与重构冻结说明.md
+3. docs/小组分工指南.md
+4. docs/冻结接口文档.md
+5. docs/系统验收接口与测试输入规范说明.md
+6. docs/功能设计.md
+7. docs/架构设计.md
+8. docs/调度算法.md
+9. docs/调度模块输入输出约定.md
+10. frontend/ui-static-ac/  （已经通过审查的静态 HTML 参考页）
+11. frontend/ui-static-ref/ （被归档的但可做参考的静态 HTML 参考页）
 
 我的身份是“成员C”，我的固定职责是：
 
@@ -336,9 +367,11 @@ git push origin <自己的分支名>
 - 当前是最终验收，不再是多组联合验收
 - 页面实现应严格参考成员A提供的静态 HTML 参考页
 - 完整页面实现完成后，需要交给成员A审查
-- waiting_area_capacity 是系统全局等候区容量，快充池和慢充池共享
-- 页面中涉及的批量模拟结果，要能够展示 avg_wait_seconds、avg_finish_seconds、station_utilization，并建议展示 total_finish_seconds
-- 批量模拟场景参数至少包括 fast_station_count、slow_station_count、waiting_area_capacity、station_queue_mode
+- 页面字段、状态值、错误提示必须与冻结接口文档保持一致
+- `waiting_area_capacity` 是系统全局等候区容量，快充 / 慢充共享容量但分别维护 `F/T` 顺序
+- 用户端重点展示 `queue_number`、`front_waiting_count`、`request_status`、`station_code`、`estimated_*`
+- 管理端重点展示桩状态、桩队列、调度模式、故障策略、报表字段、用户维护入口
+- 报表页只支持 `day / week / month`
 
 我的工作边界是：
 
@@ -361,7 +394,7 @@ git push origin <自己的分支名>
 4. 当前静态 HTML 参考稿该如何转成 Vue 页面
 5. 每个核心页面应该展示哪些字段和状态
 6. 完整页面交给成员A审查前应先自查什么
-7. 批量模拟结果 summary 如何展示更清楚
+7. 报表和监控信息如何展示更清楚
 8. 当前测试和回归该怎么做
 9. Git 上我每天应该怎么操作
 10. 请尽量给出按步骤执行的清单，而不是泛泛建议
@@ -379,6 +412,6 @@ git push origin <自己的分支名>
 
 1. 不再沿用旧的联合验收口径
 2. 统一使用当前系统验收输入规范
-3. 保持 `main` 和 `develop` 一致
+3. 以 `develop` 作为公共集成分支，`main` 只保留稳定版本
 4. 个人开发只在自己的 `feature/*` 分支推进
 5. README、文档、Prompt、静态参考页、最终实现要尽量保持同一套口径

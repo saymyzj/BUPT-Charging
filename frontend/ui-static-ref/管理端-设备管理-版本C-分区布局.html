@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备管理 - 分区布局 (版本C)</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1,h2,h3,h4,h5 { font-family: Georgia, serif; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); border-bottom: 3px solid var(--accent); height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+.nav-brand { font-family: Georgia, serif; font-size: 17px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab { padding: 8px 16px; border-radius: 6px; font-size: 13px; color: var(--text-sec); cursor: pointer; transition: all 0.2s; text-decoration: none; }
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.nav-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-sec); white-space: nowrap; }
+
+/* LAYOUT: Left list + Right detail */
+.page-layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+.left-panel { width: 380px; min-width: 340px; background: var(--card); border-right: 1px solid #e8e0d8; display: flex; flex-direction: column; }
+.right-panel { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+/* LEFT PANEL */
+.left-header { padding: 20px 20px 12px; border-bottom: 1px solid #ebe6de; }
+.left-header h3 { font-size: 18px; color: var(--primary); margin-bottom: 12px; }
+.search-bar { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; outline: none; }
+.search-bar:focus { border-color: var(--primary); }
+
+.group-section { padding: 12px 0; }
+.group-title { padding: 6px 20px; font-size: 12px; font-weight: 600; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+.group-title::after { content: ''; flex: 1; height: 1px; background: #ebe6de; }
+.group-count { background: rgba(45,106,79,0.1); color: var(--primary); font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+.device-item { padding: 14px 20px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 12px; border-left: 3px solid transparent; }
+.device-item:hover { background: #f9f6f1; }
+.device-item.selected { background: rgba(45,106,79,0.06); border-left-color: var(--primary); }
+.device-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.device-icon.fast { background: rgba(212,168,83,0.15); }
+.device-icon.slow { background: rgba(45,106,79,0.1); }
+.device-info { flex: 1; min-width: 0; }
+.device-code { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.device-meta { font-size: 12px; color: var(--text-sec); }
+.device-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 10px; }
+.device-status.idle { background: #e8f5e9; color: #2e7d32; }
+.device-status.charging { background: rgba(45,106,79,0.1); color: var(--primary); }
+.device-status.fault { background: #fce4ec; color: #c62828; }
+.device-status.disabled { background: #f5f5f5; color: #999; }
+
+.device-list { flex: 1; overflow-y: auto; }
+.device-list::-webkit-scrollbar { width: 4px; }
+.device-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+
+/* RIGHT PANEL */
+.detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+.detail-title { font-size: 24px; color: var(--primary); margin-bottom: 6px; }
+.detail-subtitle { font-size: 14px; color: var(--text-sec); }
+
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+.detail-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+.detail-card h4 { font-size: 14px; color: var(--text-sec); margin-bottom: 12px; }
+
+.info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f0e8; font-size: 14px; }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text-sec); }
+.info-value { font-weight: 600; }
+
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: var(--text-sec); margin-bottom: 6px; font-weight: 500; }
+.form-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; }
+.form-input:focus { border-color: var(--primary); }
+select.form-input { cursor: pointer; }
+
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn-danger { background: var(--secondary); color: #fff; }
+.btn-danger:hover { opacity: 0.9; }
+.btn-outline { background: transparent; border: 1px solid #ddd; color: var(--text); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-group { display: flex; gap: 10px; margin-top: 20px; }
+
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; cursor: pointer; transition: 0.3s; }
+.toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; }
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+/* BOTTOM DRAWER */
+.drawer { background: var(--card); border-top: 2px solid var(--accent); margin-top: 28px; border-radius: var(--radius); box-shadow: var(--shadow); }
+.drawer-header { padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ebe6de; cursor: pointer; }
+.drawer-header h3 { font-size: 16px; color: var(--primary); }
+.drawer-toggle { font-size: 18px; color: var(--text-sec); transition: transform 0.3s; }
+.drawer-body { padding: 24px; }
+.drawer-body.collapsed { display: none; }
+
+.init-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.import-area { border: 2px dashed #ddd; border-radius: 8px; padding: 24px; text-align: center; color: var(--text-sec); font-size: 13px; transition: border-color 0.2s; cursor: pointer; }
+.import-area:hover { border-color: var(--primary); }
+.import-area textarea { width: 100%; min-height: 80px; border: 1px solid #eee; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 10px; resize: vertical; outline: none; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <span class="nav-tab">运营总览</span>
+    <span class="nav-tab">记录中心</span>
+    <span class="nav-tab">系统配置</span>
+    <span class="nav-tab">统计分析</span>
+    <span class="nav-tab">用户管理</span>
+    <span class="nav-tab">异常事件</span>
+    <span class="nav-tab active">设备管理</span>
+    <span class="nav-tab">报表导出</span>
+  </div>
+  <div class="nav-right">
+    <span style="color:var(--secondary);font-weight:600">🔔 告警 2</span>
+    <span>管理员: 张三</span>
+    <span style="font-weight:600;color:var(--primary)">14:23:45</span>
+  </div>
+</nav>
+
+<!-- PAGE LAYOUT -->
+<div class="page-layout">
+
+  <!-- LEFT: Device List by Category -->
+  <div class="left-panel">
+    <div class="left-header">
+      <h3>充电桩设备</h3>
+      <input type="text" class="search-bar" placeholder="搜索桩编号...">
+    </div>
+    <div class="device-list">
+      <!-- Fast Chargers Group -->
+      <div class="group-section">
+        <div class="group-title">快充桩 <span class="group-count">2 台</span></div>
+        <div class="device-item selected">
+          <div class="device-icon fast">⚡</div>
+          <div class="device-info">
+            <div class="device-code">FAST_01</div>
+            <div class="device-meta">30 kW · 快充</div>
+          </div>
+          <span class="device-status idle">空闲</span>
+        </div>
+        <div class="device-item">
+          <div class="device-icon fast">⚡</div>
+          <div class="device-info">
+            <div class="device-code">FAST_02</div>
+            <div class="device-meta">30 kW · 快充</div>
+          </div>
+          <span class="device-status charging">充电中</span>
+        </div>
+      </div>
+
+      <!-- Slow Chargers Group -->
+      <div class="group-section">
+        <div class="group-title">慢充桩 <span class="group-count">3 台</span></div>
+        <div class="device-item">
+          <div class="device-icon slow">🔋</div>
+          <div class="device-info">
+            <div class="device-code">SLOW_01</div>
+            <div class="device-meta">7 kW · 慢充</div>
+          </div>
+          <span class="device-status charging">充电中</span>
+        </div>
+        <div class="device-item">
+          <div class="device-icon slow">🔋</div>
+          <div class="device-info">
+            <div class="device-code">SLOW_02</div>
+            <div class="device-meta">7 kW · 慢充</div>
+          </div>
+          <span class="device-status idle">空闲</span>
+        </div>
+        <div class="device-item">
+          <div class="device-icon slow">🔋</div>
+          <div class="device-info">
+            <div class="device-code">SLOW_03</div>
+            <div class="device-meta">7 kW · 慢充</div>
+          </div>
+          <span class="device-status fault">故障</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Detail + Edit -->
+  <div class="right-panel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">FAST_01</div>
+        <div class="detail-subtitle">快充桩 · 30 kW · 当前空闲</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:13px;color:var(--text-sec)">启用状态</span>
+        <label class="toggle-switch">
+          <input type="checkbox" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <!-- Device Info -->
+      <div class="detail-card">
+        <h4>设备基本信息</h4>
+        <div class="info-row"><span class="info-label">桩编号</span><span class="info-value">FAST_01</span></div>
+        <div class="info-row"><span class="info-label">桩类型</span><span class="info-value">快充</span></div>
+        <div class="info-row"><span class="info-label">额定功率</span><span class="info-value">30 kW</span></div>
+        <div class="info-row"><span class="info-label">当前状态</span><span class="info-value" style="color:var(--primary)">IDLE（空闲）</span></div>
+        <div class="info-row"><span class="info-label">累计充电次数</span><span class="info-value">128 次</span></div>
+        <div class="info-row"><span class="info-label">累计充电量</span><span class="info-value">2,456 kWh</span></div>
+      </div>
+
+      <!-- Edit Form -->
+      <div class="detail-card">
+        <h4>编辑设备信息</h4>
+        <div class="form-group">
+          <label>桩编号</label>
+          <input type="text" class="form-input" value="FAST_01">
+        </div>
+        <div class="form-group">
+          <label>桩类型</label>
+          <select class="form-input">
+            <option selected>快充 (FAST)</option>
+            <option>慢充 (SLOW)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>额定功率 (kW)</label>
+          <input type="number" class="form-input" value="30" min="1">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary">保存修改</button>
+          <button class="btn btn-danger btn-sm">标记故障</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Device Form -->
+    <div class="detail-card" style="margin-bottom: 28px;">
+      <h4>新增充电桩</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:16px;align-items:end;">
+        <div class="form-group" style="margin:0">
+          <label>桩编号</label>
+          <input type="text" class="form-input" placeholder="如 FAST_03">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>桩类型</label>
+          <select class="form-input">
+            <option>快充 (FAST)</option>
+            <option>慢充 (SLOW)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>额定功率 (kW)</label>
+          <input type="number" class="form-input" value="30" min="1">
+        </div>
+        <button class="btn btn-primary" style="height:42px">添加设备</button>
+      </div>
+    </div>
+
+    <!-- Bottom Drawer: Quick Init + Import -->
+    <div class="drawer">
+      <div class="drawer-header">
+        <h3>快速初始化 & 快照导入</h3>
+        <span class="drawer-toggle">▼</span>
+      </div>
+      <div class="drawer-body">
+        <h4 style="font-size:14px;margin-bottom:16px;color:var(--text)">场景快速初始化</h4>
+        <p style="font-size:13px;color:var(--text-sec);margin-bottom:16px;">按场景快速生成充电桩配置，将覆盖当前所有设备。</p>
+        <div class="init-form">
+          <div class="form-group" style="margin:0">
+            <label>快充桩数量</label>
+            <input type="number" class="form-input" value="2" min="0">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>慢充桩数量</label>
+            <input type="number" class="form-input" value="3" min="0">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>快充功率 (kW)</label>
+            <input type="number" class="form-input" value="30" min="1">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>慢充功率 (kW)</label>
+            <input type="number" class="form-input" value="7" min="1">
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-bottom:28px">生成配置</button>
+
+        <h4 style="font-size:14px;margin-bottom:16px;color:var(--text)">导入桩级初始状态快照</h4>
+        <p style="font-size:13px;color:var(--text-sec);margin-bottom:12px;">导入验收场景的桩级状态快照 (JSON)，快照优先于统一队列容量参数。</p>
+        <div class="import-area">
+          点击上传或拖拽 JSON 文件到此处
+          <textarea placeholder='[{"station_code":"FAST_01","type":"FAST","power":30,"status":"IDLE"},...]'></textarea>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary">导入快照</button>
+          <button class="btn btn-outline">下载当前配置</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

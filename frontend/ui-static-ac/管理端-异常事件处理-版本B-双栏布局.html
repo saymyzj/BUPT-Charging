@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>异常事件处理 - 智能充电桩调度计费系统 · 管理端</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
+}
+h1, h2, h3, h4 { font-family: Georgia, 'Noto Serif SC', serif; font-weight: 700; }
+
+/* NAV */
+.top-nav {
+  background: var(--nav-bg); border-bottom: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 56px; position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 8px 20px; border-radius: 8px 8px 0 0; font-size: 14px; cursor: pointer;
+  border: none; background: transparent; color: var(--text-sec); transition: all 0.2s; font-family: inherit;
+}
+.nav-tab:hover { background: rgba(45,106,79,0.08); color: var(--primary); }
+.nav-tab.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 -2px 0 var(--primary) inset; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 13px; color: var(--text-sec); }
+.nav-alert { position: relative; cursor: pointer; padding: 4px 10px; background: rgba(196,93,62,0.1); border-radius: 6px; color: var(--secondary); font-weight: 600; }
+
+/* MAIN */
+.main-content { padding: 20px 24px; max-width: 1920px; margin: 0 auto; }
+
+/* STATS ROW */
+.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--card); border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: var(--shadow); border-left: 4px solid var(--primary);
+  opacity: 0; animation: fadeInUp 0.5s forwards;
+}
+.stat-card:nth-child(1) { border-left-color: var(--secondary); animation-delay: 0s; }
+.stat-card:nth-child(2) { border-left-color: var(--accent); animation-delay: 0.06s; }
+.stat-card:nth-child(3) { border-left-color: var(--primary); animation-delay: 0.12s; }
+.stat-card:nth-child(4) { border-left-color: #e67e22; animation-delay: 0.18s; }
+.stat-card:nth-child(5) { border-left-color: var(--secondary); animation-delay: 0.24s; }
+.stat-card:nth-child(6) { border-left-color: var(--primary); animation-delay: 0.30s; }
+.stat-label { font-size: 12px; color: var(--text-sec); margin-bottom: 4px; }
+.stat-value { font-family: Georgia, serif; font-size: 26px; font-weight: 700; }
+.stat-sub { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* TWO-COLUMN LAYOUT */
+.two-col { display: grid; grid-template-columns: 400px 1fr; gap: 16px; min-height: calc(100vh - 180px); }
+
+/* LEFT PANEL - EVENT LIST */
+.left-panel {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-header {
+  padding: 14px 18px; border-bottom: 1px solid #f0ece4;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-header h3 { font-size: 15px; color: var(--primary); }
+.filter-row { padding: 10px 18px; border-bottom: 1px solid #f0ece4; display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-row select, .filter-row input {
+  padding: 5px 10px; border: 1px solid #e0d8cc; border-radius: 6px; font-size: 12px;
+  background: var(--bg); color: var(--text); font-family: inherit; flex: 1; min-width: 80px;
+}
+.event-list { flex: 1; overflow-y: auto; }
+.event-item {
+  padding: 14px 18px; border-bottom: 1px solid #f0ece4; cursor: pointer;
+  transition: all 0.15s; display: flex; flex-direction: column; gap: 6px;
+}
+.event-item:hover { background: rgba(45,106,79,0.03); }
+.event-item.selected { background: rgba(212,168,83,0.08); border-left: 3px solid var(--accent); }
+.event-item-top { display: flex; align-items: center; justify-content: space-between; }
+.event-item-top .time { font-size: 11px; color: var(--text-sec); }
+.event-item-mid { font-size: 13px; color: var(--text); }
+.event-item-bot { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-sec); }
+
+/* BADGES */
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-miss { background: #ffeaa7; color: #856404; }
+.badge-cancel { background: #dfe6e9; color: #636e72; }
+.badge-interrupt { background: #ffecd2; color: #e67e22; }
+.badge-overtime { background: #fab1a0; color: #d63031; }
+.badge-fault { background: #ff7675; color: #fff; }
+.badge-recover { background: #55efc4; color: #00695c; }
+
+.status-done { color: var(--primary); font-weight: 600; font-size: 11px; }
+.status-pending { color: var(--secondary); font-weight: 600; font-size: 11px; }
+
+/* RIGHT PANEL - DETAIL */
+.right-panel {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.detail-header {
+  padding: 18px 24px; border-bottom: 2px solid #f0ece4;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.detail-header h3 { font-size: 17px; color: var(--primary); }
+.detail-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+.detail-section { margin-bottom: 24px; }
+.detail-section h4 {
+  font-size: 14px; color: var(--primary); margin-bottom: 12px;
+  padding-bottom: 6px; border-bottom: 1px solid #f0ece4;
+}
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+.detail-field { font-size: 13px; }
+.detail-field .label { color: var(--text-sec); font-size: 12px; }
+.detail-field .value { color: var(--text); font-weight: 500; margin-top: 2px; }
+
+/* TIMELINE */
+.timeline { position: relative; padding-left: 24px; }
+.timeline::before {
+  content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+  width: 2px; background: #e0d8cc;
+}
+.timeline-item { position: relative; margin-bottom: 16px; }
+.timeline-item::before {
+  content: ''; position: absolute; left: -20px; top: 4px;
+  width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--primary);
+  background: var(--card);
+}
+.timeline-item.active::before { background: var(--primary); }
+.timeline-item.warning::before { border-color: var(--secondary); background: var(--secondary); }
+.timeline-item .tl-time { font-size: 11px; color: var(--text-sec); }
+.timeline-item .tl-text { font-size: 13px; color: var(--text); margin-top: 2px; }
+
+/* ACTIONS */
+.detail-actions {
+  padding: 16px 24px; border-top: 1px solid #f0ece4;
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+.btn {
+  padding: 8px 18px; border-radius: 6px; font-size: 13px; border: none; cursor: pointer;
+  font-family: inherit; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #235539; }
+.btn-secondary { background: var(--secondary); color: #fff; }
+.btn-secondary:hover { background: #a84d32; }
+.btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+.btn-outline:hover { background: rgba(45,106,79,0.08); }
+.btn-warning { background: var(--accent); color: #fff; }
+.btn-warning:hover { background: #c09840; }
+
+/* EMPTY STATE */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-sec); font-size: 14px; gap: 8px;
+}
+.empty-icon { font-size: 48px; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div class="nav-brand">&#9889; 智能充电桩调度计费系统 · 管理端</div>
+  <div class="nav-tabs">
+    <button class="nav-tab">运营总览</button>
+    <button class="nav-tab">记录中心</button>
+    <button class="nav-tab">系统配置</button>
+    <button class="nav-tab">统计分析</button>
+    <button class="nav-tab">用户管理</button>
+    <button class="nav-tab active">异常事件</button>
+    <button class="nav-tab">设备管理</button>
+    <button class="nav-tab">报表导出</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-alert">&#128276; 告警(2)</span>
+    <span>管理员: 张三</span>
+    <span id="clock">14:23:45</span>
+  </div>
+</nav>
+
+<div class="main-content">
+
+  <!-- STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">用户过号</div><div class="stat-value">3</div><div class="stat-sub">今日累计</div></div>
+    <div class="stat-card"><div class="stat-label">用户取消</div><div class="stat-value">5</div><div class="stat-sub">今日累计</div></div>
+    <div class="stat-card"><div class="stat-label">用户中断</div><div class="stat-value">2</div><div class="stat-sub">今日累计</div></div>
+    <div class="stat-card"><div class="stat-label">超时未挪车</div><div class="stat-value">1</div><div class="stat-sub">今日累计</div></div>
+    <div class="stat-card"><div class="stat-label">充电桩故障</div><div class="stat-value">2</div><div class="stat-sub">1 待处理</div></div>
+    <div class="stat-card"><div class="stat-label">故障恢复</div><div class="stat-value">1</div><div class="stat-sub">今日累计</div></div>
+  </div>
+
+  <!-- TWO-COLUMN -->
+  <div class="two-col">
+    <!-- LEFT: EVENT LIST -->
+    <div class="left-panel">
+      <div class="panel-header">
+        <h3>事件列表</h3>
+        <span style="font-size:12px;color:var(--text-sec);">共 7 条</span>
+      </div>
+      <div class="filter-row">
+        <select id="typeFilter" onchange="filterEvents()">
+          <option value="">全部类型</option>
+          <option value="fault">充电桩故障</option>
+          <option value="miss">用户过号</option>
+          <option value="cancel">用户取消</option>
+          <option value="interrupt">用户中断</option>
+          <option value="overtime">超时未挪车</option>
+          <option value="recover">故障恢复</option>
+        </select>
+        <select id="statusFilter" onchange="filterEvents()">
+          <option value="">全部状态</option>
+          <option value="pending">待处理</option>
+          <option value="done">已处理</option>
+        </select>
+      </div>
+      <div class="event-list" id="eventList">
+
+        <div class="event-item selected" data-type="fault" data-status="pending" data-id="0" onclick="selectEvent(0)">
+          <div class="event-item-top">
+            <span class="badge badge-fault">充电桩故障</span>
+            <span class="time">14:12:30</span>
+          </div>
+          <div class="event-item-mid">C-003 充电中发生故障，用户 王伟 充电中断</div>
+          <div class="event-item-bot">
+            <span>REQ-20260409-0087</span>
+            <span class="status-pending">待处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="miss" data-status="done" data-id="1" onclick="selectEvent(1)">
+          <div class="event-item-top">
+            <span class="badge badge-miss">用户过号</span>
+            <span class="time">13:45:10</span>
+          </div>
+          <div class="event-item-mid">用户 李娜 叫号超时未确认，已自动重选</div>
+          <div class="event-item-bot">
+            <span>REQ-20260409-0072</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="cancel" data-status="done" data-id="2" onclick="selectEvent(2)">
+          <div class="event-item-top">
+            <span class="badge badge-cancel">用户取消</span>
+            <span class="time">13:20:05</span>
+          </div>
+          <div class="event-item-mid">用户 赵强 取消排队请求</div>
+          <div class="event-item-bot">
+            <span>REQ-20260409-0065</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="interrupt" data-status="done" data-id="3" onclick="selectEvent(3)">
+          <div class="event-item-top">
+            <span class="badge badge-interrupt">用户中断</span>
+            <span class="time">12:55:42</span>
+          </div>
+          <div class="event-item-mid">用户 陈明 主动结束充电，实际 22.1kWh</div>
+          <div class="event-item-bot">
+            <span>REQ-20260409-0058</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="overtime" data-status="done" data-id="4" onclick="selectEvent(4)">
+          <div class="event-item-top">
+            <span class="badge badge-overtime">超时未挪车</span>
+            <span class="time">12:30:00</span>
+          </div>
+          <div class="event-item-mid">用户 刘洋 充电完成后 30 分钟未挪车</div>
+          <div class="event-item-bot">
+            <span>REQ-20260409-0051</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="recover" data-status="done" data-id="5" onclick="selectEvent(5)">
+          <div class="event-item-top">
+            <span class="badge badge-recover">故障恢复</span>
+            <span class="time">11:50:20</span>
+          </div>
+          <div class="event-item-mid">C-002 故障修复，已恢复 IDLE 状态</div>
+          <div class="event-item-bot">
+            <span>C-002</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+        <div class="event-item" data-type="fault" data-status="done" data-id="6" onclick="selectEvent(6)">
+          <div class="event-item-top">
+            <span class="badge badge-fault">充电桩故障</span>
+            <span class="time">09:30:00</span>
+          </div>
+          <div class="event-item-mid">C-002 空闲时发生故障，已标记 FAULT</div>
+          <div class="event-item-bot">
+            <span>C-002</span>
+            <span class="status-done">已处理</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: DETAIL PANEL -->
+    <div class="right-panel" id="detailPanel">
+      <div class="detail-header">
+        <h3 id="detailTitle">充电桩故障 - C-003</h3>
+        <span class="status-pending" id="detailStatus">待处理</span>
+      </div>
+      <div class="detail-body">
+
+        <div class="detail-section">
+          <h4>基本信息</h4>
+          <div class="detail-grid" id="detailBasic">
+            <div class="detail-field"><div class="label">事件类型</div><div class="value">充电桩故障</div></div>
+            <div class="detail-field"><div class="label">发生时间</div><div class="value">2026-04-09 14:12:30</div></div>
+            <div class="detail-field"><div class="label">关联请求</div><div class="value">REQ-20260409-0087</div></div>
+            <div class="detail-field"><div class="label">关联桩号</div><div class="value">C-003 (快充 120kW)</div></div>
+            <div class="detail-field"><div class="label">影响用户</div><div class="value">王伟 (U1023)</div></div>
+            <div class="detail-field"><div class="label">处理状态</div><div class="value" style="color:var(--secondary)">待处理</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4>充电数据</h4>
+          <div class="detail-grid" id="detailCharging">
+            <div class="detail-field"><div class="label">已充电量</div><div class="value">15.3 kWh</div></div>
+            <div class="detail-field"><div class="label">目标电量</div><div class="value">40 kWh</div></div>
+            <div class="detail-field"><div class="label">剩余需求</div><div class="value">24.7 kWh</div></div>
+            <div class="detail-field"><div class="label">已产生费用</div><div class="value">&#165;19.89</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4>处理时间线</h4>
+          <div class="timeline" id="detailTimeline">
+            <div class="timeline-item warning">
+              <div class="tl-time">14:12:30</div>
+              <div class="tl-text">C-003 检测到硬件故障，上报故障信号</div>
+            </div>
+            <div class="timeline-item active">
+              <div class="tl-time">14:12:31</div>
+              <div class="tl-text">系统中断当前充电会话，记录实际充电量 15.3 kWh</div>
+            </div>
+            <div class="timeline-item active">
+              <div class="tl-time">14:12:32</div>
+              <div class="tl-text">创建 FAULT_REQUEUE 请求，剩余需求 24.7 kWh</div>
+            </div>
+            <div class="timeline-item active">
+              <div class="tl-time">14:12:32</div>
+              <div class="tl-text">赋予用户 fault_bonus 补偿优先级 +10</div>
+            </div>
+            <div class="timeline-item">
+              <div class="tl-time">待处理</div>
+              <div class="tl-text">等待管理员确认处理</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4>处理方式</h4>
+          <div style="font-size:13px;color:var(--text);line-height:1.7;background:var(--bg);padding:12px 16px;border-radius:8px;">
+            中断当前充电会话，记录实际已充电量 (actual_energy)。计算剩余充电需求，创建新的
+            FAULT_REQUEUE 状态请求，赋予 fault_bonus 补偿优先级，用户自动重入排队等待池。
+            充电桩 C-003 标记为 FAULT 状态，排除出调度池。
+          </div>
+        </div>
+
+      </div>
+      <div class="detail-actions">
+        <button class="btn btn-outline">查看用户详情</button>
+        <button class="btn btn-secondary" onclick="alert('手动标记故障')">手动标记故障</button>
+        <button class="btn btn-warning" onclick="alert('恢复故障')">恢复故障</button>
+        <button class="btn btn-primary" onclick="alert('确认处理')">确认处理</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const eventData = [
+  {
+    title: '充电桩故障 - C-003', status: '待处理', statusClass: 'status-pending',
+    basic: [
+      ['事件类型','充电桩故障'],['发生时间','2026-04-09 14:12:30'],
+      ['关联请求','REQ-20260409-0087'],['关联桩号','C-003 (快充 120kW)'],
+      ['影响用户','王伟 (U1023)'],['处理状态','<span style="color:var(--secondary)">待处理</span>']
+    ],
+    charging: [['已充电量','15.3 kWh'],['目标电量','40 kWh'],['剩余需求','24.7 kWh'],['已产生费用','&#165;19.89']],
+    timeline: [
+      {time:'14:12:30',text:'C-003 检测到硬件故障，上报故障信号',cls:'warning'},
+      {time:'14:12:31',text:'系统中断当前充电会话，记录实际充电量 15.3 kWh',cls:'active'},
+      {time:'14:12:32',text:'创建 FAULT_REQUEUE 请求，剩余需求 24.7 kWh',cls:'active'},
+      {time:'14:12:32',text:'赋予用户 fault_bonus 补偿优先级 +10',cls:'active'},
+      {time:'待处理',text:'等待管理员确认处理',cls:''}
+    ],
+    handling: '中断当前充电会话，记录实际已充电量 (actual_energy)。计算剩余充电需求，创建新的 FAULT_REQUEUE 状态请求，赋予 fault_bonus 补偿优先级，用户自动重入排队等待池。充电桩 C-003 标记为 FAULT 状态，排除出调度池。',
+    actions: ['查看用户详情','手动标记故障','恢复故障','确认处理']
+  },
+  {
+    title: '用户过号 - 李娜', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','用户过号'],['发生时间','2026-04-09 13:45:10'],
+      ['关联请求','REQ-20260409-0072'],['关联桩号','C-007 (慢充 7kW)'],
+      ['影响用户','李娜 (U0856)'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: null,
+    timeline: [
+      {time:'13:40:00',text:'系统叫号，通知用户 李娜 前往 C-007',cls:'active'},
+      {time:'13:45:10',text:'超过 5 分钟未确认到场',cls:'warning'},
+      {time:'13:45:11',text:'系统自动重选下一用户 张丽 (U0901)',cls:'active'},
+      {time:'13:45:11',text:'事件自动处理完成',cls:'active'}
+    ],
+    handling: '叫号后超过规定时间（5分钟）未确认到场，系统自动将该桩分配给下一排队用户 张丽 (U0901)。原用户 李娜 的请求移至队尾或标记过号。',
+    actions: ['查看用户详情']
+  },
+  {
+    title: '用户取消 - 赵强', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','用户取消'],['发生时间','2026-04-09 13:20:05'],
+      ['关联请求','REQ-20260409-0065'],['关联桩号','-'],
+      ['影响用户','赵强 (U0912)'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: null,
+    timeline: [
+      {time:'13:05:00',text:'用户 赵强 提交充电请求，进入等待池（第 4 位）',cls:'active'},
+      {time:'13:20:05',text:'用户主动取消排队请求',cls:'warning'},
+      {time:'13:20:06',text:'系统从等待池移除，触发重调度',cls:'active'}
+    ],
+    handling: '用户在排队等待中主动取消充电请求，系统立即从等待池中移除该请求，并触发重调度以优化剩余排队用户的分配。',
+    actions: ['查看用户详情']
+  },
+  {
+    title: '用户中断 - 陈明', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','用户中断'],['发生时间','2026-04-09 12:55:42'],
+      ['关联请求','REQ-20260409-0058'],['关联桩号','C-005 (快充 60kW)'],
+      ['影响用户','陈明 (U0788)'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: [['实际充电量','22.1 kWh'],['目标电量','35 kWh'],['结算金额','&#165;28.73'],['充电时长','45 分钟']],
+    timeline: [
+      {time:'12:10:00',text:'用户 陈明 开始在 C-005 充电',cls:'active'},
+      {time:'12:55:42',text:'用户主动结束充电',cls:'warning'},
+      {time:'12:55:43',text:'按实际充电量 22.1 kWh 结算，金额 &#165;28.73',cls:'active'},
+      {time:'12:55:44',text:'释放充电桩 C-005，恢复 IDLE',cls:'active'}
+    ],
+    handling: '用户在充电过程中主动结束充电，系统按实际充电量 22.1 kWh 进行结算，释放充电桩 C-005 回到 IDLE 状态供后续用户使用。',
+    actions: ['查看用户详情']
+  },
+  {
+    title: '超时未挪车 - 刘洋', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','超时未挪车'],['发生时间','2026-04-09 12:30:00'],
+      ['关联请求','REQ-20260409-0051'],['关联桩号','C-001 (快充 120kW)'],
+      ['影响用户','刘洋 (U0654)'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: [['充电完成时间','12:00:00'],['超时时长','30 分钟'],['占位费','&#165;15.00'],['费率','&#165;0.50/分钟']],
+    timeline: [
+      {time:'12:00:00',text:'充电完成，通知用户挪车',cls:'active'},
+      {time:'12:15:00',text:'超时 15 分钟，发送第二次提醒',cls:'warning'},
+      {time:'12:30:00',text:'超时 30 分钟，计入占位费 &#165;15.00',cls:'warning'},
+      {time:'12:30:00',text:'桩标记为占位中，不可重新分配',cls:'active'}
+    ],
+    handling: '充电完成后用户未在规定时间内挪车，系统按 &#165;0.50/分钟 计入占位费。充电桩在用户挪车前不可重新分配给其他用户。',
+    actions: ['查看用户详情']
+  },
+  {
+    title: '故障恢复 - C-002', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','故障恢复'],['发生时间','2026-04-09 11:50:20'],
+      ['关联请求','-'],['关联桩号','C-002 (快充 60kW)'],
+      ['影响用户','-'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: null,
+    timeline: [
+      {time:'09:30:00',text:'C-002 检测到故障，标记 FAULT',cls:'warning'},
+      {time:'11:50:20',text:'维修完成，桩恢复正常',cls:'active'},
+      {time:'11:50:21',text:'恢复 IDLE 状态，重新加入调度池',cls:'active'},
+      {time:'11:50:22',text:'触发重调度，优化排队分配',cls:'active'}
+    ],
+    handling: '充电桩故障修复后恢复 IDLE 状态，重新参与调度池的分配。系统自动触发重调度，将等待池中的用户重新分配。',
+    actions: ['查看桩详情']
+  },
+  {
+    title: '充电桩故障 - C-002 (空闲)', status: '已处理', statusClass: 'status-done',
+    basic: [
+      ['事件类型','充电桩故障'],['发生时间','2026-04-09 09:30:00'],
+      ['关联请求','-'],['关联桩号','C-002 (快充 60kW)'],
+      ['影响用户','-'],['处理状态','<span style="color:var(--primary)">已处理</span>']
+    ],
+    charging: null,
+    timeline: [
+      {time:'09:30:00',text:'C-002 空闲状态下检测到故障',cls:'warning'},
+      {time:'09:30:01',text:'标记 FAULT 状态，排除出调度池',cls:'active'},
+      {time:'09:30:02',text:'通知维修人员进行检修',cls:'active'},
+      {time:'11:50:20',text:'故障修复，恢复 IDLE',cls:'active'}
+    ],
+    handling: '空闲状态的充电桩检测到故障信号，系统立即标记为 FAULT 状态并排除出调度池，避免将用户分配到故障桩。无用户受影响。',
+    actions: ['查看桩详情']
+  }
+];
+
+function selectEvent(idx) {
+  document.querySelectorAll('.event-item').forEach(el => el.classList.remove('selected'));
+  document.querySelector(`.event-item[data-id="${idx}"]`).classList.add('selected');
+  const d = eventData[idx];
+  document.getElementById('detailTitle').textContent = d.title;
+  document.getElementById('detailStatus').textContent = d.status;
+  document.getElementById('detailStatus').className = d.statusClass;
+
+  // Basic
+  let basicHtml = '';
+  d.basic.forEach(([l,v]) => { basicHtml += `<div class="detail-field"><div class="label">${l}</div><div class="value">${v}</div></div>`; });
+  document.getElementById('detailBasic').innerHTML = basicHtml;
+
+  // Charging
+  const chargingSection = document.getElementById('detailCharging').parentElement;
+  if (d.charging) {
+    chargingSection.style.display = '';
+    let chHtml = '';
+    d.charging.forEach(([l,v]) => { chHtml += `<div class="detail-field"><div class="label">${l}</div><div class="value">${v}</div></div>`; });
+    document.getElementById('detailCharging').innerHTML = chHtml;
+  } else {
+    chargingSection.style.display = 'none';
+  }
+
+  // Timeline
+  let tlHtml = '';
+  d.timeline.forEach(t => { tlHtml += `<div class="timeline-item ${t.cls}"><div class="tl-time">${t.time}</div><div class="tl-text">${t.text}</div></div>`; });
+  document.getElementById('detailTimeline').innerHTML = tlHtml;
+}
+
+function filterEvents() {
+  const typeVal = document.getElementById('typeFilter').value;
+  const statusVal = document.getElementById('statusFilter').value;
+  document.querySelectorAll('.event-item').forEach(el => {
+    let show = true;
+    if (typeVal && el.dataset.type !== typeVal) show = false;
+    if (statusVal && el.dataset.status !== statusVal) show = false;
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+}
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

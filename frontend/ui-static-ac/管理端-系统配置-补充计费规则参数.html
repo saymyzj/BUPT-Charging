@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统配置 - 补充计费规则参数(F-A03) | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text-sec: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1,h2,h3,h4 { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
+
+/* NAV */
+.topnav { background: var(--nav-bg); border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 56px; position: sticky; top: 0; z-index: 100; }
+.topnav-brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.topnav-tabs { display: flex; gap: 4px; }
+.topnav-tab { padding: 8px 16px; border-radius: 6px; font-size: 13px; color: var(--text-sec); cursor: pointer; transition: all 0.2s; }
+.topnav-tab:hover { background: rgba(45,106,79,0.08); color: var(--text); }
+.topnav-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+.topnav-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-sec); white-space: nowrap; }
+
+/* LAYOUT */
+.page-container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+.page-title { font-size: 26px; color: var(--primary); margin-bottom: 6px; }
+.page-subtitle { font-size: 14px; color: var(--text-sec); margin-bottom: 32px; line-height: 1.6; }
+
+/* BADGE */
+.badge-new { display: inline-block; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600; margin-left: 8px; vertical-align: middle; font-family: -apple-system, sans-serif; }
+
+/* CARD */
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
+.card-new { border: 2px dashed var(--primary); }
+.card-title { padding: 18px 24px; border-bottom: 1px solid #ebe6de; font-size: 16px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 24px; }
+
+/* EXISTING: 峰平谷分时电价 (保留) */
+.pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 20px; }
+.pricing-cell { background: #faf8f4; border-radius: 8px; padding: 16px; text-align: center; }
+.pricing-cell .period { font-size: 12px; color: var(--text-sec); margin-bottom: 4px; }
+.pricing-cell .time { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.pricing-cell .price { font-family: Georgia, serif; font-size: 22px; font-weight: 700; color: var(--primary); }
+.pricing-cell .unit { font-size: 13px; font-weight: 400; color: var(--text-sec); }
+.pricing-cell.peak { border-left: 3px solid var(--secondary); }
+.pricing-cell.normal { border-left: 3px solid var(--accent); }
+.pricing-cell.valley { border-left: 3px solid var(--primary); }
+
+/* NEW SECTION HIGHLIGHT */
+.section-new { border: 2px dashed var(--primary); border-radius: 8px; padding: 20px; position: relative; margin-top: 24px; }
+.section-new-label { position: absolute; top: -10px; left: 16px; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 12px; border-radius: 10px; font-weight: 600; }
+
+/* FORM */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.form-desc { font-size: 12px; color: var(--text-sec); line-height: 1.4; }
+.form-input { padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; width: 100%; }
+.form-input:focus { border-color: var(--primary); }
+select.form-input { cursor: pointer; appearance: auto; }
+
+/* BILLING MODE SELECTOR */
+.mode-selector { display: flex; gap: 12px; margin-bottom: 24px; }
+.mode-option { flex: 1; border: 2px solid #e8e2d9; border-radius: var(--radius); padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+.mode-option:hover { border-color: var(--accent); background: rgba(212,168,83,0.03); }
+.mode-option.selected { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(45,106,79,0.15); background: rgba(45,106,79,0.03); }
+.mode-option .mode-icon { font-size: 28px; margin-bottom: 8px; }
+.mode-option .mode-name { font-family: Georgia, serif; font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.mode-option .mode-desc { font-size: 12px; color: var(--text-sec); }
+.mode-option .mode-check { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; }
+.mode-option.selected .mode-check { background: var(--primary); border-color: var(--primary); }
+
+/* FORMULA BOX */
+.formula-box { background: #f9f5ee; border: 1px solid #e8e2d9; border-radius: 8px; padding: 16px 20px; font-family: 'Courier New', monospace; font-size: 14px; color: var(--text); margin-bottom: 24px; line-height: 1.8; }
+.formula-box .formula-label { display: block; font-family: -apple-system, sans-serif; font-size: 12px; color: var(--text-sec); font-weight: 600; margin-bottom: 6px; }
+.formula-box .var-highlight { color: var(--primary); font-weight: 700; }
+
+/* PARAM CARDS */
+.param-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.param-card { background: #faf8f4; border-radius: 8px; padding: 16px; display: flex; align-items: center; gap: 16px; }
+.param-card .param-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.param-card .param-icon.energy { background: rgba(45,106,79,0.1); }
+.param-card .param-icon.time { background: rgba(212,168,83,0.15); }
+.param-card .param-icon.occupy { background: rgba(196,93,62,0.1); }
+.param-card .param-info { flex: 1; }
+.param-card .param-name { font-size: 13px; color: var(--text-sec); margin-bottom: 4px; }
+.param-card .param-value { font-family: Georgia, serif; font-size: 20px; font-weight: 700; }
+.param-card .param-value.green { color: var(--primary); }
+.param-card .param-value.gold { color: var(--accent); }
+.param-card .param-value.rust { color: var(--secondary); }
+.param-card .param-input { width: 100px; }
+
+/* TOOLTIP */
+.tooltip-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #eee; color: var(--text-sec); font-size: 10px; font-weight: 700; cursor: help; position: relative; }
+.tooltip-icon:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #333; color: #fff; font-size: 12px; font-weight: 400; padding: 6px 10px; border-radius: 6px; white-space: normal; z-index: 10; max-width: 260px; line-height: 1.4; }
+
+/* BUTTONS */
+.btn-save { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+.btn-save:hover { background: #245a42; }
+.action-bar { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topnav">
+  <div class="topnav-brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
+  <div class="topnav-tabs">
+    <div class="topnav-tab">运营总览</div>
+    <div class="topnav-tab">记录中心</div>
+    <div class="topnav-tab active">系统配置</div>
+    <div class="topnav-tab">统计分析</div>
+    <div class="topnav-tab">用户管理</div>
+    <div class="topnav-tab">异常事件</div>
+    <div class="topnav-tab">设备管理</div>
+    <div class="topnav-tab">报表导出</div>
+  </div>
+  <div class="topnav-right">
+    <span style="color:var(--secondary);font-weight:600">🔔 告警 2</span>
+    <span>管理员: 张三</span>
+    <span style="font-weight:600;color:var(--primary)">14:23:45</span>
+  </div>
+</nav>
+
+<div class="page-container">
+  <h1 class="page-title">计费规则配置</h1>
+  <p class="page-subtitle">
+    本页为 SystemConfig.vue 的计费策略部分补充设计稿。<br>
+    现有页面仅有"峰/平/谷分时电价"展示（保留），<strong>新增</strong>的部分为 F-A03 文档要求的完整计费规则：billing_mode 选择器、费率参数、占位费参数及计费公式展示。
+  </p>
+
+  <!-- ============================== -->
+  <!-- 1. 现有: 峰平谷分时电价 (保留)  -->
+  <!-- ============================== -->
+  <div class="card">
+    <div class="card-title">💰 分时电价参考（现有）</div>
+    <div class="card-body">
+      <div class="pricing-grid">
+        <div class="pricing-cell peak">
+          <div class="period">峰时段</div>
+          <div class="time">10:00-15:00, 18:00-21:00</div>
+          <div class="price">1.0 <span class="unit">元/度</span></div>
+        </div>
+        <div class="pricing-cell normal">
+          <div class="period">平时段</div>
+          <div class="time">07:00-10:00, 15:00-18:00, 21:00-23:00</div>
+          <div class="price">0.7 <span class="unit">元/度</span></div>
+        </div>
+        <div class="pricing-cell valley">
+          <div class="period">谷时段</div>
+          <div class="time">23:00-07:00</div>
+          <div class="price">0.4 <span class="unit">元/度</span></div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text-sec)">上述分时电价为现有页面已实现部分，可保留作为电价参考。以下新增部分为 F-A03 规范要求的完整计费规则配置。</p>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 2. 新增: 计费模式选择器 (F-A03) -->
+  <!-- ============================== -->
+  <div class="card card-new">
+    <div class="card-title">
+      ⚙️ 计费模式选择 <span class="badge-new">新增</span>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--text-sec);margin-bottom:20px;">
+        选择系统使用的计费模式。不同模式决定费用计算方式。切换后立即生效于后续新创建的账单。
+      </p>
+
+      <div class="mode-selector">
+        <!-- ENERGY mode -->
+        <div class="mode-option">
+          <div class="mode-check"></div>
+          <div class="mode-icon">⚡</div>
+          <div class="mode-name">ENERGY</div>
+          <div class="mode-desc">按电量计费<br>单位: 元/kWh</div>
+        </div>
+
+        <!-- TIME mode -->
+        <div class="mode-option">
+          <div class="mode-check"></div>
+          <div class="mode-icon">⏱️</div>
+          <div class="mode-name">TIME</div>
+          <div class="mode-desc">按时长计费<br>单位: 元/分钟</div>
+        </div>
+
+        <!-- MIXED mode (selected) -->
+        <div class="mode-option selected">
+          <div class="mode-check">✓</div>
+          <div class="mode-icon">📊</div>
+          <div class="mode-name">MIXED</div>
+          <div class="mode-desc">电量费 + 时长费<br>综合计费</div>
+        </div>
+      </div>
+
+      <p style="font-size:12px;color:var(--text-sec);background:#f9f5ee;padding:10px 14px;border-radius:6px;">
+        当前选中: <strong style="color:var(--primary)">MIXED（综合计费）</strong> — 同时按电量和时长收费，账单将包含 energy_fee 和 time_fee 两项。
+      </p>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 3. 新增: 费率参数配置 (F-A03)   -->
+  <!-- ============================== -->
+  <div class="card card-new">
+    <div class="card-title">
+      💲 费率参数配置 <span class="badge-new">新增</span>
+    </div>
+    <div class="card-body">
+
+      <!-- Fee formula -->
+      <div class="formula-box">
+        <span class="formula-label">计费公式 (F-A03)</span>
+        <span class="var-highlight">energy_fee</span> = actual_energy × energy_price<br>
+        <span class="var-highlight">time_fee</span> = actual_service_minutes × time_price<br>
+        <span class="var-highlight">occupancy_fee</span> = max(0, overtime_minutes) × occupancy_price<br>
+        <strong><span class="var-highlight">total_fee</span> = energy_fee + time_fee + occupancy_fee</strong>
+      </div>
+
+      <!-- Fee params -->
+      <div class="form-grid" style="margin-bottom:24px;">
+        <div class="form-group">
+          <label class="form-label">
+            energy_price
+            <span class="tooltip-icon" data-tip="每千瓦时电量的单价，适用于 ENERGY 和 MIXED 模式">?</span>
+          </label>
+          <div class="form-desc">电量单价（元/kWh）</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" class="form-input" value="1.5" min="0" step="0.1">
+            <span style="font-size:13px;color:var(--text-sec);white-space:nowrap">元/kWh</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            time_price
+            <span class="tooltip-icon" data-tip="每分钟充电时长的单价，适用于 TIME 和 MIXED 模式。ENERGY 模式下设为 0">?</span>
+          </label>
+          <div class="form-desc">时长单价（元/分钟）</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" class="form-input" value="0.0" min="0" step="0.1">
+            <span style="font-size:13px;color:var(--text-sec);white-space:nowrap">元/分钟</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Occupancy fee section -->
+      <div style="border-top:1px solid #ebe6de;padding-top:20px;">
+        <h4 style="font-size:15px;color:var(--text);margin-bottom:6px;">占位费参数</h4>
+        <p style="font-size:12px;color:var(--text-sec);margin-bottom:16px;">
+          充电完成后用户未在缓冲时间内挪车，超出部分按分钟计收占位费。occupancy_start_after 即 leave_buffer 挪车缓冲结束后开始计费。
+        </p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">
+              occupancy_price
+              <span class="tooltip-icon" data-tip="超时占位的每分钟费用，充电完成后超过 occupancy_start_after 分钟未挪车开始计费">?</span>
+            </label>
+            <div class="form-desc">占位费单价（元/分钟）</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" class="form-input" value="0.5" min="0" step="0.1">
+              <span style="font-size:13px;color:var(--text-sec);white-space:nowrap">元/分钟</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              occupancy_start_after
+              <span class="tooltip-icon" data-tip="充电完成后多少分钟开始计收占位费，与 leave_buffer 挪车缓冲时间对齐">?</span>
+            </label>
+            <div class="form-desc">超时起算阈值（分钟）</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" class="form-input" value="10" min="0" step="1">
+              <span style="font-size:13px;color:var(--text-sec);white-space:nowrap">分钟</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live preview -->
+      <div style="background:#f9f5ee;border-radius:8px;padding:16px 20px;margin-top:24px;">
+        <h4 style="font-size:14px;color:var(--text);margin-bottom:12px;">费用试算示例</h4>
+        <p style="font-size:13px;color:var(--text-sec);margin-bottom:12px;">
+          假设: 实际充电量 = 30 kWh, 实际充电时长 = 60 分钟, 超时占位 = 5 分钟
+        </p>
+        <div class="param-row">
+          <div class="param-card">
+            <div class="param-icon energy">⚡</div>
+            <div class="param-info">
+              <div class="param-name">电量费用 (energy_fee)</div>
+              <div class="param-value green">¥ 45.00</div>
+            </div>
+          </div>
+          <div class="param-card">
+            <div class="param-icon time">⏱️</div>
+            <div class="param-info">
+              <div class="param-name">时长费用 (time_fee)</div>
+              <div class="param-value gold">¥ 0.00</div>
+            </div>
+          </div>
+        </div>
+        <div class="param-row">
+          <div class="param-card">
+            <div class="param-icon occupy">🅿️</div>
+            <div class="param-info">
+              <div class="param-name">占位费用 (occupancy_fee)</div>
+              <div class="param-value rust">¥ 2.50</div>
+            </div>
+          </div>
+          <div class="param-card">
+            <div class="param-icon" style="background:rgba(45,106,79,0.15);">💰</div>
+            <div class="param-info">
+              <div class="param-name">应收总费用 (total_fee)</div>
+              <div class="param-value green" style="font-size:24px;">¥ 47.50</div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--text-sec);">
+          计算过程: 45.00 (30kWh × 1.5) + 0.00 (60min × 0.0) + 2.50 (5min × 0.5) = ¥47.50
+        </p>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn-save">保存计费配置</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

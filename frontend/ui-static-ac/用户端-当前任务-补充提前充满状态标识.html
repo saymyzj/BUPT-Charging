@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当前任务 - 补充提前充满(COMPLETED_EARLY)状态标识(F-U14) | 智能充电桩调度计费系统</title>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
+  --accent: #d4a853; --text: #2c2c2c; --text2: #7a7a7a;
+  --shadow: 0 4px 12px rgba(120,80,40,0.08); --nav-bg: #f5f0e8; --radius: 10px;
+  --early: #e67e22;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1,h2,h3,h4,h5 { font-family: Georgia, serif; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 56px; }
+.nav-brand { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab { padding: 8px 22px; border-radius: 8px; font-size: 15px; color: var(--text2); cursor: pointer; transition: all 0.2s; text-decoration: none; }
+.nav-tab:hover { color: var(--text); background: rgba(45,106,79,0.06); }
+.nav-tab.active { color: var(--primary); font-weight: 600; background: rgba(45,106,79,0.1); }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--text2); }
+.nav-right .logout { color: var(--secondary); cursor: pointer; }
+
+/* LAYOUT */
+.container { display: flex; gap: 24px; padding: 24px 32px; min-height: calc(100vh - 56px); }
+.timeline-panel { width: 300px; min-width: 280px; }
+.detail-panel { flex: 1; min-width: 0; }
+
+/* TIMELINE */
+.timeline-panel h3 { font-size: 18px; color: var(--primary); margin-bottom: 20px; }
+.tl-item { display: flex; gap: 14px; margin-bottom: 0; padding: 14px 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+.tl-item:hover { background: rgba(45,106,79,0.04); }
+.tl-item.selected { background: rgba(45,106,79,0.08); }
+.tl-track { display: flex; flex-direction: column; align-items: center; width: 20px; }
+.tl-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.tl-dot.done { background: var(--primary); }
+.tl-dot.current { background: var(--accent); box-shadow: 0 0 0 4px rgba(212,168,83,0.3); }
+.tl-dot.early { background: var(--early); box-shadow: 0 0 0 4px rgba(230,126,34,0.25); }
+.tl-dot.future { background: #ddd; }
+.tl-line { flex: 1; width: 2px; margin: 4px 0; }
+.tl-line.done { background: var(--primary); }
+.tl-line.current { background: var(--accent); }
+.tl-line.early { background: var(--early); }
+.tl-line.none { background: transparent; }
+.tl-content { flex: 1; }
+.tl-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.tl-time { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.tl-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.tl-badge { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600; margin-top: 6px; }
+.tl-badge.done { background: rgba(45,106,79,0.1); color: var(--primary); }
+.tl-badge.charging { background: rgba(212,168,83,0.15); color: #b8922e; }
+.tl-badge.early-complete { background: rgba(230,126,34,0.12); color: var(--early); }
+.tl-badge.pending { background: #f0f0f0; color: #999; }
+
+/* DETAIL PANEL */
+.detail-header h2 { font-size: 22px; color: var(--primary); margin-bottom: 20px; }
+
+/* CARD */
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+.card-title { padding: 14px 20px; border-bottom: 1px solid #ebe6de; font-size: 15px; font-weight: 600; color: var(--primary); }
+.card-body { padding: 20px; }
+
+/* NEW SECTION HIGHLIGHT */
+.section-new { border: 2px dashed var(--primary); border-radius: var(--radius); position: relative; }
+.section-new-label { position: absolute; top: -10px; left: 16px; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 12px; border-radius: 10px; font-weight: 600; z-index: 1; }
+
+/* COMPLETION BANNERS */
+.complete-banner { text-align: center; padding: 32px 20px; }
+.complete-icon { font-size: 56px; margin-bottom: 12px; }
+.complete-type { display: inline-block; padding: 6px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; margin-top: 10px; }
+.complete-type.normal { background: rgba(45,106,79,0.1); color: var(--primary); }
+.complete-type.early { background: rgba(230,126,34,0.12); color: var(--early); border: 1px solid rgba(230,126,34,0.3); }
+
+/* ENERGY COMPARISON */
+.energy-compare { display: flex; align-items: center; justify-content: center; gap: 24px; padding: 24px; background: #faf8f4; border-radius: 8px; margin: 20px 0; }
+.energy-block { text-align: center; }
+.energy-block .label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.energy-block .value { font-family: Georgia, serif; font-size: 28px; font-weight: 700; }
+.energy-block .value.request { color: var(--text2); }
+.energy-block .value.actual { color: var(--primary); }
+.energy-block .value.limit { color: var(--early); }
+.energy-arrow { font-size: 24px; color: var(--text2); }
+.energy-diff { text-align: center; padding: 8px 16px; background: rgba(230,126,34,0.08); border-radius: 6px; border: 1px solid rgba(230,126,34,0.2); }
+.energy-diff .diff-label { font-size: 11px; color: var(--text2); }
+.energy-diff .diff-value { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: var(--early); }
+
+/* BILL TABLE */
+.bill-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.bill-table th { text-align: left; padding: 10px 16px; background: #faf8f4; color: var(--text2); font-weight: 500; font-size: 13px; }
+.bill-table td { padding: 10px 16px; border-bottom: 1px solid #f0ece6; }
+.bill-table tr:last-child td { border-bottom: none; }
+.bill-table .total td { font-weight: 700; font-size: 16px; background: rgba(45,106,79,0.04); }
+
+/* EXPLANATION BOX */
+.explain-box { background: rgba(230,126,34,0.06); border: 1px solid rgba(230,126,34,0.2); border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+.explain-box h4 { font-size: 14px; color: var(--early); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.explain-box p { font-size: 13px; color: var(--text); line-height: 1.7; }
+.explain-box code { background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+
+/* INFO ROW */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.info-row { display: flex; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid #f5f0e8; font-size: 14px; }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text2); }
+.info-value { font-weight: 600; }
+
+/* ACTION BAR */
+.action-bar { display: flex; gap: 12px; margin-top: 16px; }
+.btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #245a42; }
+.btn-outline { background: transparent; border: 1px solid #ddd; color: var(--text); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-accent { background: var(--accent); color: #fff; }
+
+/* DESIGN NOTE */
+.design-note { background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; font-size: 13px; line-height: 1.6; color: #e65100; }
+.design-note strong { color: #bf360c; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">⚡ 智能充电桩调度计费系统</div>
+  <div class="nav-tabs">
+    <span class="nav-tab">工作台</span>
+    <span class="nav-tab active">当前任务</span>
+    <span class="nav-tab">通知中心</span>
+    <span class="nav-tab">账户中心</span>
+  </div>
+  <div class="nav-right">
+    <span>🔔 通知(2)</span>
+    <span>用户: 张三</span>
+    <span class="logout">退出</span>
+    <span style="font-weight:600;color:var(--primary)">14:23:45</span>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ==================== -->
+  <!-- TIMELINE PANEL       -->
+  <!-- ==================== -->
+  <div class="timeline-panel">
+    <h3>任务时间线</h3>
+
+    <!-- State 0: 排队等待 (done) -->
+    <div class="tl-item">
+      <div class="tl-track">
+        <div class="tl-dot done"></div>
+        <div class="tl-line done"></div>
+      </div>
+      <div class="tl-content">
+        <div class="tl-title">排队等待</div>
+        <div class="tl-time">14:00:00 入队</div>
+        <div class="tl-desc">排队位置: #1 · 等待 8分钟</div>
+        <div class="tl-badge done">已完成</div>
+      </div>
+    </div>
+
+    <!-- State 1: 叫号确认 (done) -->
+    <div class="tl-item">
+      <div class="tl-track">
+        <div class="tl-dot done"></div>
+        <div class="tl-line done"></div>
+      </div>
+      <div class="tl-content">
+        <div class="tl-title">叫号确认</div>
+        <div class="tl-time">14:08:00 叫号</div>
+        <div class="tl-desc">桩号: FAST_01 · 已确认到场</div>
+        <div class="tl-badge done">已完成</div>
+      </div>
+    </div>
+
+    <!-- State 2: 充电中 (done) -->
+    <div class="tl-item">
+      <div class="tl-track">
+        <div class="tl-dot done"></div>
+        <div class="tl-line early"></div>
+      </div>
+      <div class="tl-content">
+        <div class="tl-title">充电中</div>
+        <div class="tl-time">14:10:00 开始充电</div>
+        <div class="tl-desc">已充 28.5 / 申报 40 kWh</div>
+        <div class="tl-badge done">已完成</div>
+      </div>
+    </div>
+
+    <!-- ★ State 3: 提前充满结算 (NEW - current, highlighted) -->
+    <div class="tl-item selected section-new" style="padding:14px 12px;">
+      <div class="section-new-label">新增状态</div>
+      <div class="tl-track">
+        <div class="tl-dot early"></div>
+        <div class="tl-line none"></div>
+      </div>
+      <div class="tl-content">
+        <div class="tl-title" style="color:var(--early)">提前充满结算</div>
+        <div class="tl-time">14:57:12 提前充满</div>
+        <div class="tl-desc">
+          实际 28.5 kWh / 申报 40 kWh<br>
+          battery_limit 触发提前结束
+        </div>
+        <div class="tl-badge early-complete">COMPLETED_EARLY</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== -->
+  <!-- DETAIL PANEL         -->
+  <!-- ==================== -->
+  <div class="detail-panel">
+
+    <div class="design-note">
+      <strong>设计说明 (F-U14):</strong> 本页展示 Task.vue 完成结算阶段需要新增的"提前充满 (COMPLETED_EARLY)"状态标识。
+      当 actual_energy 达到 battery_limit_energy 时，系统提前结束充电，状态为 COMPLETED_EARLY 而非 COMPLETED。
+      以下为该状态下的完整UI设计，与正常完成状态的差异以橙色标注。
+    </div>
+
+    <!-- ★ NEW: 提前充满完成 Banner (区别于正常完成的绿色Banner) -->
+    <div class="card section-new" style="margin-bottom:20px;">
+      <div class="section-new-label">新增: 提前充满Banner</div>
+      <div class="complete-banner">
+        <div class="complete-icon">🔋</div>
+        <h2 style="color:var(--early);font-size:22px">车辆已提前充满！</h2>
+        <p style="color:var(--text2);margin-top:6px;font-size:14px">
+          电池已达到可充入上限，充电提前结束。费用按实际充电量结算。
+        </p>
+        <div class="complete-type early">COMPLETED_EARLY · 提前充满</div>
+      </div>
+    </div>
+
+    <!-- ★ NEW: 申报量 vs 实际量 对比展示 -->
+    <div class="card section-new">
+      <div class="section-new-label">新增: 能量差异对比</div>
+      <div class="card-title">申报量与实际量对比 (F-U14)</div>
+      <div class="card-body">
+        <div class="energy-compare">
+          <div class="energy-block">
+            <div class="label">申报充电量 (request_energy)</div>
+            <div class="value request">40.0 <small style="font-size:14px">kWh</small></div>
+          </div>
+          <div class="energy-arrow">→</div>
+          <div class="energy-block">
+            <div class="label">电池可充上限 (battery_limit_energy)</div>
+            <div class="value limit">28.5 <small style="font-size:14px">kWh</small></div>
+          </div>
+          <div class="energy-arrow">→</div>
+          <div class="energy-block">
+            <div class="label">实际充电量 (actual_energy)</div>
+            <div class="value actual">28.5 <small style="font-size:14px">kWh</small></div>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div class="energy-diff" style="display:inline-block;">
+            <div class="diff-label">申报与实际差异</div>
+            <div class="diff-value">-11.5 kWh (28.8%)</div>
+          </div>
+        </div>
+
+        <div class="explain-box">
+          <h4>⚠️ 为什么会提前充满？</h4>
+          <p>
+            用户申报充电量 (<code>request_energy</code>) 为 40 kWh，但车辆电池实际可充入上限 (<code>battery_limit_energy</code>) 为 28.5 kWh。<br>
+            当 <code>actual_energy</code> 达到 <code>battery_limit_energy</code> 时，系统自动结束充电，最终状态标记为 <strong style="color:var(--early)">COMPLETED_EARLY</strong>。<br>
+            费用按照 <strong>actual_energy (28.5 kWh)</strong> 和实际充电时长结算，而非按申报量。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 充电详单 (修改版 - 高亮差异字段) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card">
+        <div class="card-title">充电详单</div>
+        <div class="card-body" style="padding:0">
+          <table class="bill-table">
+            <tr><th>请求编号</th><td>REQ-0042</td></tr>
+            <tr><th>充电模式</th><td>FAST（快充）</td></tr>
+            <tr><th>申报充电量</th><td>40.0 kWh</td></tr>
+            <tr class="section-new" style="border:none;position:static;">
+              <th style="color:var(--early)">实际充电量 ★</th>
+              <td style="color:var(--early);font-weight:700">28.5 kWh</td>
+            </tr>
+            <tr class="section-new" style="border:none;position:static;">
+              <th style="color:var(--early)">battery_limit ★</th>
+              <td style="color:var(--early);font-weight:700">28.5 kWh</td>
+            </tr>
+            <tr><th>充电桩号</th><td>FAST_01 (30kW)</td></tr>
+            <tr><th>开始充电</th><td>14:10:00</td></tr>
+            <tr><th>结束充电</th><td>14:57:12</td></tr>
+            <tr><th>充电时长</th><td>47分12秒</td></tr>
+            <tr class="section-new" style="border:none;position:static;">
+              <th style="color:var(--early)">最终状态 ★</th>
+              <td><span style="background:rgba(230,126,34,0.12);color:var(--early);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600">COMPLETED_EARLY</span></td>
+            </tr>
+            <tr><th>is_no_show</th><td>否</td></tr>
+            <tr><th>is_cancelled</th><td>否</td></tr>
+            <tr><th>is_interrupted</th><td>否</td></tr>
+            <tr><th>is_fault_requeue</th><td>否</td></tr>
+            <tr><th>is_leave_timeout</th><td>否</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">费用账单</div>
+        <div class="card-body" style="padding:0">
+          <table class="bill-table">
+            <tr><th>请求编号</th><td>REQ-0042</td></tr>
+            <tr><th>计费模式</th><td>ENERGY</td></tr>
+            <tr><th>申报充电量</th><td>40.0 kWh</td></tr>
+            <tr class="section-new" style="border:none;position:static;">
+              <th style="color:var(--early)">计费电量 ★</th>
+              <td style="color:var(--early);font-weight:700">28.5 kWh (按实际)</td>
+            </tr>
+            <tr><th>电量费用</th><td style="color:var(--primary);font-weight:600">¥ 42.75</td></tr>
+            <tr><th>时长费用</th><td>¥ 0.00</td></tr>
+            <tr><th>占位费用</th><td>¥ 0.00</td></tr>
+            <tr class="total"><th>应收总费用</th><td style="color:var(--primary)">¥ 42.75</td></tr>
+            <tr><th>支付状态</th><td><span style="background:#fff3e0;color:#e65100;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600">UNPAID</span></td></tr>
+          </table>
+          <div style="padding:16px 16px 4px;font-size:12px;color:var(--text2)">
+            计算: 28.5 kWh × 1.50 元/kWh = ¥42.75<br>
+            （费用按 actual_energy 而非 request_energy 结算）
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="action-bar" style="margin-top:20px">
+      <button class="btn btn-primary">立即支付 ¥42.75</button>
+      <button class="btn btn-outline">查看完整详单</button>
+      <button class="btn btn-accent">确认挪车</button>
+    </div>
+
+    <!-- ★ NEW: 与正常完成的对比说明 -->
+    <div class="card section-new" style="margin-top:20px;">
+      <div class="section-new-label">新增: 状态区分说明</div>
+      <div class="card-title">COMPLETED vs COMPLETED_EARLY 状态区分</div>
+      <div class="card-body">
+        <table class="bill-table">
+          <thead>
+            <tr>
+              <th style="width:30%">差异项</th>
+              <th style="width:35%">COMPLETED（正常完成）</th>
+              <th style="width:35%;background:rgba(230,126,34,0.06)">COMPLETED_EARLY（提前充满）</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:600">触发条件</td>
+              <td>actual_energy ≥ request_energy</td>
+              <td style="color:var(--early)">actual_energy = battery_limit_energy < request_energy</td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">Banner 图标</td>
+              <td>✓ 绿色 "充电已完成"</td>
+              <td style="color:var(--early)">🔋 橙色 "车辆已提前充满"</td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">状态标签颜色</td>
+              <td><span style="background:rgba(45,106,79,0.1);color:var(--primary);padding:2px 8px;border-radius:8px;font-size:12px">COMPLETED</span></td>
+              <td><span style="background:rgba(230,126,34,0.12);color:var(--early);padding:2px 8px;border-radius:8px;font-size:12px">COMPLETED_EARLY</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">时间线节点颜色</td>
+              <td>绿色 (--primary)</td>
+              <td style="color:var(--early)">橙色 (--early: #e67e22)</td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">能量对比展示</td>
+              <td>不显示（无差异）</td>
+              <td style="color:var(--early)">显示 request vs limit vs actual 三栏对比</td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">计费基准</td>
+              <td>actual_energy ≈ request_energy</td>
+              <td style="color:var(--early)">actual_energy (< request_energy)</td>
+            </tr>
+            <tr>
+              <td style="font-weight:600">调度影响</td>
+              <td>正常释放桩位</td>
+              <td style="color:var(--early)">提前释放桩位，触发重调度</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
