@@ -68,9 +68,9 @@ def _b64decode(token: str) -> dict | None:
         return None
 
 
-def generate_token(user_id: int, username: str, role: str) -> str:
+def generate_token(db_user_id: int, username: str, role: str) -> str:
     payload = {
-        "user_id": user_id,
+        "db_user_id": db_user_id,
         "username": username,
         "role": role,
         "exp": int(time.time()) + int(current_app.config.get("JWT_EXPIRATION_HOURS", 24)) * 3600,
@@ -118,15 +118,17 @@ def require_auth(view_func):
             return error_response(1001, "无效的认证令牌或已过期")
 
         user = query_db(
-            "SELECT id, username, role FROM user WHERE id = ?",
-            [payload["user_id"]],
+            "SELECT id, user_id, username, role FROM user WHERE id = ?",
+            [payload["db_user_id"]],
             one=True,
         )
         if not user:
             return error_response(1001, "用户不存在")
 
         g.current_user = {
-            "user_id": user["id"],
+            "id": user["id"],
+            "db_user_id": user["id"],
+            "user_id": user["user_id"],
             "username": user["username"],
             "role": user["role"],
         }

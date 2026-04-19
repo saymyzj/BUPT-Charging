@@ -12,6 +12,7 @@ def validate_create_request(data):
         (is_valid: bool, errors: list)
     """
     errors = []
+    data = data or {}
     
     # 必填字段检查
     required = ['request_time', 'charge_mode', 'request_energy']
@@ -31,8 +32,8 @@ def validate_create_request(data):
         energy = float(data['request_energy'])
         if energy <= 0:
             errors.append("request_energy must be positive")
-        if energy > 100:  # 建议上限100kWh
-            errors.append("request_energy exceeds maximum (100 kWh)")
+        if energy > 300:
+            errors.append("request_energy exceeds maximum (300 kWh)")
     except (ValueError, TypeError):
         errors.append("request_energy must be a number")
     

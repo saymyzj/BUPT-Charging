@@ -1,6 +1,4 @@
-"""
-最小鉴权回归测试
-"""
+"""V3 最小鉴权回归测试。"""
 
 import os
 import sys
@@ -9,7 +7,7 @@ import unittest
 
 from flask import Flask
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.routes.auth import auth_bp
 from app.utils.db import init_db
@@ -34,15 +32,20 @@ class MinimalAuthTests(unittest.TestCase):
     def test_register_login_profile(self):
         register_resp = self.client.post(
             "/api/auth/register",
-            json={"username": "user_001", "password": "secret12", "role": "USER"},
+            json={"username": "user_001", "password": "secret12", "battery_capacity": 60.0},
         ).get_json()
         self.assertEqual(register_resp["code"], 0)
+        self.assertEqual(
+            set(register_resp["data"].keys()),
+            {"user_id", "username", "role", "created_at"},
+        )
 
         login_resp = self.client.post(
             "/api/auth/login",
             json={"username": "user_001", "password": "secret12"},
         ).get_json()
         self.assertEqual(login_resp["code"], 0)
+        self.assertEqual(set(login_resp["data"].keys()), {"token", "user_id", "role"})
         token = login_resp["data"]["token"]
 
         profile_resp = self.client.get(
@@ -51,6 +54,27 @@ class MinimalAuthTests(unittest.TestCase):
         ).get_json()
         self.assertEqual(profile_resp["code"], 0)
         self.assertEqual(profile_resp["data"]["username"], "user_001")
+        self.assertEqual(profile_resp["data"]["battery_capacity"], 60.0)
+
+    def test_public_register_ignores_admin_role(self):
+        register_resp = self.client.post(
+            "/api/auth/register",
+            json={
+                "username": "user_admin_attempt",
+                "password": "secret12",
+                "battery_capacity": 60.0,
+                "role": "ADMIN",
+            },
+        ).get_json()
+        self.assertEqual(register_resp["code"], 0)
+        self.assertEqual(register_resp["data"]["role"], "USER")
+
+        login_resp = self.client.post(
+            "/api/auth/login",
+            json={"username": "user_admin_attempt", "password": "secret12"},
+        ).get_json()
+        self.assertEqual(login_resp["code"], 0)
+        self.assertEqual(login_resp["data"]["role"], "USER")
 
 
 if __name__ == "__main__":

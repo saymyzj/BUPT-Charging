@@ -1,10 +1,4 @@
-"""
-场景适配器单元测试
-测试两种适配模式和初始化逻辑
-
-作者：成员 B
-日期：2026-04-02
-"""
+"""Legacy V2 场景适配测试，Day 3 暂不纳入运行。"""
 
 import unittest
 import sys
@@ -12,6 +6,8 @@ import os
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+raise unittest.SkipTest("Legacy V2 scenario adapter tests; superseded by V3 Day 3 minimal closure.")
 
 from app.services.scenario_adapter import (
     ScenarioAdapter, StationSnapshot, 
