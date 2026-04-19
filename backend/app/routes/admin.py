@@ -1,303 +1,492 @@
-"""
-管理端接口模块
-提供场景配置管理、统计查询等管理功能
+"""V3 admin routes."""
 
-作者：成员 B
-日期：2026-04-02
-"""
+import json
 
-from flask import Blueprint, request
-from app.utils.response import success_response, error_response
-from app.services.config_manager import ConfigManager
-from app.services.scenario_adapter import get_scenario_adapter
-from app.enums import StationQueueMode
-from typing import Dict, Any
+from flask import Blueprint, current_app, request
 
-admin_bp = Blueprint('admin', __name__)
+from app.enums import DispatchMode, FaultDispatchMode
+from app.services.queue_model import (
+    handle_station_fault,
+    handle_station_recover,
+    handle_station_shutdown,
+    handle_station_start,
+    set_dispatch_mode,
+    set_fault_dispatch_mode,
+)
+from app.utils.auth import require_admin
+from app.utils.db import execute_db, query_db
+from app.utils.response import error_response, success_response
+
+admin_bp = Blueprint("admin", __name__)
 
 
-# ============================================
-# 场景配置管理接口
-# ============================================
-
-@admin_bp.route('/scenario', methods=['POST'])
-def create_scenario():
-    """
-    创建场景配置
-    
-    Request Body:
-        {
-            "config_name": "测试场景",
-            "fast_station_count": 2,
-            "slow_station_count": 3,
-            "waiting_area_capacity": 6,
-            "station_queue_mode": "UNIFORM_CAPACITY",
-            "station_queue_capacity": 3,
-            "description": "场景描述"
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "config_id": 1,
-                "config_name": "测试场景"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    if not data:
-        return error_response(1001, "请求体不能为空")
-    
-    # 提取参数
-    config_name = data.get('config_name')
-    if not config_name:
-        return error_response(1001, "config_name 不能为空")
-    
-    fast_count = data.get('fast_station_count', 2)
-    slow_count = data.get('slow_station_count', 3)
-    waiting_capacity = data.get('waiting_area_capacity', 6)
-    queue_mode = data.get('station_queue_mode', 'UNIFORM_CAPACITY')
-    queue_capacity = data.get('station_queue_capacity', 3)
-    description = data.get('description', '')
-    
-    # 验证队列模式
-    if queue_mode not in [m.value for m in StationQueueMode]:
-        return error_response(1001, f"无效的队列模式: {queue_mode}")
-    
-    # 创建配置
-    success, config_id, message = ConfigManager.create_config(
-        config_name=config_name,
-        fast_station_count=fast_count,
-        slow_station_count=slow_count,
-        waiting_area_capacity=waiting_capacity,
-        station_queue_mode=queue_mode,
-        station_queue_capacity=queue_capacity,
-        description=description
+def _system_mode_value(config_key: str, default_value: str) -> str:
+    row = query_db(
+        "SELECT config_value FROM scheduler_config WHERE config_key = ?",
+        [config_key],
+        one=True,
     )
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({
-        "config_id": config_id,
-        "config_name": config_name
-    })
+    if not row:
+        return default_value
+    return str(row["config_value"])
 
 
-@admin_bp.route('/scenario/<int:config_id>', methods=['GET'])
-def get_scenario(config_id: int):
-    """
-    获取场景配置详情
-    
-    Args:
-        config_id: 场景配置ID
-    
-    Returns:
-        场景配置详情
-    """
-    config = ConfigManager.get_config(config_id)
-    
-    if not config:
-        return error_response(1002, "场景配置不存在")
-    
-    return success_response(config.to_dict())
+def _system_config_int(config_key: str, default_value: int) -> int:
+    row = query_db(
+        "SELECT config_value FROM scheduler_config WHERE config_key = ?",
+        [config_key],
+        one=True,
+    )
+    if not row:
+        return int(default_value)
+    try:
+        return int(row["config_value"])
+    except (TypeError, ValueError):
+        return int(default_value)
 
 
-@admin_bp.route('/scenario', methods=['GET'])
-def list_scenarios():
-    """
-    获取所有场景配置列表
-    
-    Returns:
-        场景配置列表
-    """
-    configs = ConfigManager.get_all_configs()
-    
-    return success_response({
-        "total": len(configs),
-        "scenarios": [config.to_dict() for config in configs]
-    })
+def _charging_queue_len() -> int:
+    row = query_db(
+        "SELECT COALESCE(MAX(queue_capacity), 0) AS queue_capacity FROM charging_station",
+        one=True,
+    )
+    if row and int(row["queue_capacity"]) > 0:
+        return int(row["queue_capacity"])
+    return int(current_app.config.get("CHARGING_QUEUE_LEN", 2))
 
 
-@admin_bp.route('/scenario/<int:config_id>', methods=['PUT'])
-def update_scenario(config_id: int):
-    """
-    更新场景配置
-    
-    注意：已激活的配置不能修改，需要先停用
-    """
-    data = request.get_json()
-    
-    if not data:
-        return error_response(1001, "请求体不能为空")
-    
-    # 提取可更新字段
-    allowed_fields = [
-        'config_name', 'fast_station_count', 'slow_station_count',
-        'waiting_area_capacity', 'station_queue_mode',
-        'station_queue_capacity', 'description'
-    ]
-    
-    update_data = {k: v for k, v in data.items() if k in allowed_fields}
-    
-    if not update_data:
-        return error_response(1001, "没有可更新的字段")
-    
-    success, message = ConfigManager.update_config(config_id, **update_data)
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({"message": message})
+def _iso_string(value):
+    if value is None:
+        return None
+    return str(value).replace(" ", "T")
 
 
-@admin_bp.route('/scenario/<int:config_id>', methods=['DELETE'])
-def delete_scenario(config_id: int):
-    """
-    删除场景配置
-    
-    注意：不能删除已激活的配置
-    """
-    success, message = ConfigManager.delete_config(config_id)
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({"message": message})
+def _has_active_request(user_pk: int) -> bool:
+    row = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE user_id = ?
+          AND request_status IN ('WAITING_AREA', 'QUEUED', 'CHARGING')
+        """,
+        [user_pk],
+        one=True,
+    )
+    return bool(row and int(row["cnt"]) > 0)
 
 
-@admin_bp.route('/scenario/<int:config_id>/activate', methods=['POST'])
-def activate_scenario(config_id: int):
-    """
-    激活场景配置
-    
-    激活新配置时会自动停用其他配置
-    """
-    success, message = ConfigManager.activate_config(config_id)
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({"message": message})
+def _user_summary(row):
+    return {
+        "user_id": row["user_id"],
+        "username": row["username"],
+        "battery_capacity": float(row["battery_capacity"]),
+        "role": row["role"],
+        "created_at": _iso_string(row["created_at"]),
+        "has_active_request": _has_active_request(int(row["id"])),
+    }
 
 
-@admin_bp.route('/scenario/<int:config_id>/initialize', methods=['POST'])
-def initialize_scenario(config_id: int):
-    """
-    初始化场景（创建充电桩）
-    """
-    success, message = ConfigManager.initialize_stations_for_scenario(config_id)
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({"message": message})
+def _detail_summary(row):
+    return {
+        "detail_id": row["detail_id"],
+        "detail_generated_at": _iso_string(row["detail_generated_at"]),
+        "station_code": row["station_code"],
+        "actual_energy": float(row["actual_energy"]),
+        "charge_duration_seconds": int(row["charge_duration_seconds"]),
+        "start_time": _iso_string(row["start_time"]),
+        "stop_time": _iso_string(row["stop_time"]),
+        "charge_fee": float(row["charge_fee"]),
+        "service_fee": float(row["service_fee"]),
+        "total_fee": float(row["total_fee"]),
+        "request_status": row["request_status"],
+    }
 
 
-@admin_bp.route('/scenario/<int:config_id>/reset', methods=['POST'])
-def reset_scenario(config_id: int):
-    """
-    重置场景到初始状态
-    """
-    adapter = get_scenario_adapter()
-    success, message = adapter.reset_scenario(config_id)
-    
-    if not success:
-        return error_response(1003, message)
-    
-    return success_response({"message": message})
+def _validate_positive_float(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
-@admin_bp.route('/scenario/<int:config_id>/summary', methods=['GET'])
-def get_scenario_summary(config_id: int):
-    """
-    获取场景摘要信息
-    
-    包括充电桩状态统计、等待池状态等
-    """
-    summary = ConfigManager.get_scenario_summary(config_id)
-    
-    if not summary:
-        return error_response(1002, "场景配置不存在")
-    
-    return success_response(summary)
-
-
-# ============================================
-# 等待池状态查询接口
-# ============================================
-
-@admin_bp.route('/waiting-pools/status', methods=['GET'])
-def get_waiting_pools_status():
-    """
-    获取当前等待池状态
-    
-    Returns:
+@admin_bp.route("/system/config", methods=["GET"])
+@require_admin
+def get_system_config():
+    fast_row = query_db(
+        "SELECT COUNT(*) AS cnt FROM charging_station WHERE charge_mode = 'FAST'",
+        one=True,
+    )
+    slow_row = query_db(
+        "SELECT COUNT(*) AS cnt FROM charging_station WHERE charge_mode = 'SLOW'",
+        one=True,
+    )
+    return success_response(
         {
-            "fast_pool": {...},
-            "slow_pool": {...},
-            "total_waiting": 5,
-            "capacity": 6,
-            "available_slots": 1
+            "fast_station_count": int(fast_row["cnt"]) if fast_row else 0,
+            "slow_station_count": int(slow_row["cnt"]) if slow_row else 0,
+            "waiting_area_capacity": _system_config_int(
+                "waiting_area_capacity",
+                current_app.config.get("WAITING_AREA_SIZE", 6),
+            ),
+            "charging_queue_len": _charging_queue_len(),
+            "dispatch_mode": _system_mode_value("dispatch_mode", current_app.config.get("DISPATCH_MODE", "NORMAL")),
+            "fault_dispatch_mode": _system_mode_value(
+                "fault_dispatch_mode",
+                current_app.config.get("FAULT_DISPATCH_MODE", "TIME_ORDER"),
+            ),
         }
-    """
-    from app.services.waiting_pool import get_waiting_pool_manager
-    
-    manager = get_waiting_pool_manager()
-    status = manager.get_pool_status()
-    
-    if not status:
-        return error_response(1003, "无法获取等待池状态")
-    
-    return success_response(status)
+    )
 
 
-@admin_bp.route('/waiting-pools/statistics', methods=['GET'])
-def get_waiting_pools_statistics():
-    """
-    获取等待池统计信息
-    """
-    from app.services.waiting_pool import get_waiting_pool_manager
-    
-    manager = get_waiting_pool_manager()
-    stats = manager.get_pool_statistics()
-    
-    if not stats:
-        return error_response(1003, "无法获取等待池统计")
-    
-    return success_response(stats)
+@admin_bp.route("/system/fault-dispatch-mode", methods=["PUT"])
+@require_admin
+def update_fault_dispatch_mode():
+    data = request.get_json(silent=True) or {}
+    mode = data.get("fault_dispatch_mode")
+    valid_modes = {FaultDispatchMode.PRIORITY.value, FaultDispatchMode.TIME_ORDER.value}
+    if mode not in valid_modes:
+        return error_response(1001, "fault_dispatch_mode must be PRIORITY or TIME_ORDER")
+
+    return success_response({"fault_dispatch_mode": set_fault_dispatch_mode(mode)})
 
 
-# ============================================
-# 系统状态接口
-# ============================================
+@admin_bp.route("/system/dispatch-mode", methods=["PUT"])
+@require_admin
+def update_dispatch_mode():
+    data = request.get_json(silent=True) or {}
+    mode = data.get("dispatch_mode")
+    valid_modes = {
+        DispatchMode.NORMAL.value,
+        DispatchMode.EXT_SINGLE_BATCH.value,
+        DispatchMode.EXT_FULL_BATCH.value,
+    }
+    if mode not in valid_modes:
+        return error_response(1001, "dispatch_mode must be NORMAL, EXT_SINGLE_BATCH, or EXT_FULL_BATCH")
 
-@admin_bp.route('/system/status', methods=['GET'])
-def get_system_status():
-    """
-    获取系统整体状态
-    
-    包括当前激活场景、等待池状态、充电桩概况
-    """
-    # 获取当前激活场景
-    active_config = ConfigManager.get_active_config()
-    
-    if not active_config:
-        return error_response(1003, "没有激活的场景配置")
-    
-    # 获取场景摘要
-    summary = ConfigManager.get_scenario_summary(active_config.id)
-    
-    # 获取等待池状态
-    from app.services.waiting_pool import get_waiting_pool_manager
-    manager = get_waiting_pool_manager()
-    pool_status = manager.get_pool_status()
-    
-    return success_response({
-        "active_scenario": active_config.to_dict(),
-        "scenario_summary": summary,
-        "waiting_pools": pool_status
-    })
+    return success_response({"dispatch_mode": set_dispatch_mode(mode)})
+
+
+@admin_bp.route("/stations", methods=["GET"])
+@require_admin
+def list_stations():
+    rows = query_db(
+        """
+        SELECT
+            cs.station_code,
+            cs.charge_mode,
+            cs.station_status,
+            cs.current_queue_length,
+            cs.total_charge_count,
+            cs.total_charge_seconds,
+            cs.total_charge_energy,
+            cr.request_id AS current_request_id
+        FROM charging_station cs
+        LEFT JOIN charge_request cr ON cr.id = cs.current_request_id
+        ORDER BY cs.station_code
+        """
+    )
+    return success_response(
+        [
+            {
+                "station_code": row["station_code"],
+                "charge_mode": row["charge_mode"],
+                "station_status": row["station_status"],
+                "current_request_id": row["current_request_id"],
+                "queue_length": int(row["current_queue_length"]),
+                "total_charge_count": int(row["total_charge_count"]),
+                "total_charge_seconds": int(row["total_charge_seconds"]),
+                "total_charge_energy": float(row["total_charge_energy"]),
+            }
+            for row in rows
+        ]
+    )
+
+
+@admin_bp.route("/stations/<station_code>/queue", methods=["GET"])
+@require_admin
+def get_station_queue(station_code):
+    station = query_db(
+        """
+        SELECT id, station_code
+        FROM charging_station
+        WHERE station_code = ?
+        """,
+        [station_code],
+        one=True,
+    )
+    if not station:
+        return error_response(1002, "充电桩不存在")
+
+    rows = query_db(
+        """
+        SELECT
+            u.user_id,
+            u.battery_capacity,
+            cr.request_energy,
+            cr.queue_number,
+            cr.request_status,
+            cr.estimated_wait_seconds,
+            cr.station_queue_position
+        FROM charge_request cr
+        JOIN user u ON u.id = cr.user_id
+        WHERE cr.station_id = ?
+          AND cr.request_status IN ('QUEUED', 'CHARGING')
+        ORDER BY cr.station_queue_position
+        """,
+        [station["id"]],
+    )
+    queue = []
+    for row in rows:
+        queue.append(
+            {
+                "user_id": row["user_id"],
+                "battery_capacity": float(row["battery_capacity"]),
+                "request_energy": float(row["request_energy"]),
+                "queue_number": row["queue_number"],
+                "queue_wait_seconds": 0
+                if row["request_status"] == "CHARGING"
+                else int(row["estimated_wait_seconds"] or 0),
+            }
+        )
+
+    return success_response({"station_code": station["station_code"], "queue": queue})
+
+
+@admin_bp.route("/stations/<station_code>/start", methods=["POST"])
+@require_admin
+def start_station(station_code):
+    data = request.get_json(silent=True) or {}
+    result = handle_station_start(station_code, data.get("start_time"))
+    if result is None:
+        return error_response(1002, "charging station not found")
+    return success_response(result)
+
+
+@admin_bp.route("/stations/<station_code>/shutdown", methods=["POST"])
+@require_admin
+def shutdown_station(station_code):
+    data = request.get_json(silent=True) or {}
+    result = handle_station_shutdown(station_code, data.get("shutdown_time"))
+    if result is None:
+        return error_response(1002, "charging station not found")
+    if result.get("error_code") == 1007:
+        return error_response(1007, "charging station is not idle")
+    return success_response(result)
+
+
+@admin_bp.route("/stations/<station_code>/fault", methods=["POST"])
+@require_admin
+def mark_station_fault(station_code):
+    data = request.get_json(silent=True) or {}
+    result = handle_station_fault(station_code, data.get("fault_time"))
+    if result is None:
+        return error_response(1002, "charging station not found")
+    return success_response(result)
+
+
+@admin_bp.route("/stations/<station_code>/recover", methods=["POST"])
+@require_admin
+def recover_station(station_code):
+    data = request.get_json(silent=True) or {}
+    result = handle_station_recover(station_code, data.get("recover_time"))
+    if result is None:
+        return error_response(1002, "charging station not found")
+    return success_response(result)
+
+
+@admin_bp.route("/users", methods=["GET"])
+@require_admin
+def list_users():
+    page = request.args.get("page", 1, type=int)
+    page_size = request.args.get("page_size", 20, type=int)
+    if page < 1 or page_size < 1 or page_size > 100:
+        return error_response(1001, "invalid pagination parameters")
+
+    total_row = query_db("SELECT COUNT(*) AS cnt FROM user", one=True)
+    rows = query_db(
+        """
+        SELECT id, user_id, username, battery_capacity, role, created_at
+        FROM user
+        ORDER BY id
+        LIMIT ? OFFSET ?
+        """,
+        [page_size, (page - 1) * page_size],
+    )
+    return success_response(
+        {
+            "total": int(total_row["cnt"]) if total_row else 0,
+            "page": page,
+            "page_size": page_size,
+            "users": [_user_summary(row) for row in rows],
+        }
+    )
+
+
+@admin_bp.route("/users/<user_id>", methods=["GET"])
+@require_admin
+def get_user_detail(user_id):
+    user_row = query_db(
+        """
+        SELECT id, user_id, username, battery_capacity, role, created_at
+        FROM user
+        WHERE user_id = ?
+        """,
+        [user_id],
+        one=True,
+    )
+    if not user_row:
+        return error_response(1002, "user not found")
+
+    detail_rows = query_db(
+        """
+        SELECT
+            rd.detail_id,
+            rd.detail_generated_at,
+            rd.station_code,
+            rd.actual_energy,
+            rd.charge_duration_seconds,
+            rd.start_time,
+            rd.stop_time,
+            rd.charge_fee,
+            rd.service_fee,
+            rd.total_fee,
+            rd.request_status
+        FROM request_detail rd
+        WHERE rd.user_id = ?
+        ORDER BY rd.detail_generated_at DESC, rd.id DESC
+        """,
+        [user_row["id"]],
+    )
+    details = [_detail_summary(row) for row in detail_rows]
+    payload = _user_summary(user_row)
+    payload["historical_details"] = details
+    payload["details"] = details
+    return success_response(payload)
+
+
+@admin_bp.route("/users/<user_id>/battery-capacity", methods=["PUT"])
+@require_admin
+def update_user_battery_capacity(user_id):
+    data = request.get_json(silent=True) or {}
+    battery_capacity = _validate_positive_float(data.get("battery_capacity"))
+    if battery_capacity is None:
+        return error_response(1001, "battery_capacity must be positive")
+
+    user_row = query_db(
+        """
+        SELECT id, user_id, battery_capacity
+        FROM user
+        WHERE user_id = ?
+        """,
+        [user_id],
+        one=True,
+    )
+    if not user_row:
+        return error_response(1002, "user not found")
+    if _has_active_request(int(user_row["id"])):
+        return error_response(1010, "user has active request")
+
+    old_capacity = float(user_row["battery_capacity"])
+    execute_db(
+        """
+        UPDATE user
+        SET battery_capacity = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [battery_capacity, user_row["id"]],
+    )
+    execute_db(
+        """
+        INSERT INTO scheduler_event_log (event_type, request_id, event_payload)
+        VALUES (?, ?, ?)
+        """,
+        [
+            "ADMIN_UPDATE_BATTERY_CAPACITY",
+            user_id,
+            json.dumps(
+                {
+                    "user_id": user_id,
+                    "old_battery_capacity": old_capacity,
+                    "new_battery_capacity": battery_capacity,
+                },
+                ensure_ascii=True,
+            ),
+        ],
+    )
+    return success_response(
+        {
+            "user_id": user_id,
+            "battery_capacity": battery_capacity,
+            "updated": True,
+        }
+    )
+
+
+@admin_bp.route("/reports", methods=["GET"])
+@require_admin
+def get_reports():
+    granularity = request.args.get("granularity", "day")
+    if granularity not in {"day", "week", "month"}:
+        return error_response(1001, "granularity must be day, week, or month")
+
+    rows = query_db(
+        """
+        SELECT
+            detail_generated_at,
+            station_code,
+            charge_duration_seconds,
+            actual_energy,
+            charge_fee,
+            service_fee,
+            total_fee
+        FROM request_detail
+        ORDER BY detail_generated_at, station_code
+        """
+    )
+    grouped = {}
+    for row in rows:
+        generated_at = str(row["detail_generated_at"]).replace(" ", "T")
+        date_part = generated_at[:10]
+        if granularity == "day":
+            time_key = date_part
+        elif granularity == "month":
+            time_key = date_part[:7]
+        else:
+            from datetime import date
+
+            year, month, day = (int(part) for part in date_part.split("-"))
+            iso_year, iso_week, _ = date(year, month, day).isocalendar()
+            time_key = f"{iso_year}-W{iso_week:02d}"
+
+        key = (time_key, row["station_code"])
+        if key not in grouped:
+            grouped[key] = {
+                "time_key": time_key,
+                "station_code": row["station_code"],
+                "total_charge_count": 0,
+                "total_charge_seconds": 0,
+                "total_charge_energy": 0.0,
+                "total_charge_fee": 0.0,
+                "total_service_fee": 0.0,
+                "total_fee": 0.0,
+            }
+        item = grouped[key]
+        item["total_charge_count"] += 1
+        item["total_charge_seconds"] += int(row["charge_duration_seconds"])
+        item["total_charge_energy"] += float(row["actual_energy"])
+        item["total_charge_fee"] += float(row["charge_fee"])
+        item["total_service_fee"] += float(row["service_fee"])
+        item["total_fee"] += float(row["total_fee"])
+
+    report_rows = []
+    for item in grouped.values():
+        item["total_charge_energy"] = round(item["total_charge_energy"], 2)
+        item["total_charge_fee"] = round(item["total_charge_fee"], 2)
+        item["total_service_fee"] = round(item["total_service_fee"], 2)
+        item["total_fee"] = round(item["total_fee"], 2)
+        report_rows.append(item)
+
+    report_rows.sort(key=lambda item: (item["time_key"], item["station_code"]))
+    return success_response({"granularity": granularity, "rows": report_rows})

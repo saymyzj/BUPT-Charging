@@ -1,730 +1,602 @@
-from flask import Blueprint, request
-from app.utils.response import success_response, error_response
-from app.utils.validators import (
-    validate_create_request,
-    validate_cancel_request,
-    validate_confirm_arrival_request,
-    validate_interrupt_request,
-    validate_confirm_leave_request,
-    validate_pay_request
+"""V3 Day 3 请求最小闭环接口。"""
+
+from datetime import datetime
+
+from flask import Blueprint, current_app, request
+
+from app.enums import ChargeMode, RequestStatus
+from app.services.billing_service import ensure_request_detail
+from app.services.queue_model import (
+    predict_queued_request,
+    predict_waiting_area_request,
+    refresh_station_after_queue_change,
+    run_normal_scheduler,
+    settle_station_until_time,
 )
-from app.services.billing_service import generate_detail, generate_bill, save_bill, process_payment
-from app.services.contract_builders import build_status_response
-from app.services.config_manager import get_active_scenario, can_accept_request
-from app.services.scheduler_engine import (
-    advance_request_state_for_status_view,
-    predict_request_by_id,
-    reschedule_waiting_requests,
-    service_seconds_for_request,
-    trigger_reschedule_for_event,
+from app.utils.auth import get_current_user, require_auth
+from app.utils.db import execute_db, query_db
+from app.utils.response import error_response, success_response
+from app.utils.validators import validate_create_request
+
+request_bp = Blueprint("request", __name__)
+
+ACTIVE_REQUEST_STATUSES = (
+    RequestStatus.WAITING_AREA.value,
+    RequestStatus.QUEUED.value,
+    RequestStatus.CHARGING.value,
 )
-from app.services.waiting_pool import get_waiting_pool_manager
-from app.enums import ChargeMode, EventType
-from app.utils.db import query_db, execute_db
-from datetime import datetime, timedelta
-
-request_bp = Blueprint('request', __name__)
 
 
-def parse_iso_datetime(value):
-    if not value:
+def _parse_iso_datetime(value):
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _iso_string(value):
+    if value is None:
         return None
-    return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return str(value).replace(" ", "T")
 
 
-def format_iso_datetime(value):
-    if not value:
+def _next_request_id() -> str:
+    row = query_db(
+        """
+        SELECT request_id
+        FROM charge_request
+        WHERE request_id LIKE 'REQ%'
+        ORDER BY CAST(SUBSTR(request_id, 4) AS INTEGER) DESC
+        LIMIT 1
+        """,
+        one=True,
+    )
+    next_number = 1 if not row else int(str(row["request_id"])[3:]) + 1
+    return f"REQ{next_number:04d}"
+
+
+def _next_queue_number(charge_mode: str) -> str:
+    prefix = "F" if charge_mode == ChargeMode.FAST.value else "T"
+    row = query_db(
+        """
+        SELECT queue_number
+        FROM charge_request
+        WHERE queue_number LIKE ?
+        ORDER BY CAST(SUBSTR(queue_number, 2) AS INTEGER) DESC
+        LIMIT 1
+        """,
+        [f"{prefix}%"],
+        one=True,
+    )
+    next_number = 1 if not row else int(str(row["queue_number"])[1:]) + 1
+    return f"{prefix}{next_number}"
+
+
+def _validate_request_energy(value):
+    try:
+        energy = float(value)
+    except (TypeError, ValueError):
         return None
-    if isinstance(value, str):
-        return value
-    return value.strftime('%Y-%m-%dT%H:%M:%S')
+    if energy <= 0 or energy > 300:
+        return None
+    return energy
 
 
-@request_bp.route('/create', methods=['POST'])
+def _operation_time(data, fallback):
+    raw_value = (data or {}).get("stop_time")
+    if raw_value:
+        return _parse_iso_datetime(raw_value).strftime("%Y-%m-%dT%H:%M:%S")
+    return fallback
+
+
+def _get_request_for_operation(request_id, current_user):
+    req_row = query_db(
+        """
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.user_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.actual_energy,
+            cr.request_status,
+            cr.queue_number,
+            cr.waiting_area_order,
+            cr.request_time,
+            cr.station_id,
+            cr.station_queue_position,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            cr.charge_start_time,
+            cs.station_code,
+            cs.power_kw
+        FROM charge_request cr
+        LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.request_id = ?
+        """,
+        [request_id],
+        one=True,
+    )
+    if not req_row:
+        return None
+    if current_user["role"] != "ADMIN" and int(req_row["user_id"]) != int(current_user["id"]):
+        return None
+    return req_row
+
+
+def _front_waiting_count(req_row) -> int:
+    if req_row["request_status"] != RequestStatus.WAITING_AREA.value or req_row["waiting_area_order"] is None:
+        return 0
+
+    row = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE charge_mode = ?
+          AND request_status = ?
+          AND waiting_area_order < ?
+        """,
+        [
+            req_row["charge_mode"],
+            RequestStatus.WAITING_AREA.value,
+            req_row["waiting_area_order"],
+        ],
+        one=True,
+    )
+    return int(row["cnt"])
+
+
+def _serialize_status(req_row):
+    payload = {
+        "request_id": req_row["request_id"],
+        "queue_number": req_row["queue_number"],
+        "charge_mode": req_row["charge_mode"],
+        "request_energy": float(req_row["request_energy"]),
+        "request_status": req_row["request_status"],
+        "front_waiting_count": _front_waiting_count(req_row),
+        "station_code": req_row["station_code"],
+        "station_queue_position": req_row["station_queue_position"],
+        "estimated_wait_seconds": req_row["estimated_wait_seconds"],
+        "estimated_start_time": _iso_string(req_row["estimated_start_time"]),
+        "estimated_finish_time": _iso_string(req_row["estimated_finish_time"]),
+    }
+    if req_row["request_status"] == RequestStatus.WAITING_AREA.value:
+        prediction = predict_waiting_area_request(req_row["request_id"])
+        if prediction:
+            payload.update(prediction)
+    elif req_row["request_status"] in {
+        RequestStatus.QUEUED.value,
+        RequestStatus.CHARGING.value,
+    }:
+        prediction = predict_queued_request(req_row["request_id"])
+        if prediction:
+            payload.update(prediction)
+    return payload
+
+
+@request_bp.route("/create", methods=["POST"])
+@require_auth
 def create_request():
-    """
-    提交充电请求
-    
-    Request Body:
-        {
-            "request_time": "2026-03-31T10:00:00",
-            "charge_mode": "FAST",
-            "request_energy": 20.0
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "WAITING",
-                "estimated_wait_seconds": 600,
-                "estimated_start_time": "2026-03-31T10:10:00",
-                "estimated_finish_time": "2026-03-31T11:10:00"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
+    current_user = get_current_user()
+    data = request.get_json(silent=True) or {}
+
     is_valid, errors = validate_create_request(data)
     if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    # 检查是否有激活的场景配置
-    active_scenario = get_active_scenario()
-    if not active_scenario:
-        return error_response(1003, "No active scenario configuration")
-    
-    # 检查等待区容量
-    charge_mode = ChargeMode(data['charge_mode'])
-    can_accept, message = can_accept_request(charge_mode)
-    if not can_accept:
-        return error_response(1003, message)
-    
-    # 生成 request_id
-    count = query_db("SELECT COUNT(*) as cnt FROM charge_request", one=True)
-    request_id = f"REQ{count['cnt'] + 1:03d}"
+        return error_response(1001, "参数错误", {"errors": errors})
 
-    # `request_time` 是业务时间，当前阶段不得被服务器当前时间覆盖
-    submit_time = datetime.fromisoformat(data['request_time'].replace('Z', '+00:00'))
-    submit_time_iso = submit_time.strftime('%Y-%m-%dT%H:%M:%S')
-    request_energy = float(data['request_energy'])
-    estimated_service_seconds = service_seconds_for_request(request_energy, data['charge_mode'])
+    charge_mode = data["charge_mode"]
+    if charge_mode not in {ChargeMode.FAST.value, ChargeMode.SLOW.value}:
+        return error_response(1001, "charge_mode 必须是 FAST 或 SLOW")
 
-    # 插入数据库，预测结果由调度模块统一重算
-    execute_db("""
+    active_request = query_db(
+        """
+        SELECT request_id
+        FROM charge_request
+        WHERE user_id = ?
+          AND request_status IN (?, ?, ?)
+        LIMIT 1
+        """,
+        [current_user["id"], *ACTIVE_REQUEST_STATUSES],
+        one=True,
+    )
+    if active_request:
+        return error_response(1003, "当前用户已有活跃请求")
+
+    waiting_area_count = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE request_status = ?
+        """,
+        [RequestStatus.WAITING_AREA.value],
+        one=True,
+    )
+    if int(waiting_area_count["cnt"]) >= int(current_app.config.get("WAITING_AREA_SIZE", 6)):
+        return error_response(1004, "等候区容量已满")
+
+    available_station = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charging_station
+        WHERE charge_mode = ?
+          AND station_status = 'RUNNING'
+        """,
+        [charge_mode],
+        one=True,
+    )
+    if int(available_station["cnt"]) <= 0:
+        return error_response(1005, "当前模式无可用充电桩")
+
+    front_waiting_count = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE charge_mode = ?
+          AND request_status = ?
+        """,
+        [charge_mode, RequestStatus.WAITING_AREA.value],
+        one=True,
+    )
+    order_row = query_db(
+        """
+        SELECT COALESCE(MAX(waiting_area_order), 0) AS max_order
+        FROM charge_request
+        WHERE charge_mode = ?
+          AND request_status = ?
+        """,
+        [charge_mode, RequestStatus.WAITING_AREA.value],
+        one=True,
+    )
+
+    request_id = _next_request_id()
+    queue_number = _next_queue_number(charge_mode)
+    waiting_area_order = int(order_row["max_order"]) + 1
+    request_time = _parse_iso_datetime(data["request_time"]).strftime("%Y-%m-%dT%H:%M:%S")
+
+    execute_db(
+        """
         INSERT INTO charge_request (
-            request_id, charge_mode, request_energy, status, submit_time,
-            estimated_wait_seconds, estimated_start_time, estimated_finish_time,
-            estimated_service_seconds, scenario_id
+            request_id, user_id, charge_mode, request_energy, request_status,
+            queue_number, waiting_area_order, request_time
         )
-        VALUES (?, ?, ?, 'WAITING', ?, ?, ?, ?, ?, ?)
-    """, [
-        request_id,
-        data['charge_mode'],
-        request_energy,
-        submit_time_iso,
-        0,
-        submit_time_iso,
-        submit_time_iso,
-        estimated_service_seconds,
-        active_scenario.id
-    ])
-    
-    # 获取新创建请求的ID
-    new_request = query_db(
-        "SELECT id FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            request_id,
+            current_user["id"],
+            charge_mode,
+            float(data["request_energy"]),
+            RequestStatus.WAITING_AREA.value,
+            queue_number,
+            waiting_area_order,
+            request_time,
+        ],
     )
-    
-    # 添加到等待池
-    if new_request:
-        pool_manager = get_waiting_pool_manager()
-        success, pool_message = pool_manager.add_to_pool(
-            new_request['id'], 
-            charge_mode
-        )
-        if not success:
-            # 回滚：删除已创建的请求
-            execute_db("DELETE FROM charge_request WHERE id = ?", [new_request['id']])
-            return error_response(1003, f"Failed to add to waiting pool: {pool_message}")
 
-    reschedule_waiting_requests(
-        active_scenario.id,
-        event_type=EventType.NEW_REQUEST.value,
-        event_time=submit_time_iso
-    )
-    prediction = predict_request_by_id(request_id, event_time=submit_time_iso)
-    if not prediction:
-        return error_response(1099, "Failed to generate scheduler prediction")
-    
-    return success_response({
-        "request_id": request_id,
-        "status": prediction["status"],
-        "estimated_wait_seconds": prediction["estimated_wait_seconds"],
-        "estimated_start_time": prediction["estimated_start_time"],
-        "estimated_finish_time": prediction["estimated_finish_time"]
-    })
-
-
-@request_bp.route('/status/<request_id>', methods=['GET'])
-def get_status(request_id):
-    """
-    查询请求状态
-    
-    Args:
-        request_id: 请求 ID
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "WAITING",
-                "station_id": "FAST_01",
-                "estimated_wait_seconds": 300,
-                "last_called_time": "2026-03-31T10:08:00"
-            }
-        }
-    """
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 获取充电桩编号
-    station_id = None
-    if req['assigned_station_id']:
-        station = query_db(
-            "SELECT station_code FROM charging_station WHERE id = ?",
-            [req['assigned_station_id']],
-            one=True
-        )
-        if station:
-            station_id = station['station_code']
-    
-    estimated_wait = 0
-    estimated_start_dt = parse_iso_datetime(req.get('estimated_start_time'))
-    if req['status'] in ['WAITING', 'CALLED', 'CONFIRMED'] and estimated_start_dt:
-        estimated_wait = max(0, int((estimated_start_dt - datetime.now()).total_seconds()))
+    run_normal_scheduler(event_time=request_time, charge_mode=charge_mode)
 
     return success_response(
-        build_status_response(
-            request_id=request_id,
-            status=req['status'],
-            station_id=station_id,
-            estimated_wait_seconds=estimated_wait,
-            last_called_time=req['last_called_at'],
-        )
+        {
+            "request_id": request_id,
+            "queue_number": queue_number,
+            "request_status": RequestStatus.WAITING_AREA.value,
+            "front_waiting_count": int(front_waiting_count["cnt"]),
+        }
     )
 
 
-@request_bp.route('/cancel_queue', methods=['POST'])
-def cancel_queue():
-    """
-    取消排队
-    
-    Request Body:
-        {
-            "request_id": "REQ001",
-            "cancel_time": "2026-03-31T10:05:00"
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "CANCELLED"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
-    is_valid, errors = validate_cancel_request(data)
-    if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    request_id = data['request_id']
-    cancel_time = data['cancel_time']
-    
-    # 查询请求
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
+@request_bp.route("/status/<request_id>", methods=["GET"])
+@require_auth
+def get_status(request_id):
+    current_user = get_current_user()
+    req_row = query_db(
+        """
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.user_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.request_status,
+            cr.queue_number,
+            cr.waiting_area_order,
+            cr.station_queue_position,
+            cr.estimated_wait_seconds,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            cs.station_code
+        FROM charge_request cr
+        LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.request_id = ?
+        """,
         [request_id],
-        one=True
+        one=True,
     )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 状态校验：只能取消 PENDING、WAITING 或 CALLED 状态的请求
-    # 注：PENDING 是初始状态，WAITING 是入池后的状态
-    if req['status'] not in ['PENDING', 'WAITING', 'CALLED']:
-        return error_response(1003, "Current status does not allow cancel")
-    
-    # 如果已在等待池中，先移除
-    if req['status'] == 'WAITING' and req['waiting_pool_type']:
-        pool_manager = get_waiting_pool_manager()
-        pool_manager.remove_from_pool(req['id'])
-    
-    # 如果已分配充电桩，释放预留
-    if req['assigned_station_id']:
-        execute_db("""
-            UPDATE charging_station 
-            SET status = 'IDLE', current_request_id = NULL, available_time = ?, updated_at = ?
-            WHERE id = ?
-        """, [cancel_time, cancel_time, req['assigned_station_id']])
-    
-    # 更新请求状态为 CANCELLED
-    execute_db("""
-        UPDATE charge_request 
-        SET status = 'CANCELLED', 
-            waiting_pool_type = NULL,
-            updated_at = ? 
+    if not req_row:
+        return error_response(1002, "请求不存在")
+
+    if current_user["role"] != "ADMIN" and int(req_row["user_id"]) != int(current_user["id"]):
+        return error_response(1002, "请求不存在")
+
+    return success_response(_serialize_status(req_row))
+
+
+@request_bp.route("/mode", methods=["PUT"])
+@require_auth
+def update_request_mode():
+    current_user = get_current_user()
+    data = request.get_json(silent=True) or {}
+    request_id = (data.get("request_id") or "").strip()
+    charge_mode = data.get("charge_mode")
+
+    if not request_id or charge_mode not in {ChargeMode.FAST.value, ChargeMode.SLOW.value}:
+        return error_response(1001, "参数错误")
+
+    req_row = _get_request_for_operation(request_id, current_user)
+    if not req_row:
+        return error_response(1002, "请求不存在")
+    if req_row["request_status"] != RequestStatus.WAITING_AREA.value:
+        return error_response(1003, "当前状态不允许该操作")
+
+    if charge_mode == req_row["charge_mode"]:
+        return success_response(
+            {
+                "request_id": req_row["request_id"],
+                "queue_number": req_row["queue_number"],
+                "request_status": RequestStatus.WAITING_AREA.value,
+                "front_waiting_count": _front_waiting_count(req_row),
+            }
+        )
+
+    available_station = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charging_station
+        WHERE charge_mode = ?
+          AND station_status = 'RUNNING'
+        """,
+        [charge_mode],
+        one=True,
+    )
+    if int(available_station["cnt"]) <= 0:
+        return error_response(1005, "当前模式无可用充电桩")
+
+    front_row = query_db(
+        """
+        SELECT COUNT(*) AS cnt, COALESCE(MAX(waiting_area_order), 0) AS max_order
+        FROM charge_request
+        WHERE charge_mode = ?
+          AND request_status = ?
+        """,
+        [charge_mode, RequestStatus.WAITING_AREA.value],
+        one=True,
+    )
+    new_queue_number = _next_queue_number(charge_mode)
+    new_order = int(front_row["max_order"]) + 1
+    response_data = {
+        "request_id": req_row["request_id"],
+        "queue_number": new_queue_number,
+        "request_status": RequestStatus.WAITING_AREA.value,
+        "front_waiting_count": int(front_row["cnt"]),
+    }
+
+    execute_db(
+        """
+        UPDATE charge_request
+        SET charge_mode = ?,
+            queue_number = ?,
+            waiting_area_order = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [charge_mode, new_queue_number, new_order, req_row["id"]],
+    )
+    run_normal_scheduler(event_time=req_row["request_time"])
+    return success_response(response_data)
+
+
+@request_bp.route("/energy", methods=["PUT"])
+@require_auth
+def update_request_energy():
+    current_user = get_current_user()
+    data = request.get_json(silent=True) or {}
+    request_id = (data.get("request_id") or "").strip()
+    request_energy = _validate_request_energy(data.get("request_energy"))
+
+    if not request_id:
+        return error_response(1001, "参数错误")
+    if request_energy is None:
+        return error_response(1008, "request_energy 不合法")
+
+    req_row = _get_request_for_operation(request_id, current_user)
+    if not req_row:
+        return error_response(1002, "请求不存在")
+    if req_row["request_status"] != RequestStatus.WAITING_AREA.value:
+        return error_response(1003, "当前状态不允许该操作")
+
+    execute_db(
+        """
+        UPDATE charge_request
+        SET request_energy = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [request_energy, req_row["id"]],
+    )
+    response_data = {
+        "request_id": req_row["request_id"],
+        "queue_number": req_row["queue_number"],
+        "request_energy": request_energy,
+        "request_status": RequestStatus.WAITING_AREA.value,
+        "front_waiting_count": _front_waiting_count(req_row),
+    }
+    run_normal_scheduler(event_time=req_row["request_time"])
+    return success_response(response_data)
+
+
+@request_bp.route("/cancel", methods=["POST"])
+@require_auth
+def cancel_request():
+    current_user = get_current_user()
+    data = request.get_json(silent=True) or {}
+    request_id = (data.get("request_id") or "").strip()
+
+    if not request_id:
+        return error_response(1001, "参数错误")
+
+    req_row = _get_request_for_operation(request_id, current_user)
+    if not req_row:
+        return error_response(1002, "请求不存在")
+    if req_row["request_status"] != RequestStatus.WAITING_AREA.value:
+        return error_response(1003, "当前状态不允许该操作")
+
+    execute_db(
+        """
+        UPDATE charge_request
+        SET request_status = ?,
+            waiting_area_order = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [RequestStatus.CANCELLED.value, req_row["id"]],
+    )
+    run_normal_scheduler(event_time=req_row["request_time"])
+    return success_response(
+        {
+            "request_id": req_row["request_id"],
+            "request_status": RequestStatus.CANCELLED.value,
+        }
+    )
+
+
+@request_bp.route("/stop", methods=["POST"])
+@require_auth
+def stop_request():
+    current_user = get_current_user()
+    data = request.get_json(silent=True) or {}
+    request_id = (data.get("request_id") or "").strip()
+
+    if not request_id:
+        return error_response(1001, "参数错误")
+
+    req_row = _get_request_for_operation(request_id, current_user)
+    if not req_row:
+        return error_response(1002, "请求不存在")
+    if req_row["request_status"] not in {
+        RequestStatus.QUEUED.value,
+        RequestStatus.CHARGING.value,
+    }:
+        return error_response(1003, "当前状态不允许该操作")
+
+    stop_time = _operation_time(data, req_row["estimated_start_time"] or req_row["request_time"])
+    if req_row["station_id"]:
+        settle_station_until_time(int(req_row["station_id"]), stop_time)
+        req_row = _get_request_for_operation(request_id, current_user)
+        if not req_row:
+            return error_response(1002, "请求不存在")
+        if req_row["request_status"] not in {
+            RequestStatus.QUEUED.value,
+            RequestStatus.CHARGING.value,
+        }:
+            return error_response(1003, "当前状态不允许该操作")
+
+    stop_dt = _parse_iso_datetime(stop_time)
+    charge_start_dt = _parse_iso_datetime(req_row["charge_start_time"] or stop_time)
+
+    if req_row["request_status"] == RequestStatus.CHARGING.value:
+        if stop_dt < charge_start_dt:
+            stop_dt = charge_start_dt
+        duration_seconds = max(0, int((stop_dt - charge_start_dt).total_seconds()))
+        actual_energy = round(float(req_row["power_kw"]) * duration_seconds / 3600.0, 2)
+        if actual_energy > float(req_row["request_energy"]):
+            actual_energy = float(req_row["request_energy"])
+        start_time_value = charge_start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        should_count_station = duration_seconds > 0 or actual_energy > 0
+    else:
+        duration_seconds = 0
+        actual_energy = 0.0
+        start_time_value = stop_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        should_count_station = False
+
+    execute_db(
+        """
+        UPDATE charge_request
+        SET request_status = ?,
+            actual_energy = ?,
+            charge_start_time = ?,
+            charge_stop_time = ?,
+            charge_duration_seconds = ?,
+            station_queue_position = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [
+            RequestStatus.COMPLETED_EARLY.value,
+            actual_energy,
+            start_time_value,
+            stop_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            duration_seconds,
+            req_row["id"],
+        ],
+    )
+    if req_row["station_id"]:
+        execute_db(
+            """
+            UPDATE charging_session
+            SET end_time = ?,
+                actual_energy = ?,
+                status = ?
+            WHERE request_id = ?
+            """,
+            [
+                stop_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                actual_energy,
+                RequestStatus.COMPLETED_EARLY.value,
+                req_row["id"],
+            ],
+        )
+        if should_count_station:
+            execute_db(
+                """
+                UPDATE charging_station
+                SET total_charge_count = total_charge_count + 1,
+                    total_charge_seconds = total_charge_seconds + ?,
+                    total_charge_energy = total_charge_energy + ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                [duration_seconds, actual_energy, req_row["station_id"]],
+            )
+        refresh_station_after_queue_change(int(req_row["station_id"]), stop_dt.strftime("%Y-%m-%dT%H:%M:%S"))
+        run_normal_scheduler(stop_dt.strftime("%Y-%m-%dT%H:%M:%S"), req_row["charge_mode"])
+
+    ensure_request_detail(req_row["request_id"])
+    return success_response(
+        {
+            "request_id": req_row["request_id"],
+            "request_status": RequestStatus.COMPLETED_EARLY.value,
+        }
+    )
+
+
+@request_bp.route("/detail/<request_id>", methods=["GET"])
+@require_auth
+def get_request_detail(request_id):
+    current_user = get_current_user()
+    req_row = query_db(
+        """
+        SELECT request_id, user_id
+        FROM charge_request
         WHERE request_id = ?
-    """, [cancel_time, request_id])
-    
-    if req['scenario_id']:
-        trigger_reschedule_for_event(
-            req['scenario_id'],
-            EventType.CANCEL,
-            cancel_time
-        )
-    
-    return success_response({
-        "request_id": request_id,
-        "status": "CANCELLED"
-    })
-
-
-@request_bp.route('/confirm_arrival', methods=['POST'])
-def confirm_arrival():
-    """
-    确认到场
-    
-    Request Body:
-        {
-            "request_id": "REQ001",
-            "confirm_time": "2026-03-31T10:09:00"
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "CONFIRMED",
-                "station_id": "FAST_01"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
-    is_valid, errors = validate_confirm_arrival_request(data)
-    if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    request_id = data['request_id']
-    confirm_time = data['confirm_time']
-    
-    # 查询请求
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
+        """,
         [request_id],
-        one=True
+        one=True,
     )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 状态校验：必须是 CALLED 状态才能确认到场
-    if req['status'] == 'NO_SHOW':
-        return error_response(1004, "Call number expired")
-    if req['status'] == 'CANCELLED':
-        return error_response(1005, "Request has been cancelled")
-    if req['status'] != 'CALLED':
-        return error_response(1003, "Request is not in CALLED status")
-    
-    # 检查是否过号（超时）
-    if req['last_called_at']:
-        called_time = datetime.fromisoformat(req['last_called_at'])
-        confirm_dt = datetime.fromisoformat(confirm_time.replace('Z', '+00:00'))
-        
-        # 获取确认超时配置
-        config = query_db(
-            "SELECT config_value FROM scheduler_config WHERE config_key = 'CONFIRM_TIMEOUT_MINUTES'",
-            one=True
-        )
-        timeout_minutes = int(config['config_value']) if config else 3
-        
-        # 检查是否超时
-        if (confirm_dt - called_time).total_seconds() > timeout_minutes * 60:
-            return error_response(1004, "Call number expired")
-    
-    # 获取充电桩编号
-    station_id = None
-    if req['assigned_station_id']:
-        station = query_db(
-            "SELECT station_code FROM charging_station WHERE id = ?",
-            [req['assigned_station_id']],
-            one=True
-        )
-        if station:
-            station_id = station['station_code']
-    
-    # 更新请求状态为 CONFIRMED，开始充电由统一状态推进器负责
-    execute_db("""
-        UPDATE charge_request 
-        SET status = 'CONFIRMED', confirmed_at = ?, updated_at = ? 
-        WHERE request_id = ?
-    """, [confirm_time, confirm_time, request_id])
+    if not req_row:
+        return error_response(1002, "请求不存在")
 
-    if req['assigned_station_id']:
-        execute_db("""
-            UPDATE charging_station
-            SET status = 'RESERVED',
-                current_request_id = ?,
-                available_time = ?,
-                updated_at = ?
-            WHERE id = ?
-        """, [
-            req['id'],
-            req['estimated_finish_time'],
-            confirm_time,
-            req['assigned_station_id']
-        ])
+    if current_user["role"] != "ADMIN" and int(req_row["user_id"]) != int(current_user["id"]):
+        return error_response(1002, "请求不存在")
 
-    if req['scenario_id']:
-        trigger_reschedule_for_event(
-            req['scenario_id'],
-            EventType.CONFIRM_ARRIVAL,
-            confirm_time
-        )
-    
-    return success_response({
-        "request_id": request_id,
-        "status": "CONFIRMED",
-        "station_id": station_id
-    })
-
-
-@request_bp.route('/interrupt_charge', methods=['POST'])
-def interrupt_charge():
-    """
-    中断充电
-    
-    Request Body:
-        {
-            "request_id": "REQ001",
-            "interrupt_time": "2026-03-31T10:40:00"
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "INTERRUPTED",
-                "actual_energy": 12.5,
-                "actual_service_seconds": 1800
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
-    is_valid, errors = validate_interrupt_request(data)
-    if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    request_id = data['request_id']
-    interrupt_time = data['interrupt_time']
-    
-    # 查询请求
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 状态校验：必须是 CHARGING 状态才能中断
-    if req['status'] != 'CHARGING':
-        return error_response(1003, "Request is not in CHARGING status")
-    
-    # 查询充电会话
-    session = query_db(
-        """SELECT * FROM charging_session 
-           WHERE request_id = ? AND status = 'CHARGING'""",
-        [req['id']],
-        one=True
-    )
-    
-    if not session:
-        return error_response(1003, "No active charging session found")
-    
-    # 计算实际充电时长和电量
-    start_time = datetime.fromisoformat(session['start_time'])
-    interrupt_dt = datetime.fromisoformat(interrupt_time.replace('Z', '+00:00'))
-    actual_service_seconds = int((interrupt_dt - start_time).total_seconds())
-    
-    # 查询充电桩功率
-    station = query_db(
-        "SELECT * FROM charging_station WHERE id = ?",
-        [session['station_id']],
-        one=True
-    )
-    
-    # 计算实际充电电量（功率 kW * 时间 h）
-    actual_energy = round(station['power_kw'] * actual_service_seconds / 3600, 2)
-    # 不能超过请求的电量和电池上限
-    actual_energy = min(actual_energy, req['request_energy'], req['battery_limit_energy'])
-    
-    leave_config = query_db(
-        "SELECT config_value FROM scheduler_config WHERE config_key = 'LEAVE_BUFFER_MINUTES'",
-        one=True
-    )
-    leave_buffer_minutes = int(leave_config['config_value']) if leave_config else 10
-    leave_deadline = interrupt_dt + timedelta(minutes=leave_buffer_minutes)
-    leave_deadline_iso = format_iso_datetime(leave_deadline)
-
-    # 更新充电会话
-    execute_db("""
-        UPDATE charging_session 
-        SET end_time = ?, actual_energy = ?, status = 'INTERRUPTED', 
-            interrupt_reason = 'USER_INTERRUPT', leave_deadline = ?
-        WHERE id = ?
-    """, [interrupt_time, actual_energy, leave_deadline_iso, session['id']])
-    
-    # 更新请求状态
-    execute_db("""
-        UPDATE charge_request 
-        SET status = 'INTERRUPTED', actual_energy = ?, 
-            actual_service_seconds = ?, updated_at = ?
-        WHERE request_id = ?
-    """, [actual_energy, actual_service_seconds, interrupt_time, request_id])
-    
-    # 中断后车辆仍需离场，桩进入 WAITING_TO_LEAVE
-    execute_db("""
-        UPDATE charging_station 
-        SET status = 'WAITING_TO_LEAVE', current_request_id = ?, available_time = ?
-        WHERE id = ?
-    """, [req['id'], leave_deadline_iso, session['station_id']])
-    
-    if req['scenario_id']:
-        trigger_reschedule_for_event(
-            req['scenario_id'],
-            EventType.CHARGE_INTERRUPT,
-            interrupt_time
-        )
-    
-    return success_response({
-        "request_id": request_id,
-        "status": "INTERRUPTED",
-        "actual_energy": actual_energy,
-        "actual_service_seconds": actual_service_seconds
-    })
-
-
-@request_bp.route('/confirm_leave', methods=['POST'])
-def confirm_leave():
-    """
-    确认挪车
-    
-    Request Body:
-        {
-            "request_id": "REQ001",
-            "leave_time": "2026-03-31T11:15:00"
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "status": "COMPLETED"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
-    is_valid, errors = validate_confirm_leave_request(data)
-    if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    request_id = data['request_id']
-    leave_time = data['leave_time']
-    
-    # 查询请求
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 状态校验：请求必须处于可离场结算状态
-    if req['status'] not in ['COMPLETED', 'COMPLETED_EARLY', 'INTERRUPTED']:
-        return error_response(1003, "Request is not in completed status")
-    
-    # 查询充电会话和充电桩状态
-    session = query_db(
-        """SELECT cs.*, station.status as station_status 
-           FROM charging_session cs
-           JOIN charging_station station ON cs.station_id = station.id
-           WHERE cs.request_id = ?""",
-        [req['id']],
-        one=True
-    )
-    
-    if not session:
-        return error_response(1003, "No charging session found")
-    
-    # 检查充电桩是否处于 WAITING_TO_LEAVE 状态
-    if session['station_status'] != 'WAITING_TO_LEAVE':
-        return error_response(1003, "Charging station is not in WAITING_TO_LEAVE status")
-    
-    # 更新会话的挪车时间
-    execute_db("""
-        UPDATE charging_session 
-        SET left_at = ?
-        WHERE id = ?
-    """, [leave_time, session['id']])
-    
-    # 释放充电桩
-    execute_db("""
-        UPDATE charging_station 
-        SET status = 'IDLE', current_request_id = NULL, available_time = ?
-        WHERE id = ?
-    """, [leave_time, session['station_id']])
-    
-    if req['scenario_id']:
-        trigger_reschedule_for_event(
-            req['scenario_id'],
-            EventType.LEAVE,
-            leave_time
-        )
-    
-    return success_response({
-        "request_id": request_id,
-        "status": "COMPLETED"
-    })
-
-
-@request_bp.route('/result/<request_id>', methods=['GET'])
-def get_result(request_id):
-    """
-    获取详单与账单
-    
-    Args:
-        request_id: 请求 ID
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "detail": {...},  // 详单（18 个字段）
-                "bill": {...}     // 账单（9 个字段）
-            }
-        }
-    """
-    # 查询请求
-    req = query_db(
-        "SELECT * FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return error_response(1002, "Request not found")
-    req = dict(req)
-    req = advance_request_state_for_status_view(req) or req
-    
-    # 检查请求是否已结束（终态）
-    final_statuses = ['COMPLETED', 'COMPLETED_EARLY', 'INTERRUPTED', 
-                      'CANCELLED', 'NO_SHOW']
-    if req['status'] not in final_statuses:
-        return error_response(1003, "Request has not completed yet")
-    
-    # 生成详单
-    detail = generate_detail(request_id)
+    detail = ensure_request_detail(request_id)
     if not detail:
-        return error_response(1002, "Failed to generate detail")
-    
-    # 生成账单
-    bill = generate_bill(request_id)
-    if not bill:
-        return error_response(1002, "Failed to generate bill")
-    
-    # 如果账单未保存，保存到数据库
-    existing_bill = query_db(
-        """SELECT id FROM billing_record 
-           WHERE request_id = (SELECT id FROM charge_request WHERE request_id = ?)""",
-        [request_id],
-        one=True
-    )
-    if not existing_bill:
-        save_bill(request_id, bill)
-    
-    return success_response({
-        "request_id": request_id,
-        "detail": detail,
-        "bill": bill
-    })
+        return error_response(1006, "详单尚未生成")
 
-
-@request_bp.route('/pay', methods=['POST'])
-def pay():
-    """
-    支付确认
-    
-    Request Body:
-        {
-            "request_id": "REQ001",
-            "pay_time": "2026-03-31T11:20:00",
-            "pay_amount": 27.75
-        }
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "request_id": "REQ001",
-                "payment_status": "PAID"
-            }
-        }
-    """
-    data = request.get_json()
-    
-    # 参数校验
-    is_valid, errors = validate_pay_request(data)
-    if not is_valid:
-        return error_response(1001, "Invalid parameters", {"errors": errors})
-    
-    request_id = data['request_id']
-    pay_time = data['pay_time']
-    pay_amount = float(data['pay_amount'])
-    
-    # 处理支付
-    success, error_code, error_message = process_payment(request_id, pay_amount, pay_time)
-    
-    if not success:
-        return error_response(error_code, error_message)
-    
-    return success_response({
-        "request_id": request_id,
-        "payment_status": "PAID"
-    })
+    return success_response(detail)

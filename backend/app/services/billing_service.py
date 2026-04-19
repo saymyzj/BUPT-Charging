@@ -1,273 +1,228 @@
-"""
-计费服务模块
-处理详单生成、账单计算、支付等业务逻辑
-"""
+"""V3 time-of-use billing and request-detail services."""
 
-from app.utils.db import query_db, execute_db
-from datetime import datetime
-from app.services.contract_builders import build_bill_record, build_detail_record
+from __future__ import annotations
+
+from datetime import datetime, time, timedelta
+
+from app.utils.db import execute_db, query_db
+
+DETAIL_FINAL_STATUSES = {"COMPLETED", "COMPLETED_EARLY", "FAULT_INTERRUPTED"}
 
 
-def get_billing_config():
-    """
-    获取计费配置
-    
-    Returns:
-        dict: 计费配置参数
-    """
-    configs = query_db("SELECT config_key, config_value FROM scheduler_config")
-    config_dict = {row['config_key']: row['config_value'] for row in configs}
-    
+def _parse_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _db_string(value):
+    if value is None:
+        return None
+    return _parse_datetime(value).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _iso_string(value):
+    if value is None:
+        return None
+    return _parse_datetime(value).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _get_rate_config():
+    rows = query_db(
+        """
+        SELECT config_key, config_value
+        FROM scheduler_config
+        WHERE config_key IN ('peak_price', 'flat_price', 'valley_price', 'service_fee_unit_price')
+        """
+    )
+    config = {row["config_key"]: float(row["config_value"]) for row in rows}
     return {
-        'billing_mode': config_dict.get('BILLING_MODE', 'ENERGY'),
-        'energy_price': float(config_dict.get('ENERGY_PRICE', 1.5)),
-        'time_price': float(config_dict.get('TIME_PRICE', 0.0)),
-        'occupancy_price': float(config_dict.get('OCCUPANCY_PRICE', 0.5)),
-        'occupancy_start_after_minutes': int(config_dict.get('OCCUPANCY_START_AFTER_MINUTES', 10))
+        "peak_price": config.get("peak_price", 1.0),
+        "flat_price": config.get("flat_price", 0.7),
+        "valley_price": config.get("valley_price", 0.4),
+        "service_fee_unit_price": config.get("service_fee_unit_price", 0.8),
     }
 
 
-def generate_detail(request_id):
-    """
-    生成详单
-    
-    详单包含18个字段，记录用户充电全流程的时间节点和状态
-    
-    Args:
-        request_id: 请求ID
-    
-    Returns:
-        dict: 详单数据
-    """
-    # 查询请求信息
-    req = query_db(
-        """SELECT cr.*, cs.station_id, cs.start_time, cs.end_time, 
-                  cs.left_at, cs.leave_deadline, cs.interrupt_reason
-           FROM charge_request cr
-           LEFT JOIN charging_session cs ON cs.request_id = cr.id
-           WHERE cr.request_id = ?""",
-        [request_id],
-        one=True
+def _next_detail_id() -> str:
+    row = query_db(
+        """
+        SELECT detail_id
+        FROM request_detail
+        WHERE detail_id LIKE 'DETAIL%'
+        ORDER BY CAST(SUBSTR(detail_id, 7) AS INTEGER) DESC
+        LIMIT 1
+        """,
+        one=True,
     )
-    
-    if not req:
+    next_number = 1 if not row else int(str(row["detail_id"])[6:]) + 1
+    return f"DETAIL{next_number:04d}"
+
+
+def _segment_price(at_time: datetime, config: dict) -> float:
+    current = at_time.time()
+    if time(10, 0) <= current < time(15, 0) or time(18, 0) <= current < time(21, 0):
+        return config["peak_price"]
+    if time(7, 0) <= current < time(10, 0) or time(15, 0) <= current < time(18, 0) or time(21, 0) <= current < time(23, 0):
+        return config["flat_price"]
+    return config["valley_price"]
+
+
+def _next_boundary(at_time: datetime) -> datetime:
+    current = at_time.time()
+    if time(7, 0) <= current < time(10, 0):
+        return at_time.replace(hour=10, minute=0, second=0, microsecond=0)
+    if time(10, 0) <= current < time(15, 0):
+        return at_time.replace(hour=15, minute=0, second=0, microsecond=0)
+    if time(15, 0) <= current < time(18, 0):
+        return at_time.replace(hour=18, minute=0, second=0, microsecond=0)
+    if time(18, 0) <= current < time(21, 0):
+        return at_time.replace(hour=21, minute=0, second=0, microsecond=0)
+    if time(21, 0) <= current < time(23, 0):
+        return at_time.replace(hour=23, minute=0, second=0, microsecond=0)
+    if current >= time(23, 0):
+        next_day = at_time + timedelta(days=1)
+        return next_day.replace(hour=7, minute=0, second=0, microsecond=0)
+    return at_time.replace(hour=7, minute=0, second=0, microsecond=0)
+
+
+def calculate_charge_fee(start_time, stop_time, power_kw: float) -> float:
+    start_dt = _parse_datetime(start_time)
+    stop_dt = _parse_datetime(stop_time)
+    if not start_dt or not stop_dt or stop_dt <= start_dt or power_kw <= 0:
+        return 0.0
+
+    config = _get_rate_config()
+    charge_fee = 0.0
+    cursor = start_dt
+    while cursor < stop_dt:
+        segment_end = min(_next_boundary(cursor), stop_dt)
+        segment_seconds = max(0, (segment_end - cursor).total_seconds())
+        segment_energy = float(power_kw) * segment_seconds / 3600.0
+        charge_fee += _segment_price(cursor, config) * segment_energy
+        cursor = segment_end
+    return round(charge_fee, 2)
+
+
+def _serialize_detail_row(detail_row):
+    return {
+        "detail_id": detail_row["detail_id"],
+        "detail_generated_at": _iso_string(detail_row["detail_generated_at"]),
+        "station_code": detail_row["station_code"],
+        "actual_energy": float(detail_row["actual_energy"]),
+        "charge_duration_seconds": int(detail_row["charge_duration_seconds"]),
+        "start_time": _iso_string(detail_row["start_time"]),
+        "stop_time": _iso_string(detail_row["stop_time"]),
+        "charge_fee": float(detail_row["charge_fee"]),
+        "service_fee": float(detail_row["service_fee"]),
+        "total_fee": float(detail_row["total_fee"]),
+        "request_status": detail_row["request_status"],
+    }
+
+
+def get_request_detail(request_id: str):
+    detail_row = query_db(
+        """
+        SELECT
+            rd.detail_id,
+            rd.detail_generated_at,
+            rd.station_code,
+            rd.actual_energy,
+            rd.charge_duration_seconds,
+            rd.start_time,
+            rd.stop_time,
+            rd.charge_fee,
+            rd.service_fee,
+            rd.total_fee,
+            rd.request_status
+        FROM request_detail rd
+        JOIN charge_request cr ON cr.id = rd.request_id
+        WHERE cr.request_id = ?
+        ORDER BY rd.id DESC
+        LIMIT 1
+        """,
+        [request_id],
+        one=True,
+    )
+    return _serialize_detail_row(detail_row) if detail_row else None
+
+
+def ensure_request_detail(request_id: str):
+    existing = get_request_detail(request_id)
+    if existing:
+        return existing
+
+    req_row = query_db(
+        """
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.user_id,
+            cr.actual_energy,
+            cr.charge_duration_seconds,
+            cr.charge_start_time,
+            cr.charge_stop_time,
+            cr.request_status,
+            cs.station_code,
+            cs.power_kw
+        FROM charge_request cr
+        LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.request_id = ?
+        """,
+        [request_id],
+        one=True,
+    )
+    if not req_row or req_row["request_status"] not in DETAIL_FINAL_STATUSES:
         return None
-    
-    # 获取充电桩编号
-    station_code = None
-    if req['station_id']:
-        station = query_db(
-            "SELECT station_code FROM charging_station WHERE id = ?",
-            [req['station_id']],
-            one=True
-        )
-        if station:
-            station_code = station['station_code']
-    
-    # 计算挪车是否超时
-    is_leave_timeout = False
-    if req['left_at'] and req['leave_deadline']:
-        left_time = datetime.fromisoformat(req['left_at'])
-        deadline = datetime.fromisoformat(req['leave_deadline'])
-        is_leave_timeout = left_time > deadline
-    
-    return build_detail_record(
-        request_id=request_id,
-        charge_mode=req['charge_mode'],
-        request_energy=req['request_energy'],
-        actual_energy=req['actual_energy'],
-        request_time=req['submit_time'],
-        queue_enter_time=req['submit_time'],
-        called_time=req['last_called_at'],
-        arrival_confirm_time=req['confirmed_at'],
-        charge_start_time=req['start_time'],
-        charge_end_time=req['end_time'],
-        leave_notify_time=req['end_time'],
-        final_leave_time=req['left_at'],
-        station_id=station_code,
-        final_status=req['status'],
-        is_no_show=req['status'] == 'NO_SHOW',
-        is_cancelled=req['status'] == 'CANCELLED',
-        is_interrupted=req['status'] == 'INTERRUPTED',
-        is_fault_requeue=bool(req['fault_requeue_flag']),
-        is_leave_timeout=is_leave_timeout,
-    )
-
-
-def generate_bill(request_id):
-    """
-    生成账单
-    
-    账单包含9个字段，记录费用计算结果
-    
-    Args:
-        request_id: 请求ID
-    
-    Returns:
-        dict: 账单数据
-    """
-    # 查询请求信息
-    req = query_db(
-        """SELECT cr.*, cs.end_time, cs.left_at, cs.leave_deadline
-           FROM charge_request cr
-           LEFT JOIN charging_session cs ON cs.request_id = cr.id
-           WHERE cr.request_id = ?""",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
+    if not req_row["station_code"] or not req_row["charge_start_time"] or not req_row["charge_stop_time"]:
         return None
-    
-    # 查询已有计费记录
-    billing_record = query_db(
-        """SELECT * FROM billing_record 
-           WHERE request_id = (SELECT id FROM charge_request WHERE request_id = ?)""",
-        [request_id],
-        one=True
-    )
-    
-    if billing_record:
-        # 返回已存在的账单
-        return build_bill_record(
-            request_id=request_id,
-            billing_mode=billing_record['billing_mode'],
-            request_energy=req['request_energy'],
-            billing_energy=billing_record['billing_energy'],
-            energy_fee=billing_record['energy_fee'],
-            time_fee=billing_record['time_fee'],
-            occupancy_fee=billing_record['occupancy_fee'],
-            total_fee=billing_record['total_fee'],
-            payment_status=billing_record['payment_status'],
+
+    start_time = _parse_datetime(req_row["charge_start_time"])
+    stop_time = _parse_datetime(req_row["charge_stop_time"])
+    charge_duration_seconds = int(req_row["charge_duration_seconds"] or max(0, (stop_time - start_time).total_seconds()))
+    actual_energy = float(req_row["actual_energy"])
+
+    config = _get_rate_config()
+    charge_fee = calculate_charge_fee(start_time, stop_time, float(req_row["power_kw"]))
+    service_fee = round(config["service_fee_unit_price"] * actual_energy, 2)
+    total_fee = round(charge_fee + service_fee, 2)
+    detail_generated_at = stop_time
+
+    execute_db(
+        """
+        INSERT INTO request_detail (
+            detail_id,
+            request_id,
+            user_id,
+            station_code,
+            actual_energy,
+            charge_duration_seconds,
+            start_time,
+            stop_time,
+            detail_generated_at,
+            charge_fee,
+            service_fee,
+            total_fee,
+            request_status
         )
-    
-    # 获取计费配置
-    config = get_billing_config()
-    
-    # 获取实际充电电量
-    actual_energy = float(req['actual_energy'])
-    
-    # 计算电量费用
-    energy_fee = round(actual_energy * config['energy_price'], 2)
-    
-    # 计算时长费用（如按时间计费）
-    time_fee = 0.0
-    if config['billing_mode'] == 'TIME' and req['actual_service_seconds']:
-        actual_minutes = req['actual_service_seconds'] / 60
-        time_fee = round(actual_minutes * config['time_price'], 2)
-    
-    # 计算占位费
-    occupancy_fee = 0.0
-    if req['left_at'] and req['leave_deadline']:
-        left_time = datetime.fromisoformat(req['left_at'])
-        deadline = datetime.fromisoformat(req['leave_deadline'])
-        if left_time > deadline:
-            overtime_minutes = (left_time - deadline).total_seconds() / 60
-            occupancy_fee = round(overtime_minutes * config['occupancy_price'], 2)
-    
-    # 计算总费用
-    total_fee = round(energy_fee + time_fee + occupancy_fee, 2)
-    
-    # 确定计费电量
-    billing_energy = actual_energy if config['billing_mode'] == 'ENERGY' else 0.0
-    
-    return build_bill_record(
-        request_id=request_id,
-        billing_mode=config['billing_mode'],
-        request_energy=req['request_energy'],
-        billing_energy=billing_energy,
-        energy_fee=energy_fee,
-        time_fee=time_fee,
-        occupancy_fee=occupancy_fee,
-        total_fee=total_fee,
-        payment_status="UNPAID",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            _next_detail_id(),
+            req_row["id"],
+            req_row["user_id"],
+            req_row["station_code"],
+            actual_energy,
+            charge_duration_seconds,
+            _db_string(start_time),
+            _db_string(stop_time),
+            _db_string(detail_generated_at),
+            charge_fee,
+            service_fee,
+            total_fee,
+            req_row["request_status"],
+        ],
     )
-
-
-def save_bill(request_id, bill_data):
-    """
-    保存账单到数据库
-    
-    Args:
-        request_id: 请求ID
-        bill_data: 账单数据
-    
-    Returns:
-        bool: 是否保存成功
-    """
-    req = query_db(
-        "SELECT id FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return False
-    
-    execute_db("""
-        INSERT INTO billing_record 
-        (request_id, billing_mode, billing_energy, energy_fee, time_fee, 
-         occupancy_fee, total_fee, payment_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, [
-        req['id'],
-        bill_data['billing_mode'],
-        bill_data['billing_energy'],
-        bill_data['energy_fee'],
-        bill_data['time_fee'],
-        bill_data['occupancy_fee'],
-        bill_data['total_fee'],
-        bill_data['payment_status']
-    ])
-    
-    return True
-
-
-def process_payment(request_id, pay_amount, pay_time):
-    """
-    处理支付
-    
-    Args:
-        request_id: 请求ID
-        pay_amount: 支付金额
-        pay_time: 支付时间
-    
-    Returns:
-        tuple: (success: bool, error_code: int, error_message: str)
-    """
-    # 查询请求
-    req = query_db(
-        "SELECT id, status FROM charge_request WHERE request_id = ?",
-        [request_id],
-        one=True
-    )
-    
-    if not req:
-        return False, 1002, "Request not found"
-    
-    # 查询账单
-    bill = query_db(
-        "SELECT * FROM billing_record WHERE request_id = ?",
-        [req['id']],
-        one=True
-    )
-    
-    if not bill:
-        return False, 1003, "Bill not found"
-    
-    # 检查是否已支付
-    if bill['payment_status'] == 'PAID':
-        return False, 1003, "Already paid"
-    
-    # 检查金额是否匹配
-    if abs(float(pay_amount) - float(bill['total_fee'])) > 0.01:
-        return False, 1001, "Payment amount does not match bill"
-    
-    # 更新支付状态
-    execute_db("""
-        UPDATE billing_record 
-        SET payment_status = 'PAID', paid_at = ?
-        WHERE request_id = ?
-    """, [pay_time, req['id']])
-    
-    return True, 0, "success"
+    return get_request_detail(request_id)

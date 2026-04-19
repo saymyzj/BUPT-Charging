@@ -1,111 +1,109 @@
-"""
-充电桩总览接口模块
-提供充电桩状态总览信息
+"""Legacy public station overview route backed by the V3 schema.
 
-路径：GET /api/stations/overview
-
-作者：成员 B
-日期：2026-04-02
+The formal V3 management interface is GET /api/admin/stations.  This route is
+kept only so older demos or front-end probes do not crash on removed V2 fields.
 """
 
-from flask import Blueprint
-from app.utils.response import success_response, error_response
+from flask import Blueprint, current_app
+
+from app.enums import RequestStatus
 from app.utils.db import query_db
-from app.services.config_manager import get_active_scenario
-from app.services.waiting_pool import get_waiting_pool_manager
+from app.utils.response import success_response
 
-stations_bp = Blueprint('stations', __name__)
+stations_bp = Blueprint("stations", __name__)
 
 
-@stations_bp.route('/overview', methods=['GET'])
-def get_stations_overview():
+def _serialize_station(row):
+    return {
+        "station_code": row["station_code"],
+        "charge_mode": row["charge_mode"],
+        "power_kw": float(row["power_kw"]),
+        "station_status": row["station_status"],
+        "current_request_id": row["current_request_id"],
+        "queue_length": int(row["current_queue_length"]),
+        "queue_capacity": int(row["queue_capacity"]),
+        "available_time": str(row["available_time"]).replace(" ", "T") if row["available_time"] else None,
+        "total_charge_count": int(row["total_charge_count"]),
+        "total_charge_seconds": int(row["total_charge_seconds"]),
+        "total_charge_energy": float(row["total_charge_energy"]),
+    }
+
+
+def _waiting_count(charge_mode=None):
+    sql = """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE request_status = ?
     """
-    获取充电桩总览
-    
-    返回所有充电桩的状态、排队人数等信息
-    
-    Returns:
-        {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "fast_stations": [
-                    {
-                        "station_id": "FAST_01",
-                        "station_type": "FAST",
-                        "power_kw": 30.0,
-                        "status": "IDLE",
-                        "current_request_id": null,
-                        "available_time": "2026-03-31T10:00:00"
-                    }
-                ],
-                "slow_stations": [
-                    {
-                        "station_id": "SLOW_01",
-                        "station_type": "SLOW",
-                        "power_kw": 7.0,
-                        "status": "IDLE",
-                        "current_request_id": null,
-                        "available_time": "2026-03-31T10:00:00"
-                    }
-                ],
-                "waiting_queue": {
-                    "fast_queue_count": 0,
-                    "slow_queue_count": 0,
-                    "total_waiting": 0,
-                    "capacity": 6
-                }
-            }
-        }
-    """
-    # 获取当前激活场景
-    active_scenario = get_active_scenario()
-    if not active_scenario:
-        return error_response(1003, "No active scenario configuration")
-    
-    # 查询所有充电桩
-    stations = query_db(
-        """SELECT id, station_code, station_type, power_kw, status, 
-                   current_request_id, available_time
-            FROM charging_station 
-            WHERE scenario_id = ?
-            ORDER BY station_code""",
-        [active_scenario.id]
+    args = [RequestStatus.WAITING_AREA.value]
+    if charge_mode:
+        sql += " AND charge_mode = ?"
+        args.append(charge_mode)
+    row = query_db(sql, args, one=True)
+    return int(row["cnt"]) if row else 0
+
+
+def _waiting_area_capacity():
+    row = query_db(
+        """
+        SELECT config_value
+        FROM scheduler_config
+        WHERE config_key = 'waiting_area_capacity'
+        """,
+        one=True,
     )
-    
-    # 分类整理充电桩
+    if not row:
+        return int(current_app.config.get("WAITING_AREA_SIZE", 6))
+    try:
+        return int(row["config_value"])
+    except (TypeError, ValueError):
+        return int(current_app.config.get("WAITING_AREA_SIZE", 6))
+
+
+@stations_bp.route("/overview", methods=["GET"])
+def get_stations_overview():
+    rows = query_db(
+        """
+        SELECT
+            cs.station_code,
+            cs.charge_mode,
+            cs.power_kw,
+            cs.station_status,
+            cs.queue_capacity,
+            cs.current_queue_length,
+            cs.available_time,
+            cs.total_charge_count,
+            cs.total_charge_seconds,
+            cs.total_charge_energy,
+            cr.request_id AS current_request_id
+        FROM charging_station cs
+        LEFT JOIN charge_request cr ON cr.id = cs.current_request_id
+        ORDER BY cs.station_code
+        """
+    )
+
     fast_stations = []
     slow_stations = []
-    
-    if stations:
-        for station in stations:
-            station_data = {
-                "station_id": station['station_code'],
-                "station_type": station['station_type'],
-                "power_kw": station['power_kw'],
-                "status": station['status'],
-                "current_request_id": station['current_request_id'],
-                "available_time": station['available_time']
-            }
-            
-            if station['station_type'] == 'FAST':
-                fast_stations.append(station_data)
-            else:
-                slow_stations.append(station_data)
-    
-    # 获取等待池状态
-    pool_manager = get_waiting_pool_manager()
-    pool_status = pool_manager.get_pool_status()
-    
+    for row in rows:
+        station = _serialize_station(row)
+        if row["charge_mode"] == "FAST":
+            fast_stations.append(station)
+        else:
+            slow_stations.append(station)
+
     waiting_queue = {
-        "fast_queue_count": pool_status['fast_pool']['count'] if pool_status else 0,
-        "slow_queue_count": pool_status['slow_pool']['count'] if pool_status else 0,
-        "total_waiting": pool_status['total_waiting'] if pool_status else 0,
-        "capacity": active_scenario.waiting_area_capacity
+        "fast_queue_count": _waiting_count("FAST"),
+        "slow_queue_count": _waiting_count("SLOW"),
+        "total_waiting": _waiting_count(),
+        "capacity": _waiting_area_capacity(),
     }
-    
-    return success_response({
-        "fast_stations": fast_stations,
-        "slow_stations": slow_stations,
-        "waiting_queue": waiting_queue
-    })
+
+    return success_response(
+        {
+            "deprecated": True,
+            "replacement": "/api/admin/stations",
+            "fast_stations": fast_stations,
+            "slow_stations": slow_stations,
+            "waiting_queue": waiting_queue,
+        }
+    )
