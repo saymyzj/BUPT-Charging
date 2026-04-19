@@ -43,9 +43,7 @@ def register():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
-    role = (data.get("role") or "USER").upper()
-    if role not in {"USER", "ADMIN"}:
-        role = "USER"
+    role = "USER"
 
     try:
         battery_capacity = float(data.get("battery_capacity"))

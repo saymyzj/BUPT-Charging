@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from flask import Flask
 
@@ -17,6 +18,7 @@ from app.routes.health import health_bp
 from app.routes.request import request_bp
 from app.routes.stations import stations_bp
 from app.services.queue_model import enqueue_request, run_normal_scheduler
+from app.utils.auth import hash_password
 from app.utils.db import execute_db, init_db, query_db
 
 
@@ -51,15 +53,7 @@ class FrozenContractTests(unittest.TestCase):
         ).get_json()
         self.auth_headers = {"Authorization": f"Bearer {login_payload['data']['token']}"}
 
-        self.client.post(
-            "/api/auth/register",
-            json={
-                "username": "admin_001",
-                "password": "secret12",
-                "battery_capacity": 80.0,
-                "role": "ADMIN",
-            },
-        )
+        self._create_admin_user("admin_001", battery_capacity=80.0)
         admin_login = self.client.post(
             "/api/auth/login",
             json={"username": "admin_001", "password": "secret12"},
@@ -76,6 +70,25 @@ class FrozenContractTests(unittest.TestCase):
             json={"username": username, "password": "secret12"},
         ).get_json()
         return {"Authorization": f"Bearer {login_payload['data']['token']}"}
+
+    def _create_admin_user(self, username: str, battery_capacity: float = 80.0):
+        with self.app.app_context():
+            next_row = query_db(
+                """
+                SELECT COALESCE(MAX(CAST(SUBSTR(user_id, 2) AS INTEGER)), 0) AS max_user_no
+                FROM user
+                WHERE user_id LIKE 'U%'
+                """,
+                one=True,
+            )
+            user_id = f"U{int(next_row['max_user_no']) + 1:03d}"
+            execute_db(
+                """
+                INSERT INTO user (user_id, username, password_hash, battery_capacity, role)
+                VALUES (?, ?, ?, ?, 'ADMIN')
+                """,
+                [user_id, username, hash_password("secret12"), battery_capacity],
+            )
 
     def _create_request(self, headers, request_time: str, charge_mode: str, request_energy: float):
         return self.client.post(
@@ -128,6 +141,30 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(payload["request_status"], "WAITING_AREA")
         self.assertEqual(payload["queue_number"], "F1")
         self.assertEqual(payload["front_waiting_count"], 0)
+
+    def test_public_register_cannot_create_admin_role(self):
+        payload = self.client.post(
+            "/api/auth/register",
+            json={
+                "username": "not_admin",
+                "password": "secret12",
+                "battery_capacity": 60.0,
+                "role": "ADMIN",
+            },
+        ).get_json()["data"]
+        self.assertEqual(payload["role"], "USER")
+
+        login_payload = self.client.post(
+            "/api/auth/login",
+            json={"username": "not_admin", "password": "secret12"},
+        ).get_json()["data"]
+        self.assertEqual(login_payload["role"], "USER")
+
+        denied = self.client.get(
+            "/api/admin/system/config",
+            headers={"Authorization": f"Bearer {login_payload['token']}"},
+        ).get_json()
+        self.assertEqual(denied["code"], 1003)
 
     def test_health_check_uses_v3_success_envelope(self):
         payload = self.client.get("/api/health").get_json()
@@ -563,7 +600,7 @@ class FrozenContractTests(unittest.TestCase):
             f"/api/request/detail/{request_id}",
             headers=self.auth_headers,
         ).get_json()
-        self.assertEqual(detail_response["code"], 1006)
+        self.assertEqual(detail_response["code"], 1003)
 
     def test_stop_queued_request_generates_zero_energy_detail(self):
         user2_headers = self._register_and_login("user_002")
@@ -1192,15 +1229,7 @@ class FrozenContractTests(unittest.TestCase):
             },
         )
 
-        self.client.post(
-            "/api/auth/register",
-            json={
-                "username": "admin_batch",
-                "password": "secret12",
-                "battery_capacity": 80.0,
-                "role": "ADMIN",
-            },
-        )
+        self._create_admin_user("admin_batch", battery_capacity=80.0)
         admin_login = self.client.post(
             "/api/auth/login",
             json={"username": "admin_batch", "password": "secret12"},
@@ -1217,6 +1246,27 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(payload["charging_queue_len"], 3)
         self.assertEqual(payload["dispatch_mode"], "EXT_SINGLE_BATCH")
         self.assertEqual(payload["fault_dispatch_mode"], "PRIORITY")
+
+    def test_batch_simulate_internal_failure_uses_1099_without_leaking_exception(self):
+        with patch("app.routes.batch_simulate._run_batch_simulation", side_effect=RuntimeError("sensitive boom")):
+            payload = self.client.post(
+                "/api/test/batch-simulate",
+                json={
+                    "test_case_id": "FAIL-CASE",
+                    "scenario": {
+                        "fast_station_count": 1,
+                        "slow_station_count": 0,
+                        "waiting_area_capacity": 1,
+                        "charging_queue_len": 1,
+                        "dispatch_mode": "NORMAL",
+                        "fault_dispatch_mode": "TIME_ORDER",
+                    },
+                    "users": [],
+                },
+            ).get_json()
+
+        self.assertEqual(payload["code"], 1099)
+        self.assertEqual(payload["message"], "internal server error")
 
     def test_admin_system_config_returns_v3_fields(self):
         payload = self.client.get(

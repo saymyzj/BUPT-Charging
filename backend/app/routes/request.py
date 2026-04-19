@@ -597,6 +597,6 @@ def get_request_detail(request_id):
 
     detail = ensure_request_detail(request_id)
     if not detail:
-        return error_response(1006, "详单尚未生成")
+        return error_response(1003, "详单尚未生成")
 
     return success_response(detail)

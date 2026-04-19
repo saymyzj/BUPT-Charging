@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 
 from app.enums import ChargeMode, DispatchMode, FaultDispatchMode, RequestStatus
 from app.services.billing_service import get_request_detail
@@ -580,5 +580,6 @@ def batch_simulate():
         return error_response(1001, "Invalid parameters", {"errors": errors})
     try:
         return success_response(_run_batch_simulation(data))
-    except Exception as exc:
-        return error_response(2001, f"batch simulation failed: {exc}")
+    except Exception:
+        current_app.logger.exception("Batch simulation failed")
+        return error_response(1099, "internal server error")

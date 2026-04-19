@@ -56,6 +56,26 @@ class MinimalAuthTests(unittest.TestCase):
         self.assertEqual(profile_resp["data"]["username"], "user_001")
         self.assertEqual(profile_resp["data"]["battery_capacity"], 60.0)
 
+    def test_public_register_ignores_admin_role(self):
+        register_resp = self.client.post(
+            "/api/auth/register",
+            json={
+                "username": "user_admin_attempt",
+                "password": "secret12",
+                "battery_capacity": 60.0,
+                "role": "ADMIN",
+            },
+        ).get_json()
+        self.assertEqual(register_resp["code"], 0)
+        self.assertEqual(register_resp["data"]["role"], "USER")
+
+        login_resp = self.client.post(
+            "/api/auth/login",
+            json={"username": "user_admin_attempt", "password": "secret12"},
+        ).get_json()
+        self.assertEqual(login_resp["code"], 0)
+        self.assertEqual(login_resp["data"]["role"], "USER")
+
 
 if __name__ == "__main__":
     unittest.main()
