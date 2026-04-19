@@ -9,3 +9,9 @@ dist/
 build/
 第一次作业.md
 out/
+backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
+backend/*.sqlite
+backend/*.sqlite3
