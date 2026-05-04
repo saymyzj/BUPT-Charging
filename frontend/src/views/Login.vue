@@ -138,7 +138,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { login, register } from '@/api/charging'
+import { getProfile, login, register } from '@/api/charging'
 
 const router = useRouter()
 const scrolled = ref(false)
@@ -176,7 +176,14 @@ async function handleLogin() {
     localStorage.setItem('auth_token', data.token)
     localStorage.setItem('user_role', data.role)
     localStorage.setItem('user_id', data.user_id)
-    localStorage.setItem('username', data.username)
+    localStorage.setItem('username', loginForm.value.username.trim())
+    try {
+      const profileRes = await getProfile()
+      const profile = profileRes.data || profileRes
+      if (profile.code === undefined || profile.code === 0) {
+        localStorage.setItem('username', profile.username || loginForm.value.username.trim())
+      }
+    } catch (_) { /* keep login form username */ }
     closeModal()
     router.push(data.role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
   } catch (e) {

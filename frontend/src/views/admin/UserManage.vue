@@ -27,7 +27,7 @@
         <tr v-for="u in users" :key="u.user_id">
           <td><strong>{{ u.user_id }}</strong></td>
           <td>{{ u.username }}</td>
-          <td>{{ u.battery_capacity }} kWh</td>
+          <td>{{ capacityText(u) }}</td>
           <td><span class="role-badge" :class="u.role === 'ADMIN' ? 'admin' : 'user'">{{ u.role }}</span></td>
           <td>{{ fmtDate(u.created_at) }}</td>
           <td>
@@ -35,7 +35,14 @@
           </td>
           <td class="action-cell">
             <button class="btn-sm btn-blue" @click="viewDetail(u.user_id)">详情</button>
-            <button class="btn-sm btn-green" @click="editCapacity(u)" :disabled="u.has_active_request">修改容量</button>
+            <button
+              class="btn-sm btn-green"
+              v-if="u.role !== 'ADMIN'"
+              @click="editCapacity(u)"
+              :disabled="u.has_active_request"
+              :title="u.has_active_request ? '该用户有活跃请求，暂不可修改容量' : ''"
+            >修改容量</button>
+            <span v-else class="muted">不适用</span>
           </td>
         </tr>
       </tbody>
@@ -49,7 +56,7 @@
           <div class="detail-grid">
             <div class="dg-item"><span class="dg-key">用户ID</span><span class="dg-val">{{ userDetail.user_id }}</span></div>
             <div class="dg-item"><span class="dg-key">用户名</span><span class="dg-val">{{ userDetail.username }}</span></div>
-            <div class="dg-item"><span class="dg-key">电池容量</span><span class="dg-val">{{ userDetail.battery_capacity }} kWh</span></div>
+            <div class="dg-item"><span class="dg-key">电池容量</span><span class="dg-val">{{ capacityText(userDetail) }}</span></div>
             <div class="dg-item"><span class="dg-key">角色</span><span class="dg-val">{{ userDetail.role }}</span></div>
           </div>
           <div v-if="userDetail.historical_details && userDetail.historical_details.length" style="margin-top:16px;">
@@ -87,6 +94,11 @@ function fmtDate(t) {
   try { return new Date(t).toLocaleDateString('zh-CN') } catch { return t }
 }
 
+function capacityText(user) {
+  if (!user || user.role === 'ADMIN') return '不适用'
+  return `${user.battery_capacity} kWh`
+}
+
 async function loadUsers() {
   loading.value = true
   try {
@@ -108,6 +120,7 @@ async function viewDetail(userId) {
 }
 
 async function editCapacity(u) {
+  if (u.role === 'ADMIN') { alert('管理员账号没有车辆电池容量'); return }
   if (u.has_active_request) { alert('该用户有活跃请求，不可修改'); return }
   const val = prompt(`当前电池容量: ${u.battery_capacity} kWh\n输入新容量:`, u.battery_capacity)
   if (!val) return
@@ -155,6 +168,7 @@ table.t tr:last-child td { border-bottom: none; }
 .action-cell { display: flex; gap: 6px; }
 .btn-sm { padding: 5px 10px; border-radius: 6px; border: 1px solid; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.12s; background: white; }
 .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; }
+.muted { font-size: 12px; color: #9ca3af; }
 .btn-green { border-color: #d1fae5; color: #059669; }
 .btn-green:hover:not(:disabled) { background: #ecfdf5; }
 .btn-blue { border-color: #bfdbfe; color: #3b82f6; }

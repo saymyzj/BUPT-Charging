@@ -18,7 +18,8 @@ const routes = [
     children: [
       { path: 'workspace', name: 'UserWorkspace', component: () => import('../views/user/Workspace.vue'), meta: { title: '工作台' } },
       { path: 'task', name: 'UserTask', component: () => import('../views/user/Task.vue'), meta: { title: '当前请求' } },
-      { path: 'account', name: 'UserAccount', component: () => import('../views/user/Account.vue'), meta: { title: '详单与账户' } },
+      { path: 'account', name: 'UserAccount', component: () => import('../views/user/Profile.vue'), meta: { title: '账户中心' } },
+      { path: 'bills', name: 'UserBills', component: () => import('../views/user/Account.vue'), meta: { title: '账单' } },
     ]
   },
 

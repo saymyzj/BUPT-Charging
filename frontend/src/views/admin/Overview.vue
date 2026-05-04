@@ -36,17 +36,18 @@
         <div class="modal-body">
           <div v-if="queueLoading">加载中...</div>
           <table class="t" v-if="!queueLoading && queueData.length">
-            <thead><tr><th>用户ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>排队时长</th></tr></thead>
+            <thead><tr><th>用户ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr></thead>
             <tbody>
-              <tr v-for="q in queueData" :key="q.queue_number">
+              <tr v-for="(q, index) in queueData" :key="q.queue_number">
                 <td>{{ q.user_id }}</td>
                 <td>{{ q.battery_capacity }} kWh</td>
                 <td>{{ q.request_energy }} kWh</td>
                 <td><strong>{{ q.queue_number }}</strong></td>
-                <td>{{ Math.ceil((q.queue_wait_seconds || 0) / 60) }} min</td>
+                <td>{{ queueTimeText(q, index) }}</td>
               </tr>
             </tbody>
           </table>
+          <div v-if="!queueLoading && queueData.length" class="queue-note">正在充电显示剩余时间；未充电车辆显示前方人数与前方车辆全部充完后的预计时间。</div>
           <div v-if="!queueLoading && !queueData.length" style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">队列为空</div>
         </div>
       </div>
@@ -56,7 +57,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getStations, getStationQueue } from '@/api/charging'
+import { getRequestStatus, getStations, getStationQueue } from '@/api/charging'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
 const stations = ref([])
@@ -65,6 +66,8 @@ const showModal = ref(false)
 const modalCode = ref('')
 const queueData = ref([])
 const queueLoading = ref(false)
+const currentStation = ref(null)
+const currentFinishTime = ref(null)
 
 async function loadStations() {
   loading.value = true
@@ -78,6 +81,8 @@ async function loadStations() {
 
 async function viewQueue(code) {
   modalCode.value = code
+  currentStation.value = stations.value.find((station) => station.station_code === code) || null
+  currentFinishTime.value = null
   showModal.value = true
   queueLoading.value = true
   queueData.value = []
@@ -85,8 +90,57 @@ async function viewQueue(code) {
     const res = await getStationQueue(code)
     const data = res.data || res
     queueData.value = Array.isArray(data) ? data : (data.queue || [])
+    if (currentStation.value?.current_request_id) {
+      const statusRes = await getRequestStatus(currentStation.value.current_request_id)
+      const status = statusRes.data || statusRes
+      if (status.code === undefined || status.code === 0) {
+        currentFinishTime.value = status.estimated_finish_time || null
+      }
+    }
   } catch (_) { /* silent */ }
   queueLoading.value = false
+}
+
+function queueTimeText(row, index) {
+  const now = new Date()
+  const hasChargingHead = Boolean(currentStation.value?.current_request_id)
+  if (hasChargingHead && index === 0) {
+    const remain = remainingMinutes(currentFinishTime.value, now)
+    return remain === null ? '充电中' : `充电中，还需 ${remain} min`
+  }
+
+  const frontCount = hasChargingHead ? index : Math.max(0, index)
+  const finish = estimateFinishTime(index, now)
+  return `前方 ${frontCount} 人，预计 ${finish ? fmtTime(finish) : '--'} 充完`
+}
+
+function remainingMinutes(time, now = new Date()) {
+  if (!time) return null
+  const finish = new Date(time)
+  if (Number.isNaN(finish.getTime())) return null
+  return Math.max(0, Math.ceil((finish.getTime() - now.getTime()) / 60000))
+}
+
+function estimateFinishTime(index, now = new Date()) {
+  const station = currentStation.value
+  if (!station) return null
+  const power = station.charge_mode === 'FAST' ? 30 : 10
+  const start = currentFinishTime.value ? new Date(currentFinishTime.value) : now
+  if (Number.isNaN(start.getTime())) return null
+  const startIndex = station.current_request_id ? 1 : 0
+  let cursor = new Date(start)
+  for (let i = startIndex; i <= index; i += 1) {
+    const item = queueData.value[i]
+    if (!item) break
+    cursor = new Date(cursor.getTime() + Number(item.request_energy || 0) / power * 3600000)
+  }
+  return cursor
+}
+
+function fmtTime(time) {
+  try {
+    return new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch { return '--' }
 }
 
 onMounted(loadStations)
@@ -105,7 +159,7 @@ onMounted(loadStations)
 
 .loading-text { color: #9ca3af; font-size: 14px; padding: 40px 0; text-align: center; }
 
-.station-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.station-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .station-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; transition: 0.2s; }
 .station-card:hover { border-color: #d1d5db; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
 .station-card.st-running { border-left: 3px solid #10b981; }
@@ -134,4 +188,11 @@ table.t { width: 100%; border-collapse: collapse; }
 table.t th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
 table.t td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; color: #374151; }
 table.t td strong { color: #111827; }
+.queue-note { margin-top: 12px; color: #9ca3af; font-size: 12px; }
+@media (max-width: 980px) {
+  .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .station-grid { grid-template-columns: 1fr; }
+}
 </style>

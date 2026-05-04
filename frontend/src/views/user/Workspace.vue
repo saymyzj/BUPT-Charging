@@ -8,8 +8,8 @@
     <!-- Stats -->
     <div class="stats">
       <div class="stat"><div class="stat-label green">当前状态</div><div class="stat-val">{{ hasActive ? statusText : '空闲' }}</div></div>
-      <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ currentReq?.queue_number || '--' }}</div></div>
-      <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ currentReq?.front_waiting_count ?? '--' }}</div></div>
+      <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ activeRequest?.queue_number || '--' }}</div></div>
+      <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ activeRequest?.front_waiting_count ?? '--' }}</div></div>
       <div class="stat"><div class="stat-label gray">预计等待</div><div class="stat-val">{{ estWaitDisplay }}</div></div>
     </div>
 
@@ -21,22 +21,25 @@
           <div class="form-grid">
             <div class="field">
               <label>充电模式</label>
-              <select v-model="form.charge_mode" :disabled="hasActive">
+              <select v-model="form.charge_mode" :disabled="hasActive || activeConflict">
                 <option value="FAST">快充 (30kW)</option>
                 <option value="SLOW">慢充 (10kW)</option>
               </select>
             </div>
             <div class="field">
               <label>请求电量 (kWh)</label>
-              <input type="number" v-model.number="form.request_energy" placeholder="1 ~ 电池容量" :disabled="hasActive" min="1">
+              <input type="number" v-model.number="form.request_energy" placeholder="1 ~ 电池容量" :disabled="hasActive || activeConflict" min="1">
             </div>
           </div>
-          <button class="btn btn-primary" @click="submitRequest" :disabled="hasActive || submitting">
-            {{ hasActive ? '当前有进行中的请求' : submitting ? '提交中...' : '提交请求' }}
+          <button class="btn btn-primary" @click="submitRequest" :disabled="hasActive || activeConflict || submitting">
+            {{ hasActive || activeConflict ? '当前有进行中的请求' : submitting ? '提交中...' : '提交请求' }}
           </button>
 
           <!-- Error -->
           <div class="error-box" v-if="errMsg">{{ errMsg }}</div>
+          <div class="link-task" v-if="activeConflict">
+            <router-link to="/user/task">前往当前请求页查看状态</router-link>
+          </div>
 
           <!-- Result -->
           <div class="result" v-if="submitResult">
@@ -86,7 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { createChargeRequest, getRequestStatus } from '@/api/charging'
+import { createChargeRequest, getProfile, getRequestStatus } from '@/api/charging'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 
 const form = ref({ charge_mode: 'FAST', request_energy: null })
@@ -94,6 +97,8 @@ const submitting = ref(false)
 const errMsg = ref('')
 const submitResult = ref(null)
 const currentReq = ref(null)
+const batteryCapacity = ref(null)
+const activeConflict = ref(localStorage.getItem('active_request_conflict') === '1')
 let pollTimer = null
 
 const hasActive = computed(() => {
@@ -101,16 +106,56 @@ const hasActive = computed(() => {
   return ACTIVE_STATUSES.includes(currentReq.value.request_status)
 })
 
+const activeRequest = computed(() => hasActive.value ? currentReq.value : null)
+
 const statusText = computed(() => {
-  if (!currentReq.value) return '空闲'
-  return REQUEST_STATUS_TEXT[currentReq.value.request_status] || currentReq.value.request_status
+  if (!activeRequest.value) return '空闲'
+  return REQUEST_STATUS_TEXT[activeRequest.value.request_status] || activeRequest.value.request_status
 })
 
 const estWaitDisplay = computed(() => {
-  if (!currentReq.value?.estimated_wait_seconds) return '--'
-  const m = Math.ceil(currentReq.value.estimated_wait_seconds / 60)
+  if (!activeRequest.value?.estimated_wait_seconds) return '--'
+  const m = Math.ceil(activeRequest.value.estimated_wait_seconds / 60)
   return `~${m} min`
 })
+
+async function loadProfile() {
+  try {
+    const res = await getProfile()
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) return
+    batteryCapacity.value = Number(data.battery_capacity)
+  } catch (_) { /* silent */ }
+}
+
+function formatLocalDateTime(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function rememberActiveConflict() {
+  activeConflict.value = true
+  localStorage.setItem('active_request_conflict', '1')
+}
+
+function clearActiveConflict() {
+  activeConflict.value = false
+  localStorage.removeItem('active_request_conflict')
+}
+
+function rememberRequestId(requestId) {
+  if (!requestId) return
+  let ids = []
+  try {
+    const stored = JSON.parse(localStorage.getItem('request_ids') || '[]')
+    if (Array.isArray(stored)) ids = stored
+  } catch (_) { /* ignore broken local data */ }
+  localStorage.setItem('request_ids', JSON.stringify([...new Set([requestId, ...ids])]))
+}
 
 async function submitRequest() {
   errMsg.value = ''
@@ -120,22 +165,33 @@ async function submitRequest() {
     errMsg.value = '请求电量必须大于 0'
     return
   }
+  if (batteryCapacity.value && form.value.request_energy > batteryCapacity.value) {
+    errMsg.value = `请求电量不能超过电池容量 ${batteryCapacity.value} kWh`
+    return
+  }
 
   submitting.value = true
   try {
     const res = await createChargeRequest({
       charge_mode: form.value.charge_mode,
       request_energy: form.value.request_energy,
-      request_time: new Date().toISOString()
+      request_time: formatLocalDateTime()
     })
     const data = res.data || res
     if (data.code !== undefined && data.code !== 0) {
       errMsg.value = data.message || '提交失败'
       return
     }
-    submitResult.value = data
+    const createdRequest = {
+      ...data,
+      charge_mode: form.value.charge_mode,
+      request_energy: form.value.request_energy
+    }
+    submitResult.value = createdRequest
     localStorage.setItem('request_id', data.request_id)
-    currentReq.value = data
+    rememberRequestId(data.request_id)
+    clearActiveConflict()
+    currentReq.value = createdRequest
     startPoll()
   } catch (e) {
     const code = e?.response?.data?.code
@@ -143,6 +199,10 @@ async function submitRequest() {
     if (code === 1004) errMsg.value = '等候区已满，请稍后再试'
     else if (code === 1005) errMsg.value = '当前模式无可用充电桩'
     else if (code === 1008) errMsg.value = '请求电量不合法'
+    else if (code === 1003) {
+      rememberActiveConflict()
+      errMsg.value = '当前用户已有活跃请求，但本地缺少请求编号，无法直接展示详情。请进入当前请求页查看提示，或由管理员结束该请求后重试。'
+    }
     else errMsg.value = msg || e?.message || '提交失败'
   } finally {
     submitting.value = false
@@ -155,9 +215,17 @@ async function pollStatus() {
   try {
     const res = await getRequestStatus(rid)
     const data = res.data || res
-    if (data.code !== undefined && data.code !== 0) return
+    if (data.code !== undefined && data.code !== 0) {
+      if (data.code === 1002) {
+        localStorage.removeItem('request_id')
+        currentReq.value = null
+      }
+      return
+    }
+    clearActiveConflict()
     currentReq.value = data
     if (!ACTIVE_STATUSES.includes(data.request_status)) {
+      currentReq.value = null
       stopPoll()
     }
   } catch (_) { /* silent */ }
@@ -173,6 +241,7 @@ function stopPoll() {
 }
 
 onMounted(() => {
+  loadProfile()
   const rid = localStorage.getItem('request_id')
   if (rid) {
     pollStatus()

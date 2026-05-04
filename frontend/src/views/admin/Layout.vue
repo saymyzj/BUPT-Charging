@@ -12,9 +12,12 @@
         <router-link to="/admin/users" :class="{ active: $route.path === '/admin/users' }">用户管理</router-link>
         <router-link to="/admin/statistics" :class="{ active: $route.path === '/admin/statistics' }">报表统计</router-link>
       </div>
-      <div class="nav-admin" @click="handleLogout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
-        admin
+      <div class="nav-actions">
+        <div class="nav-admin">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+          admin
+        </div>
+        <button class="nav-logout" @click="handleLogout">退出</button>
       </div>
     </nav>
     <router-view />
@@ -43,5 +46,8 @@ function handleLogout() {
 .nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #6b7280; text-decoration: none; transition: 0.15s; }
 .nav-links a.active { color: #059669; background: #ecfdf5; font-weight: 600; }
 .nav-links a:hover:not(.active) { color: #1f2937; background: #f3f4f6; }
-.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: #111827; font-size: 12px; font-weight: 600; color: white; cursor: pointer; }
+.nav-actions { display: flex; align-items: center; gap: 8px; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: #111827; font-size: 12px; font-weight: 600; color: white; }
+.nav-logout { padding: 6px 12px; border-radius: 999px; border: 1px solid #fecaca; background: white; color: #ef4444; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; }
+.nav-logout:hover { background: #fef2f2; }
 </style>

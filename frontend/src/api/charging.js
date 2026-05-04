@@ -14,6 +14,7 @@ export const checkHealth = () => request({ url: '/api/health', method: 'get' })
 // 登录 / 注册
 export const login = (data) => request({ url: '/api/auth/login', method: 'post', data })
 export const register = (data) => request({ url: '/api/auth/register', method: 'post', data })
+export const getProfile = () => request({ url: '/api/auth/profile', method: 'get' })
 
 // 提交充电请求
 export const createChargeRequest = (data) => request({ url: '/api/request/create', method: 'post', data })

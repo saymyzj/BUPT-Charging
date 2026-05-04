@@ -10,8 +10,8 @@
       <div class="empty-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
       </div>
-      <div class="empty-title">暂无进行中的请求</div>
-      <div class="empty-sub">前往工作台提交充电请求</div>
+      <div class="empty-title">{{ activeConflict ? '服务端已有活跃请求' : '暂无进行中的请求' }}</div>
+      <div class="empty-sub">{{ activeConflict ? '本地缺少请求编号，前端无法直接查询详情。请由管理员结束该请求后重新提交。' : '前往工作台提交充电请求' }}</div>
       <router-link to="/user/workspace" class="btn btn-primary" style="width:auto;padding:10px 24px;">前往工作台</router-link>
     </div>
 
@@ -80,7 +80,7 @@
             <button class="btn btn-secondary" :disabled="!canEditEnergy" @click="editEnergy">修改充电量</button>
             <button class="btn btn-danger" :disabled="!canCancel" @click="cancelReq">取消请求</button>
             <button class="btn btn-primary" :disabled="!canStop" @click="stopReq">提前结束充电</button>
-            <router-link v-if="canViewDetail" :to="`/user/account`" class="btn btn-secondary" style="text-decoration:none;text-align:center;">查看详单</router-link>
+            <router-link v-if="canViewDetail" :to="`/user/bills`" class="btn btn-secondary" style="text-decoration:none;text-align:center;">查看详单</router-link>
           </div>
           <p class="actions-note">注: 修改充电模式会回到等候区重新排队。提前结束仅在桩队列或充电中状态可用。</p>
         </div>
@@ -91,10 +91,12 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
+import { getProfile, getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
 
 const req = ref(null)
+const batteryCapacity = ref(null)
+const activeConflict = ref(localStorage.getItem('active_request_conflict') === '1')
 let pollTimer = null
 
 const statusText = computed(() => REQUEST_STATUS_TEXT[req.value?.request_status] || req.value?.request_status || '--')
@@ -166,7 +168,23 @@ const canViewDetail = computed(() => HAS_DETAIL_STATUSES.includes(req.value?.req
 
 function fmtTime(t) {
   if (!t) return '--'
-  try { return new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) } catch { return t }
+  try {
+    return new Date(t).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch { return t }
+}
+
+function formatLocalDateTime(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 async function refresh() {
@@ -175,9 +193,26 @@ async function refresh() {
   try {
     const res = await getRequestStatus(rid)
     const data = res.data || res
-    if (data.code !== undefined && data.code !== 0) return
+    if (data.code !== undefined && data.code !== 0) {
+      if (data.code === 1002) {
+        localStorage.removeItem('request_id')
+        req.value = null
+      }
+      return
+    }
+    activeConflict.value = false
+    localStorage.removeItem('active_request_conflict')
     req.value = data
     if (!ACTIVE_STATUSES.includes(data.request_status)) stopPoll()
+  } catch (_) { /* silent */ }
+}
+
+async function loadProfile() {
+  try {
+    const res = await getProfile()
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) return
+    batteryCapacity.value = Number(data.battery_capacity)
   } catch (_) { /* silent */ }
 }
 
@@ -197,6 +232,10 @@ async function editEnergy() {
   if (!val) return
   const num = parseFloat(val)
   if (!num || num <= 0) { alert('电量必须大于 0'); return }
+  if (batteryCapacity.value && num > batteryCapacity.value) {
+    alert(`请求电量不能超过电池容量 ${batteryCapacity.value} kWh`)
+    return
+  }
   try {
     const res = await updateRequestEnergy({ request_id: req.value.request_id, request_energy: num })
     const data = res.data || res
@@ -218,7 +257,10 @@ async function cancelReq() {
 async function stopReq() {
   if (!confirm('确认提前结束充电？将按已充电量结算。')) return
   try {
-    const res = await stopRequest({ request_id: req.value.request_id })
+    const res = await stopRequest({
+      request_id: req.value.request_id,
+      stop_time: formatLocalDateTime()
+    })
     const data = res.data || res
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '操作失败'); return }
     await refresh()
@@ -228,7 +270,7 @@ async function stopReq() {
 function startPoll() { stopPoll(); pollTimer = setInterval(refresh, 5000) }
 function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
-onMounted(() => { refresh(); startPoll() })
+onMounted(() => { loadProfile(); refresh(); startPoll() })
 onUnmounted(() => { stopPoll() })
 </script>
 
