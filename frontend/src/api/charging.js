@@ -1,133 +1,62 @@
-import request from './request';
+import request from './request'
 
 // ==========================================
-// 健康检查与服务探测
-// ==========================================
-export const checkHealth = () => {
-  return request({
-    url: '/health',
-    method: 'get'
-  });
-};
-
-// ==========================================
-// 充电请求与调度相关 (用户端核心流程)
-// 对应7个已冻结接口
+// V3 正式接口 — 基于 成员C页面设计清单 §7
 // ==========================================
 
-/**
- * 1. 提交充电请求
- * @param {Object} data 
- * @param {string} data.request_time - ISO 8601 时间字符串
- * @param {string} data.charge_mode - 'FAST' | 'SLOW'
- * @param {number} data.request_energy - 请求电量(kWh)
- */
-export const createChargeRequest = (data) => {
-  return request({
-    url: '/api/request/create',
-    method: 'post',
-    data
-  });
-};
+// ---------- 健康检查 ----------
+export const checkHealth = () => request({ url: '/api/health', method: 'get' })
 
-/**
- * 2. 查询请求状态 (用于轮询)
- * @param {string} requestId 
- */
-export const getRequestStatus = (requestId) => {
-  return request({
-    url: `/api/request/status/${requestId}`,
-    method: 'get'
-  });
-};
+// ======================
+// 7.1 用户端接口
+// ======================
 
-/**
- * 3. 取消排队
- * @param {Object} data 
- * @param {string} data.request_id 
- * @param {string} data.cancel_time 
- */
-export const cancelQueue = (data) => {
-  return request({
-    url: '/api/request/cancel_queue',
-    method: 'post',
-    data
-  });
-};
+// 登录 / 注册
+export const login = (data) => request({ url: '/api/auth/login', method: 'post', data })
+export const register = (data) => request({ url: '/api/auth/register', method: 'post', data })
 
-/**
- * 4. 确认到场 (叫号后)
- * @param {Object} data
- * @param {string} data.request_id
- * @param {string} data.confirm_time
- */
-export const confirmArrival = (data) => {
-  return request({
-    url: '/api/request/confirm_arrival',
-    method: 'post',
-    data
-  });
-};
+// 提交充电请求
+export const createChargeRequest = (data) => request({ url: '/api/request/create', method: 'post', data })
 
-/**
- * 5. 中断充电
- * @param {Object} data
- * @param {string} data.request_id
- * @param {string} data.interrupt_time 
- */
-export const interruptCharge = (data) => {
-  return request({
-    url: '/api/request/interrupt_charge',
-    method: 'post',
-    data
-  });
-};
+// 查询请求状态（轮询）
+export const getRequestStatus = (requestId) => request({ url: `/api/request/status/${requestId}`, method: 'get' })
 
-/**
- * 6. 确认挪车 (充电或中断后)
- * @param {Object} data
- * @param {string} data.request_id
- * @param {string} data.leave_time
- */
-export const confirmLeave = (data) => {
-  return request({
-    url: '/api/request/confirm_leave',
-    method: 'post',
-    data
-  });
-};
+// 修改充电模式
+export const updateChargeMode = (data) => request({ url: '/api/request/mode', method: 'put', data })
 
-// ==========================================
-// 待解冻/待实施接口预留 (包含鉴权/登录)
-// ==========================================
+// 修改请求电量
+export const updateRequestEnergy = (data) => request({ url: '/api/request/energy', method: 'put', data })
 
-export const login = (data) => {
-  return request({
-    url: '/api/auth/login',
-    method: 'post',
-    data
-  });
-};
+// 取消请求（等候区取消）
+export const cancelRequest = (data) => request({ url: '/api/request/cancel', method: 'post', data })
 
-export const register = (data) => {
-  return request({
-    url: '/api/auth/register',
-    method: 'post',
-    data
-  });
-};
+// 提前结束（充电区取消 / 提前结束）
+export const stopRequest = (data) => request({ url: '/api/request/stop', method: 'post', data })
 
-export const getResult = (requestId) => {
-  return request({
-    url: `/api/request/result/${requestId}`,
-    method: 'get'
-  });
-};
+// 查询详单
+export const getRequestDetail = (requestId) => request({ url: `/api/request/detail/${requestId}`, method: 'get' })
 
-export const payRequest = (data) => {
-  return request({
-    url: '/api/request/pay',
-    method: 'post',
-    data
-  });
-};
+// ======================
+// 7.2 管理端接口
+// ======================
+
+// 系统配置
+export const getSystemConfig = () => request({ url: '/api/admin/system/config', method: 'get' })
+export const setDispatchMode = (data) => request({ url: '/api/admin/system/dispatch-mode', method: 'put', data })
+export const setFaultDispatchMode = (data) => request({ url: '/api/admin/system/fault-dispatch-mode', method: 'put', data })
+
+// 充电桩管理
+export const getStations = () => request({ url: '/api/admin/stations', method: 'get' })
+export const getStationQueue = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/queue`, method: 'get' })
+export const startStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/start`, method: 'post' })
+export const shutdownStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/shutdown`, method: 'post' })
+export const faultStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/fault`, method: 'post' })
+export const recoverStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/recover`, method: 'post' })
+
+// 用户管理
+export const getUsers = () => request({ url: '/api/admin/users', method: 'get' })
+export const getUserDetail = (userId) => request({ url: `/api/admin/users/${userId}`, method: 'get' })
+export const updateBatteryCapacity = (userId, data) => request({ url: `/api/admin/users/${userId}/battery-capacity`, method: 'put', data })
+
+// 报表统计
+export const getReports = (granularity) => request({ url: '/api/admin/reports', method: 'get', params: { granularity } })

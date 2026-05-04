@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>系统配置 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--dark); font-size: 12px; font-weight: 600; color: white; }
+
+.page { max-width: 1000px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: 0.2s; margin-bottom: 16px; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.readonly-tag { font-size: 10px; background: #fffbeb; color: #b45309; padding: 3px 8px; border-radius: 4px; font-weight: 600; border: 1px solid #fde68a; }
+.card-body { padding: 20px; }
+
+/* CONFIG PARAMS */
+.params { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.param { padding: 16px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); position: relative; }
+.param-lock { position: absolute; top: 12px; right: 12px; font-size: 12px; color: var(--text3); }
+.param-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+.param-label code { font-size: 10px; color: var(--text3); margin-left: 4px; }
+.param-val { font-size: 24px; font-weight: 700; color: var(--dark); margin-top: 6px; letter-spacing: -0.5px; }
+.param-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* SWITCH BUTTONS */
+.switch-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.switch-group.two { grid-template-columns: 1fr 1fr; }
+.sw-btn { padding: 18px 16px; border-radius: 10px; border: 2px solid var(--border); background: white; cursor: pointer; transition: 0.2s; text-align: left; }
+.sw-btn:hover { border-color: var(--primary-pale); background: var(--primary-wash); }
+.sw-btn.active { border-color: var(--primary); background: var(--primary-wash); box-shadow: 0 0 0 3px rgba(16,185,129,0.08); }
+.sw-name { font-size: 14px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+.sw-btn.active .sw-name { color: var(--primary-dark); }
+.sw-code { font-size: 11px; font-family: "SF Mono", monospace; color: var(--text3); margin-bottom: 8px; }
+.sw-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统 · 管理端
+  </div>
+  <div class="nav-links">
+    <a href="admin-overview.html">总览</a>
+    <a class="active" href="admin-config.html">系统配置</a>
+    <a href="admin-faults.html">设备控制</a>
+    <a href="admin-users.html">用户管理</a>
+    <a href="admin-statistics.html">报表统计</a>
+  </div>
+  <div class="nav-admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+    admin
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>系统配置</h1>
+    <p>查看基础参数，切换调度模式与故障转移策略</p>
+  </div>
+
+  <!-- Readonly Params -->
+  <div class="card">
+    <div class="card-head">
+      <h3>基础参数</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="readonly-tag">只读</span>
+        <span class="card-tag">GET /api/admin/system/config</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="params">
+        <div class="param"><div class="param-lock">&#128274;</div><div class="param-label">快充桩数量 <code>fast_station_count</code></div><div class="param-val">5</div><div class="param-sub">每座 30kW</div></div>
+        <div class="param"><div class="param-lock">&#128274;</div><div class="param-label">慢充桩数量 <code>slow_station_count</code></div><div class="param-val">5</div><div class="param-sub">每座 10kW</div></div>
+        <div class="param"><div class="param-lock">&#128274;</div><div class="param-label">等候区容量 <code>waiting_area_capacity</code></div><div class="param-val">20</div><div class="param-sub">超出拒绝新请求</div></div>
+        <div class="param"><div class="param-lock">&#128274;</div><div class="param-label">每桩队列长度 <code>charging_queue_len</code></div><div class="param-val">3</div><div class="param-sub">等候区→桩队列阈值</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dispatch Mode -->
+  <div class="card">
+    <div class="card-head"><h3>调度模式</h3><span class="card-tag">PUT /api/admin/system/dispatch-mode</span></div>
+    <div class="card-body">
+      <div class="switch-group" id="dispatch-group">
+        <div class="sw-btn active" onclick="setDispatch(this,'NORMAL')">
+          <div class="sw-name">普通调度</div>
+          <div class="sw-code">NORMAL</div>
+          <div class="sw-desc">每次从等候区取一辆车，按最短完成时间分配桩位</div>
+        </div>
+        <div class="sw-btn" onclick="setDispatch(this,'EXT_SINGLE_BATCH')">
+          <div class="sw-name">单次联合调度</div>
+          <div class="sw-code">EXT_SINGLE_BATCH</div>
+          <div class="sw-desc">单次对全部等候车辆做批量最优分配</div>
+        </div>
+        <div class="sw-btn" onclick="setDispatch(this,'EXT_FULL_BATCH')">
+          <div class="sw-name">批量调度</div>
+          <div class="sw-code">EXT_FULL_BATCH</div>
+          <div class="sw-desc">持续批量调度直到等候区清空</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fault Mode -->
+  <div class="card">
+    <div class="card-head"><h3>故障转移策略</h3><span class="card-tag">PUT /api/admin/system/fault-dispatch-mode</span></div>
+    <div class="card-body">
+      <div class="switch-group two" id="fault-group">
+        <div class="sw-btn active" onclick="setFault(this,'PRIORITY')">
+          <div class="sw-name">故障队列优先</div>
+          <div class="sw-code">PRIORITY</div>
+          <div class="sw-desc">故障桩队列中的请求优先于等候区重新分配</div>
+        </div>
+        <div class="sw-btn" onclick="setFault(this,'TIME_ORDER')">
+          <div class="sw-name">时间顺序重排</div>
+          <div class="sw-code">TIME_ORDER</div>
+          <div class="sw-desc">故障请求回等候区按提交时间重新排序</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setDispatch(el,mode){
+  document.getElementById('dispatch-group').querySelectorAll('.sw-btn').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+  alert('PUT /api/admin/system/dispatch-mode\n{ dispatch_mode: "'+mode+'" }');
+}
+function setFault(el,mode){
+  document.getElementById('fault-group').querySelectorAll('.sw-btn').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+  alert('PUT /api/admin/system/fault-dispatch-mode\n{ fault_dispatch_mode: "'+mode+'" }');
+}
+</script>
+</body>
+</html>

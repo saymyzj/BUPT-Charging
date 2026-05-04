@@ -1,124 +1,83 @@
 <template>
-  <div class="user-workspace-wrapper">
-    <!-- Top Nav -->
-    <nav class="top-nav">
-      <div class="nav-brand">⚡ 智能充电桩调度计费系统</div>
-      <div class="nav-center">
-        <router-link to="/user/workspace" class="nav-tab active">工作台</router-link>
-        <router-link to="/user/task" class="nav-tab">当前任务</router-link>
-        <router-link to="/user/account" class="nav-tab">账户中心</router-link>
-      </div>
-      <div class="nav-right">
-        <span>🔔 通知(3)</span>
-        <span>用户: 张三</span>
-        <span class="logout">退出</span>
-        <span>{{ clock }}</span>
-      </div>
-    </nav>
+  <div class="page">
+    <div class="page-head">
+      <h1>工作台</h1>
+      <p>提交充电请求，查看实时状态</p>
+    </div>
 
-    <div class="main-wrap">
-      <!-- Left -->
-      <div class="left-area">
-        <div class="inner-tabs">
-          <button class="inner-tab" :class="{active: tab==='overview'}" @click="tab='overview'">充电桩总览</button>
-          <button class="inner-tab" :class="{active: tab==='submit'}" @click="tab='submit'">提交请求</button>
-        </div>
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat"><div class="stat-label green">当前状态</div><div class="stat-val">{{ hasActive ? statusText : '空闲' }}</div></div>
+      <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ currentReq?.queue_number || '--' }}</div></div>
+      <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ currentReq?.front_waiting_count ?? '--' }}</div></div>
+      <div class="stat"><div class="stat-label gray">预计等待</div><div class="stat-val">{{ estWaitDisplay }}</div></div>
+    </div>
 
-        <!-- Tab 1: Overview -->
-        <div class="tab-content" :class="{active: tab==='overview'}">
-          <div class="summary-row">
-            <div class="summary-badge"><div class="icon fast">⚡</div><div><div class="val">{{ kpi.fastWait }}</div><div class="lbl">快充平均等待 (分)</div></div></div>
-            <div class="summary-badge"><div class="icon slow">🔋</div><div><div class="val">{{ kpi.slowWait }}</div><div class="lbl">慢充平均等待 (分)</div></div></div>
-            <div class="summary-badge"><div class="icon queue">👥</div><div><div class="val">{{ kpi.queue }}</div><div class="lbl">当前排队 (人)</div></div></div>
-          </div>
-
-          <div class="filter-row">
-            <button class="filter-btn" :class="{active: pileFilter==='all'}" @click="pileFilter='all'">全部</button>
-            <button class="filter-btn" :class="{active: pileFilter==='charging'}" @click="pileFilter='charging'">充电中</button>
-            <button class="filter-btn" :class="{active: pileFilter==='idle'}" @click="pileFilter='idle'">空闲</button>
-            <button class="filter-btn" :class="{active: pileFilter==='fault'}" @click="pileFilter='fault'">故障</button>
-          </div>
-
-          <div class="pile-grid">
-            <div v-for="pile in filteredPiles" :key="pile.code" class="pile-card" :data-status="pile.status">
-              <div class="pile-header">
-                <span class="pile-code">{{ pile.code }}</span>
-                <span class="type-badge" :class="pile.type === '快充' ? 'fast' : 'slow'">{{ pile.type }}</span>
-              </div>
-              <div class="pile-power">额定功率: {{ pile.power }}kW</div>
-              <div class="status-line">
-                <span class="status-dot" :class="pile.status"></span>
-                <span class="status-text" :class="{fault: pile.status==='fault'}">{{ pile.statusText }}</span>
-              </div>
-              <template v-if="pile.status==='charging' || pile.status==='waiting'">
-                <div class="progress-wrap"><div class="progress-bar" :style="{width: pile.progress+'%'}"></div></div>
-                <div class="charge-info">{{ pile.user }} · {{ pile.energy }} · {{ pile.progress }}%</div>
-              </template>
+    <!-- Form + Current Status -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h3>提交充电请求</h3><span class="card-tag">POST /api/request/create</span></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field">
+              <label>充电模式</label>
+              <select v-model="form.charge_mode" :disabled="hasActive">
+                <option value="FAST">快充 (30kW)</option>
+                <option value="SLOW">慢充 (10kW)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>请求电量 (kWh)</label>
+              <input type="number" v-model.number="form.request_energy" placeholder="1 ~ 电池容量" :disabled="hasActive" min="1">
             </div>
           </div>
-        </div>
+          <button class="btn btn-primary" @click="submitRequest" :disabled="hasActive || submitting">
+            {{ hasActive ? '当前有进行中的请求' : submitting ? '提交中...' : '提交请求' }}
+          </button>
 
-        <!-- Tab 2: Submit Request -->
-        <div class="tab-content" :class="{active: tab==='submit'}">
-          <div class="form-card">
-            <h3>提交充电请求</h3>
-            <p class="sub">选择充电模式和需求电量，系统将自动为您分配最优充电桩</p>
+          <!-- Error -->
+          <div class="error-box" v-if="errMsg">{{ errMsg }}</div>
 
-            <div class="mode-select">
-              <div class="mode-card" :class="{selected: mode==='fast'}" @click="selectMode('fast')">
-                <div class="mode-icon">⚡</div>
-                <div class="mode-title">快充</div>
-                <div class="mode-desc">30kW 大功率</div>
-                <div class="mode-wait">预计等待 ~8分钟</div>
-              </div>
-              <div class="mode-card" :class="{selected: mode==='slow'}" @click="selectMode('slow')">
-                <div class="mode-icon">🌿</div>
-                <div class="mode-title">慢充</div>
-                <div class="mode-desc">7kW 节能</div>
-                <div class="mode-wait">预计等待 ~15分钟</div>
-              </div>
+          <!-- Result -->
+          <div class="result" v-if="submitResult">
+            <div class="result-title">请求已提交</div>
+            <div class="result-grid">
+              <div class="r-item"><div class="rl">请求编号</div><div class="rv">{{ submitResult.request_id }}</div></div>
+              <div class="r-item"><div class="rl">排队号</div><div class="rv">{{ submitResult.queue_number }}</div></div>
+              <div class="r-item"><div class="rl">状态</div><div class="rv">{{ REQUEST_STATUS_TEXT[submitResult.request_status] || submitResult.request_status }}</div></div>
+              <div class="r-item"><div class="rl">模式</div><div class="rv">{{ CHARGE_MODE_TEXT[submitResult.charge_mode] }}</div></div>
+              <div class="r-item"><div class="rl">请求电量</div><div class="rv">{{ submitResult.request_energy }} kWh</div></div>
+              <div class="r-item"><div class="rl">前车数量</div><div class="rv">{{ submitResult.front_waiting_count }} 辆</div></div>
             </div>
+          </div>
 
-            <div class="kwh-section">
-              <label>需求电量 (kWh)</label>
-              <div class="kwh-presets">
-                <button class="kwh-btn" :class="{selected: kwh===10}" @click="selectKwh(10)">10</button>
-                <button class="kwh-btn" :class="{selected: kwh===20}" @click="selectKwh(20)">20</button>
-                <button class="kwh-btn" :class="{selected: kwh===30}" @click="selectKwh(30)">30</button>
-                <button class="kwh-btn" :class="{selected: kwh===50}" @click="selectKwh(50)">50</button>
-                <button class="kwh-btn" :class="{selected: kwh===80}" @click="selectKwh(80)">80</button>
-              </div>
-              <div class="kwh-custom">
-                <input type="number" v-model.number="customKwh" placeholder="自定义" min="1" max="100" @input="onCustomKwhInput">
-                <span>kWh</span>
-              </div>
-            </div>
-
-            <div class="info-box">
-              <span>预计等待时间: <strong>{{ mode==='fast'?'~8分钟':'~15分钟' }}</strong></span>
-              <span>预计完成时间: <strong>{{ mode==='fast'?'~45分钟':'~2小时' }}</strong></span>
-            </div>
-
-            <button class="submit-btn" @click="submitRequest">提交充电请求</button>
-            <p class="form-note">系统将自动为您分配最优充电桩</p>
+          <div class="link-task" v-if="hasActive">
+            <router-link to="/user/task">查看当前请求详情 →</router-link>
           </div>
         </div>
       </div>
 
-      <!-- Right Panel -->
-      <div class="right-panel">
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-val">{{ stats.history }}</div><div class="stat-lbl">我的历史充电 (次)</div></div>
-          <div class="stat-card"><div class="stat-val gold">{{ stats.totalKwh }}</div><div class="stat-lbl">累计充电量 (kWh)</div></div>
-          <div class="stat-card"><div class="stat-val rust">¥{{ stats.totalFee }}.00</div><div class="stat-lbl">累计消费</div></div>
-          <div class="stat-card"><div class="stat-val" style="color:var(--primary)">¥{{ stats.balance }}.00</div><div class="stat-lbl">账户余额</div></div>
+      <div class="card">
+        <div class="card-head"><h3>充电流程</h3></div>
+        <div class="card-body">
+          <div class="flow-item"><div class="flow-num">1</div><div><div class="flow-text">提交充电请求</div><div class="flow-sub">选择快充/慢充，填写请求电量</div></div></div>
+          <div class="flow-item"><div class="flow-num">2</div><div><div class="flow-text">等候区排队</div><div class="flow-sub">按提交时间排序，容量上限 20 辆</div></div></div>
+          <div class="flow-item"><div class="flow-num">3</div><div><div class="flow-text">调度分配桩位</div><div class="flow-sub">最短完成时间策略自动分配</div></div></div>
+          <div class="flow-item"><div class="flow-num">4</div><div><div class="flow-text">充电中</div><div class="flow-sub">到达桩队列首位后自动启动</div></div></div>
+          <div class="flow-item"><div class="flow-num">5</div><div><div class="flow-text">完成 · 结算</div><div class="flow-sub">各时段电量×电价 + 服务费 = 总费用</div></div></div>
         </div>
-        <div class="divider"></div>
-        <div class="notif-title">最近通知</div>
-        <div class="notif-list">
-          <div class="notif-item" v-for="(n, i) in notifications" :key="i">
-            <span class="time">{{ n.time }}</span> {{ n.icon }} <span class="tag" :class="n.tagClass">[{{ n.tag }}]</span> {{ n.text }}
-          </div>
+      </div>
+    </div>
+
+    <!-- Price -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-head"><h3>电价时段</h3></div>
+      <div class="card-body">
+        <div class="price-grid">
+          <div class="price-row"><div class="price-dot" style="background:#ef4444;"></div><div class="price-info"><div class="price-name">峰时</div><div class="price-time">10:00–15:00, 18:00–21:00</div></div><div class="price-val">¥1.0/kWh</div></div>
+          <div class="price-row"><div class="price-dot" style="background:#f59e0b;"></div><div class="price-info"><div class="price-name">平时</div><div class="price-time">07:00–10:00, 15:00–18:00, 21:00–23:00</div></div><div class="price-val">¥0.7/kWh</div></div>
+          <div class="price-row"><div class="price-dot" style="background:#3b82f6;"></div><div class="price-info"><div class="price-name">谷时</div><div class="price-time">23:00–07:00</div></div><div class="price-val">¥0.4/kWh</div></div>
+          <div class="price-row"><div class="price-dot" style="background:#10b981;"></div><div class="price-info"><div class="price-name">服务费</div><div class="price-time">全时段固定费率</div></div><div class="price-val">¥0.8/kWh</div></div>
         </div>
       </div>
     </div>
@@ -127,274 +86,166 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { createChargeRequest } from '@/api/charging'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { createChargeRequest, getRequestStatus } from '@/api/charging'
+import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 
-const router = useRouter()
+const form = ref({ charge_mode: 'FAST', request_energy: null })
+const submitting = ref(false)
+const errMsg = ref('')
+const submitResult = ref(null)
+const currentReq = ref(null)
+let pollTimer = null
 
-const clock = ref('')
-let clockInterval = null
-onMounted(() => {
-  updateClock()
-  clockInterval = setInterval(updateClock, 1000)
-})
-onUnmounted(() => { if(clockInterval) clearInterval(clockInterval) })
-function updateClock() {
-  clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-}
-
-const tab = ref('overview')
-const pileFilter = ref('all')
-const mode = ref('fast')
-const kwh = ref(30)
-const customKwh = ref(null)
-
-const kpi = ref({ fastWait: 8, slowWait: 15, queue: 7 })
-const piles = ref([
-  { code: 'FAST_01', type: '快充', power: 30, status: 'charging', statusText: '充电中', user: 'user_003', energy: '23.4/30 kWh', progress: 78 },
-  { code: 'FAST_02', type: '快充', power: 30, status: 'waiting', statusText: '等待离场', user: 'user_007', energy: '30/30 kWh', progress: 100 },
-  { code: 'SLOW_01', type: '慢充', power: 7, status: 'charging', statusText: '充电中', user: 'user_001', energy: '13.5/30 kWh', progress: 45 },
-  { code: 'SLOW_02', type: '慢充', power: 7, status: 'idle', statusText: '空闲就绪' },
-  { code: 'SLOW_03', type: '慢充', power: 7, status: 'fault', statusText: '设备故障' }
-])
-const filteredPiles = computed(() => {
-  if (pileFilter.value === 'all') return piles.value
-  return piles.value.filter(p => p.status === pileFilter.value)
+const hasActive = computed(() => {
+  if (!currentReq.value) return false
+  return ACTIVE_STATUSES.includes(currentReq.value.request_status)
 })
 
-function selectMode(m) {
-  mode.value = m
-}
-function selectKwh(val) {
-  kwh.value = val
-  customKwh.value = null
-}
-function onCustomKwhInput(e) {
-  if (customKwh.value) kwh.value = customKwh.value
-}
+const statusText = computed(() => {
+  if (!currentReq.value) return '空闲'
+  return REQUEST_STATUS_TEXT[currentReq.value.request_status] || currentReq.value.request_status
+})
+
+const estWaitDisplay = computed(() => {
+  if (!currentReq.value?.estimated_wait_seconds) return '--'
+  const m = Math.ceil(currentReq.value.estimated_wait_seconds / 60)
+  return `~${m} min`
+})
+
 async function submitRequest() {
-  if (!kwh.value || kwh.value <= 0) {
-    ElMessage.warning('请输入有效的充电量')
+  errMsg.value = ''
+  submitResult.value = null
+
+  if (!form.value.request_energy || form.value.request_energy <= 0) {
+    errMsg.value = '请求电量必须大于 0'
     return
   }
-  
+
+  submitting.value = true
   try {
-    const payload = {
-      // 构造符合冻结接口文档的时间格式 YYYY-MM-DDTHH:mm:ss
-      request_time: new Date().toISOString().substring(0, 19), 
-      charge_mode: mode.value.toUpperCase(), // 转为 FAST 或 SLOW
-      request_energy: Number(kwh.value)
+    const res = await createChargeRequest({
+      charge_mode: form.value.charge_mode,
+      request_energy: form.value.request_energy,
+      request_time: new Date().toISOString()
+    })
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) {
+      errMsg.value = data.message || '提交失败'
+      return
     }
-    
-    // 调用我们在 charging.js 封装好的接口发起真实请求
-    const res = await createChargeRequest(payload)
-    
-    if (res && res.code === 0) {
-      const waitTime = Math.round(res.data.estimated_wait_seconds / 60)
-      const waitText = waitTime < 1 ? '不足 1 分钟' : `约 ${waitTime} 分钟`
-      await ElMessageBox.alert(
-        `
-        <div style="text-align: center; padding: 20px 0;">
-          <div style="font-size: 15px; color: var(--text2); margin-bottom: 8px;">请求流水号</div>
-          <div style="font-family: Georgia, serif; font-size: 36px; font-weight: 700; color: var(--primary); margin-bottom: 24px; letter-spacing: 1px;">${res.data.request_id}</div>
-          
-          <div style="font-size: 15px; color: var(--text2); margin-bottom: 8px;">预计等待时间</div>
-          <div style="font-family: Georgia, serif; font-size: 28px; font-weight: 700; color: var(--accent);">${waitText}</div>
-        </div>
-        `,
-        '🎉 充电请求提交成功',
-        {
-          dangerouslyUseHTMLString: true,
-          confirmButtonText: '立即查看任务',
-          customStyle: { borderRadius: '16px' },
-          showClose: false,
-          center: true,
-          confirmButtonClass: 'btn-primary'
-        }
-      )
-      // 保存请求信息到 sessionStorage（会话级，不跨浏览器重开）供任务页面读取
-      sessionStorage.setItem('currentRequestID', res.data.request_id)
-      sessionStorage.setItem(`taskFlow_${res.data.request_id}`, JSON.stringify({
-        request_id: res.data.request_id,
-        request_energy: Number(kwh.value),
-        charge_mode: mode.value.toUpperCase(),
-        submit_time: payload.request_time,
-        estimated_wait_seconds: Number(res.data.estimated_wait_seconds || 0),
-        estimated_start_time: res.data.estimated_start_time || null,
-        estimated_finish_time: res.data.estimated_finish_time || null,
-        status: 'WAITING'
-      }))
-      // 清理旧的持久化缓存，避免“下次打开仍保留记录”
-      localStorage.removeItem('currentRequestID')
-      
-      // 携带状态跳往当前任务页 (Task.vue)
-      router.push('/user/task')
-    } else {
-      ElMessage.error(`提交失败: ${res?.message || '服务器内部错误'}`)
-    }
-  } catch (err) {
-    console.error('Request Error:', err)
-    ElMessage.error('接口请求异常，请检查后端是否稳定运行以及网络配置！')
+    submitResult.value = data
+    localStorage.setItem('request_id', data.request_id)
+    currentReq.value = data
+    startPoll()
+  } catch (e) {
+    const code = e?.response?.data?.code
+    const msg = e?.response?.data?.message
+    if (code === 1004) errMsg.value = '等候区已满，请稍后再试'
+    else if (code === 1005) errMsg.value = '当前模式无可用充电桩'
+    else if (code === 1008) errMsg.value = '请求电量不合法'
+    else errMsg.value = msg || e?.message || '提交失败'
+  } finally {
+    submitting.value = false
   }
 }
 
-const stats = ref({ history: 12, totalKwh: 356, totalFee: 534, balance: 166 })
-const notifications = ref([
-  { time: '14:23', icon: '🔔', tag: '叫号提醒', tagClass: 'call', text: '您的充电请求已被叫号，请在3分钟内确认到场' },
-  { time: '14:21', icon: '✅', tag: '充电完成', tagClass: 'done', text: 'FAST_01充电完成，请尽快移车' },
-  { time: '14:18', icon: '⚠️', tag: '故障通知', tagClass: 'warn', text: 'SLOW_03发生故障，受影响用户已重新排队' },
-  { time: '14:15', icon: '🔔', tag: '排队更新', tagClass: 'queue', text: '您的预计等待时间已更新为8分钟' },
-  { time: '13:50', icon: '✅', tag: '支付成功', tagClass: 'pay', text: '订单REQ-0023支付成功，¥45.00' },
-  { time: '13:30', icon: '📋', tag: '新请求', tagClass: 'new', text: '充电请求已提交，进入等待队列' }
-])
+async function pollStatus() {
+  const rid = localStorage.getItem('request_id')
+  if (!rid) return
+  try {
+    const res = await getRequestStatus(rid)
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) return
+    currentReq.value = data
+    if (!ACTIVE_STATUSES.includes(data.request_status)) {
+      stopPoll()
+    }
+  } catch (_) { /* silent */ }
+}
+
+function startPoll() {
+  stopPoll()
+  pollTimer = setInterval(pollStatus, 5000)
+}
+
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+onMounted(() => {
+  const rid = localStorage.getItem('request_id')
+  if (rid) {
+    pollStatus()
+    startPoll()
+  }
+})
+
+onUnmounted(() => { stopPoll() })
 </script>
 
 <style scoped>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-:global(body) {
-  --bg:#faf8f5;--card:#ffffff;--primary:#2d6a4f;--secondary:#c45d3e;
-  --accent:#d4a853;--text:#2c2c2c;--text2:#7a7a7a;
-  --shadow:0 4px 12px rgba(120,80,40,0.08);--radius:10px;
-  --nav-bg:#f5f0e8;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  min-height: 100vh;
-  margin: 0;
-  padding: 0;
-}
-.user-workspace-wrapper {
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  background:var(--bg);
-  color:var(--text);
-  min-height:100vh;
-  width: 100vw;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-h1,h2,h3,h4,h5,h6{font-family:Georgia,serif;}
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #111827; }
+.page-head p { font-size: 14px; color: #6b7280; margin-top: 4px; }
 
-/* Top Nav */
-.top-nav{background:var(--nav-bg);border-bottom:3px solid var(--accent);display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px;position:sticky;top:0;z-index:100;}
-.nav-brand{font-family:Georgia,serif;font-weight:bold;font-size:18px;color:var(--primary);white-space:nowrap;}
-.nav-center{display:flex;gap:4px;}
-.nav-tab{padding:8px 22px;border-radius:8px;cursor:pointer;font-size:15px;color:var(--text2);transition:all .2s;text-decoration:none;border:none;background:none;}
-.nav-tab:hover{color:var(--text);background:rgba(45,106,79,.06);}
-.nav-tab.active{color:var(--primary);font-weight:600;background:rgba(45,106,79,.1);}
-.nav-right{display:flex;align-items:center;gap:18px;font-size:14px;color:var(--text2);}
-.nav-right span{cursor:pointer;transition:color .2s;}.nav-right span:hover{color:var(--text);}
-.nav-right .logout{color:var(--secondary);}
-#liveClock{font-variant-numeric:tabular-nums;font-weight:500;color:var(--text);}
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 20px; transition: 0.2s; }
+.stat:hover { border-color: #34d399; box-shadow: 0 2px 12px rgba(16,185,129,0.06); }
+.stat-label { font-size: 12px; font-weight: 500; color: #6b7280; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.stat-label::before { content: ""; width: 6px; height: 6px; border-radius: 2px; }
+.stat-label.green::before { background: #10b981; }
+.stat-label.blue::before { background: #3b82f6; }
+.stat-label.amber::before { background: #f59e0b; }
+.stat-label.gray::before { background: #9ca3af; }
+.stat-val { font-size: 26px; font-weight: 700; color: #111827; letter-spacing: -1px; }
 
-/* Layout */
-.main-wrap{display:flex;gap:24px;padding:24px 32px;width:100%;max-width:none;margin:0;min-height:calc(100vh - 56px);flex:1;}
-.left-area{flex:7;min-width:0;}
-.right-panel{flex:3;min-width:320px;max-width:420px;}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; transition: 0.2s; }
+.card:hover { border-color: #d1d5db; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; }
+.card-head h3 { font-size: 14px; font-weight: 600; color: #111827; }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: #059669; padding: 3px 8px; border-radius: 6px; background: #ecfdf5; border: 1px solid #d1fae5; }
+.card-body { padding: 20px; }
 
-/* Inner Tabs */
-.inner-tabs{display:flex;gap:2px;margin-bottom:20px;border-bottom:2px solid #ebe6de;}
-.inner-tab{padding:10px 28px;cursor:pointer;font-size:15px;color:var(--text2);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;background:none;border-top:none;border-left:none;border-right:none;}
-.inner-tab:hover{color:var(--text);}
-.inner-tab.active{color:var(--primary);font-weight:600;border-bottom-color:var(--primary);}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.field label { display: block; font-size: 12px; font-weight: 500; color: #6b7280; margin-bottom: 6px; }
+.field select, .field input { width: 100%; padding: 10px 12px; background: #f8faf9; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: inherit; color: #1f2937; outline: none; transition: 0.15s; }
+.field select:focus, .field input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+.field select:disabled, .field input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Tab Content */
-.tab-content{display:none;animation:fadeSlide .3s ease;}
-.tab-content.active{display:block;}
-@keyframes fadeSlide{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; width: 100%; }
+.btn-primary { background: #10b981; color: white; }
+.btn-primary:hover:not(:disabled) { background: #059669; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Summary Badges */
-.summary-row{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;}
-.summary-badge{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 24px;display:flex;align-items:center;gap:10px;flex:1;min-width:200px;}
-.summary-badge .icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
-.summary-badge .icon.fast{background:rgba(212,168,83,.15);color:var(--accent);}
-.summary-badge .icon.slow{background:rgba(45,106,79,.1);color:var(--primary);}
-.summary-badge .icon.queue{background:rgba(196,93,62,.1);color:var(--secondary);}
-.summary-badge .val{font-size:22px;font-weight:700;font-family:Georgia,serif;color:var(--text);}
-.summary-badge .lbl{font-size:13px;color:var(--text2);}
+.error-box { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #ef4444; font-size: 13px; font-weight: 500; }
 
-/* Filters */
-.filter-row{display:flex;gap:8px;margin-bottom:20px;}
-.filter-btn{padding:7px 20px;border-radius:20px;border:1.5px solid #ddd;background:var(--card);cursor:pointer;font-size:14px;color:var(--text2);transition:all .2s;}
-.filter-btn:hover{border-color:var(--primary);color:var(--primary);}
-.filter-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.result { margin-top: 16px; padding: 16px; border-radius: 10px; background: #ecfdf5; border: 1px solid #d1fae5; }
+.result-title { font-size: 12px; font-weight: 600; color: #059669; margin-bottom: 12px; }
+.result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.r-item { padding: 10px 12px; border-radius: 8px; background: white; border: 1px solid #d1fae5; }
+.r-item .rl { font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+.r-item .rv { font-size: 15px; font-weight: 700; color: #111827; margin-top: 2px; }
 
-/* Pile Grid */
-.pile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
-.pile-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;transition:transform .25s,box-shadow .25s;cursor:default;}
-.pile-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(120,80,40,.13);}
-.pile-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-.pile-code{font-family:Georgia,serif;font-weight:700;font-size:17px;}
-.type-badge{padding:3px 12px;border-radius:12px;font-size:12px;font-weight:600;}
-.type-badge.fast{background:rgba(212,168,83,.15);color:#b8922e;}
-.type-badge.slow{border:1.5px solid var(--primary);color:var(--primary);background:transparent;}
-.pile-power{font-size:13px;color:var(--text2);margin-bottom:10px;}
-.status-line{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.status-dot.charging{background:var(--primary);}
-.status-dot.waiting{background:var(--accent);}
-.status-dot.idle{background:#bbb;}
-.status-dot.fault{background:#d32f2f;}
-.status-text{font-size:14px;font-weight:500;}
-.status-text.fault{color:#d32f2f;}
-.progress-wrap{background:#eee;border-radius:6px;height:8px;margin:8px 0;overflow:hidden;}
-.progress-bar{height:100%;border-radius:6px;background:var(--primary);transition:width 1.2s ease;}
-.charge-info{font-size:13px;color:var(--text2);}
+.link-task { margin-top: 12px; text-align: center; }
+.link-task a { font-size: 13px; color: #059669; font-weight: 600; text-decoration: none; }
+.link-task a:hover { text-decoration: underline; }
 
-/* Submit Form Tab */
-.form-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:36px 40px;max-width:720px;margin:0 auto;}
-.form-card h3{font-size:22px;margin-bottom:8px;color:var(--text);}
-.form-card .sub{color:var(--text2);font-size:14px;margin-bottom:28px;}
-.mode-select{display:flex;gap:20px;margin-bottom:28px;}
-.mode-card{flex:1;border:2px solid #e8e3da;border-radius:var(--radius);padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;}
-.mode-card:hover{border-color:var(--accent);background:rgba(212,168,83,.03);}
-.mode-card.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(212,168,83,.2);background:rgba(212,168,83,.04);}
-.mode-icon{font-size:36px;margin-bottom:10px;}
-.mode-title{font-family:Georgia,serif;font-weight:700;font-size:18px;margin-bottom:6px;}
-.mode-desc{font-size:13px;color:var(--text2);margin-bottom:4px;}
-.mode-wait{font-size:12px;color:var(--accent);font-weight:500;}
+/* FLOW */
+.flow-item { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+.flow-item:last-child { border-bottom: none; }
+.flow-num { width: 24px; height: 24px; border-radius: 50%; background: #ecfdf5; border: 1px solid #d1fae5; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #059669; flex-shrink: 0; margin-top: 2px; }
+.flow-text { font-size: 13px; font-weight: 600; color: #111827; }
+.flow-sub { font-size: 12px; color: #9ca3af; margin-top: 2px; }
 
-.kwh-section{margin-bottom:28px;}
-.kwh-section label{display:block;font-weight:600;margin-bottom:10px;font-size:15px;}
-.kwh-presets{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
-.kwh-btn{width:60px;height:40px;border-radius:8px;border:1.5px solid #ddd;background:var(--card);cursor:pointer;font-size:15px;font-weight:600;color:var(--text2);transition:all .2s;}
-.kwh-btn:hover{border-color:var(--primary);color:var(--primary);}
-.kwh-btn.selected{background:var(--primary);color:#fff;border-color:var(--primary);}
-.kwh-custom{display:flex;align-items:center;gap:10px;}
-.kwh-custom input{width:120px;height:40px;border:1.5px solid #ddd;border-radius:8px;padding:0 14px;font-size:15px;outline:none;transition:border .2s;}
-.kwh-custom input:focus{border-color:var(--primary);}
-.kwh-custom span{color:var(--text2);font-size:14px;}
-
-.info-box{background:#f9f5ee;border-radius:8px;padding:14px 20px;margin-bottom:28px;display:flex;gap:24px;font-size:14px;color:var(--text2);}
-.info-box strong{color:var(--text);}
-
-.submit-btn{width:100%;padding:15px;border:none;border-radius:var(--radius);background:var(--primary);color:#fff;font-size:17px;font-weight:600;cursor:pointer;transition:background .2s;margin-bottom:12px;}
-.submit-btn:hover{background:#245a42;}
-.form-note{text-align:center;font-size:13px;color:var(--text2);}
-
-/* Right Panel */
-.right-panel .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
-.stat-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;text-align:center;}
-.stat-val{font-family:Georgia,serif;font-size:24px;font-weight:700;color:var(--primary);margin-bottom:4px;}
-.stat-val.gold{color:var(--accent);}
-.stat-val.rust{color:var(--secondary);}
-.stat-lbl{font-size:13px;color:var(--text2);}
-.divider{height:1px;background:#ebe6de;margin:20px 0;}
-.notif-title{font-family:Georgia,serif;font-size:16px;font-weight:700;margin-bottom:14px;}
-.notif-list{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px;}
-.notif-list::-webkit-scrollbar{width:5px;}.notif-list::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px;}
-.notif-item{background:var(--card);border-radius:8px;box-shadow:var(--shadow);padding:12px 16px;font-size:13px;line-height:1.6;animation:fadeIn .4s ease;}
-.notif-item .time{color:var(--text2);font-size:12px;margin-right:6px;}
-.notif-item .tag{font-weight:600;font-size:12px;}
-.notif-item .tag.call{color:var(--accent);}
-.notif-item .tag.done{color:var(--primary);}
-.notif-item .tag.warn{color:var(--secondary);}
-.notif-item .tag.pay{color:var(--primary);}
-.notif-item .tag.queue{color:var(--accent);}
-.notif-item .tag.new{color:var(--text2);}
-@keyframes fadeIn{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:translateX(0);}}
-
-/* Count-up animation */
-.count-up{transition:none;}
+/* PRICE */
+.price-grid { display: flex; flex-direction: column; }
+.price-row { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid #e5e7eb; }
+.price-row:last-child { border-bottom: none; }
+.price-dot { width: 8px; height: 8px; border-radius: 3px; margin-right: 14px; flex-shrink: 0; }
+.price-info { flex: 1; }
+.price-name { font-size: 13px; font-weight: 600; color: #1f2937; }
+.price-time { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.price-val { font-size: 16px; font-weight: 700; color: #059669; letter-spacing: -0.3px; }
 </style>

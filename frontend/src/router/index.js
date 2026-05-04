@@ -1,68 +1,43 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
-  {
-    path: '/',
-    redirect: '/login'
-  },
-  {
-    path: '/admin/overview',
-    name: 'AdminDashboard',
-    component: () => import('../views/admin/Overview.vue'),
-    meta: { title: '管理员控制台' }
-  },
-  {
-    path: '/admin/records',
-    name: 'AdminRecords',
-    component: () => import('../views/admin/Records.vue'),
-    meta: { title: '记录中心控制台' }
-  },
-  {
-    path: '/admin/config',
-    name: 'AdminConfig',
-    component: () => import('../views/admin/SystemConfig.vue'),
-    meta: { title: '系统配置' }
-  },
-  {
-    path: '/admin/statistics',
-    name: 'AdminStatistics',
-    component: () => import('../views/admin/Statistics.vue'),
-    meta: { title: '统计分析' }
-  },
-  {
-    path: '/admin/users',
-    name: 'AdminUsers',
-    component: () => import('../views/admin/UserManage.vue'),
-    meta: { title: '用户管理' }
-  },
-  // 直接访问 /admin（无具体子路径）统一引导到登录页，避免未认证直接访问管理首页
-  {
-    path: '/admin',
-    redirect: '/login'
-  },
-  
+  { path: '/', redirect: '/login' },
   {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
-    meta: { title: '登录 - 智能充电桩系统' }
+    meta: { title: '登录 - 智能充电桩系统', guest: true }
   },
-  // 用户侧
+
+  // 用户端
   {
     path: '/user',
     component: () => import('../views/user/Layout.vue'),
-    // 访问 /user 仅作为入口，统一跳转到登录页，具体子页面仍可直接访问（/user/workspace 等）
-    redirect: '/login',
+    redirect: '/user/workspace',
+    meta: { requiresAuth: true, role: 'USER' },
     children: [
-      { path: 'workspace', component: () => import('../views/user/Workspace.vue'), meta: { title: '工作台 - 车主' } },
-      { path: 'task', component: () => import('../views/user/Task.vue'), meta: { title: '当前任务 - 车主' } },
-      { path: 'account', component: () => import('../views/user/Account.vue'), meta: { title: '账户中心 - 车主' } }
+      { path: 'workspace', name: 'UserWorkspace', component: () => import('../views/user/Workspace.vue'), meta: { title: '工作台' } },
+      { path: 'task', name: 'UserTask', component: () => import('../views/user/Task.vue'), meta: { title: '当前请求' } },
+      { path: 'account', name: 'UserAccount', component: () => import('../views/user/Account.vue'), meta: { title: '详单与账户' } },
     ]
   },
+
+  // 管理端
   {
-    path: '/:pathMatch(.*)*',
-    redirect: '/login'
-  }
+    path: '/admin',
+    component: () => import('../views/admin/Layout.vue'),
+    redirect: '/admin/overview',
+    meta: { requiresAuth: true, role: 'ADMIN' },
+    children: [
+      { path: 'overview', name: 'AdminOverview', component: () => import('../views/admin/Overview.vue'), meta: { title: '管理总览' } },
+      { path: 'config', name: 'AdminConfig', component: () => import('../views/admin/SystemConfig.vue'), meta: { title: '系统配置' } },
+      { path: 'records', name: 'AdminRecords', component: () => import('../views/admin/Records.vue'), meta: { title: '设备控制' } },
+      { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/UserManage.vue'), meta: { title: '用户管理' } },
+      { path: 'statistics', name: 'AdminStatistics', component: () => import('../views/admin/Statistics.vue'), meta: { title: '报表统计' } },
+    ]
+  },
+
+  { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 
 const router = createRouter({
@@ -70,11 +45,31 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫：更改页面标题
 router.beforeEach((to, from, next) => {
-  if (to.meta.title) {
-    document.title = to.meta.title
+  // 页面标题
+  if (to.meta.title) document.title = to.meta.title
+
+  const token = localStorage.getItem('auth_token')
+  const role = localStorage.getItem('user_role')
+
+  // 需要登录但未登录 → 跳登录
+  if (to.matched.some(r => r.meta.requiresAuth) && !token) {
+    return next('/login')
   }
+
+  // 已登录访问登录页 → 跳对应首页
+  if (to.meta.guest && token) {
+    return next(role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
+  }
+
+  // 角色不匹配 → 跳对应首页
+  if (to.matched.some(r => r.meta.role) && token) {
+    const requiredRole = to.matched.find(r => r.meta.role)?.meta.role
+    if (requiredRole && requiredRole !== role) {
+      return next(role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
+    }
+  }
+
   next()
 })
 

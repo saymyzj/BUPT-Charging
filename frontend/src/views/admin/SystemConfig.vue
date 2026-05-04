@@ -1,193 +1,134 @@
 <template>
-  <div class="admin-wrapper">
-    <nav class="topnav">
-      <div class="brand">⚡ 智能充电桩调度计费系统 · 管理端</div>
-      <div class="tabs">
-        <router-link to="/admin/overview" class="nav-tab">运营总览</router-link>
-        <router-link to="/admin/records" class="nav-tab">记录中心</router-link>
-        <router-link to="/admin/config" class="nav-tab active">系统配置</router-link>
-        <router-link to="/admin/statistics" class="nav-tab">统计分析</router-link>
-        <router-link to="/admin/users" class="nav-tab">用户管理</router-link>
-      </div>
-      <div class="right">
-        <span class="alert-badge">🔔 告警<span class="dot">2</span></span>
-        <span>管理员: 张三</span>
-        <span>{{ clock }}</span>
-      </div>
-    </nav>
-
-    <div class="page-content">
-      <div class="header-section">
-        <h2>系统配置</h2>
-        <p class="subtitle">调整充电桩数量、参数及费用设置</p>
-      </div>
-
-      <div class="config-grid">
-        <!-- Pile config -->
-        <div class="config-card">
-          <div class="card-header">
-            <h3>充电桩硬件配置</h3>
-            <button class="action-btn" @click="notifyStaticAction('充电桩硬件配置')">保存修改</button>
-          </div>
-          <div class="card-body">
-            <div class="form-group">
-              <label>快充桩总数</label>
-              <input type="number" value="2" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>快充功率 (kW)</label>
-              <input type="number" value="30" class="form-input">
-            </div>
-            <hr class="divider">
-            <div class="form-group">
-              <label>慢充桩总数</label>
-              <input type="number" value="3" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>慢充功率 (kW)</label>
-              <input type="number" value="7" class="form-input">
-            </div>
-          </div>
-        </div>
-
-        <!-- Charging config -->
-        <div class="config-card">
-          <div class="card-header">
-            <h3>调度与队列参数</h3>
-            <button class="action-btn" @click="notifyStaticAction('调度与队列参数')">保存修改</button>
-          </div>
-          <div class="card-body">
-            <div class="form-group">
-              <label>等候区最大容量 (车辆)</label>
-              <input type="number" value="6" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>叫号无响应超时 (分钟)</label>
-              <input type="number" value="5" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>故障自动重试次数</label>
-              <input type="number" value="3" class="form-input">
-            </div>
-          </div>
-        </div>
-
-        <!-- Pricing config -->
-        <div class="config-card full-width">
-          <div class="card-header">
-            <h3>计费策略配置</h3>
-            <button class="action-btn" @click="notifyStaticAction('计费策略配置')">保存计费策略</button>
-          </div>
-          <div class="card-body price-grid">
-            <div class="price-col">
-              <h4>高峰期 (10:00-15:00, 18:00-21:00)</h4>
-              <div class="form-group">
-                <label>电费 (元/度)</label>
-                <input type="number" step="0.1" value="1.0" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>服务费 (元/度)</label>
-                <input type="number" step="0.1" value="0.8" class="form-input">
-              </div>
-            </div>
-            <div class="price-col">
-              <h4>平时段 (07:00-10:00, 15:00-18:00, 21:00-23:00)</h4>
-              <div class="form-group">
-                <label>电费 (元/度)</label>
-                <input type="number" step="0.1" value="0.7" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>服务费 (元/度)</label>
-                <input type="number" step="0.1" value="0.8" class="form-input">
-              </div>
-            </div>
-            <div class="price-col">
-              <h4>低谷期 (23:00-07:00)</h4>
-              <div class="form-group">
-                <label>电费 (元/度)</label>
-                <input type="number" step="0.1" value="0.4" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>服务费 (元/度)</label>
-                <input type="number" step="0.1" value="0.8" class="form-input">
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <div class="page">
+    <div class="page-head">
+      <h1>系统配置</h1>
+      <p>查看系统参数，切换调度模式与故障策略</p>
     </div>
+
+    <div v-if="loading" class="loading-text">加载中...</div>
+
+    <template v-if="config">
+      <!-- Readonly Config -->
+      <div class="card">
+        <div class="card-head"><h3>系统参数（只读）</h3><button class="btn-refresh" @click="loadConfig">刷新</button></div>
+        <div class="card-body">
+          <div class="param-grid">
+            <div class="param"><span class="p-label">快充桩数量</span><span class="p-val">{{ config.fast_station_count }}</span></div>
+            <div class="param"><span class="p-label">慢充桩数量</span><span class="p-val">{{ config.slow_station_count }}</span></div>
+            <div class="param"><span class="p-label">等候区容量</span><span class="p-val">{{ config.waiting_area_capacity }}</span></div>
+            <div class="param"><span class="p-label">每桩队列长度</span><span class="p-val">{{ config.charging_queue_len }}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dispatch Mode -->
+      <div class="card">
+        <div class="card-head"><h3>调度模式</h3><span class="card-tag">PUT /api/admin/system/dispatch-mode</span></div>
+        <div class="card-body">
+          <div class="mode-group">
+            <button v-for="m in dispatchModes" :key="m.key" class="mode-btn" :class="{ active: config.dispatch_mode === m.key }" @click="changeDispatch(m.key)">
+              <div class="mode-title">{{ m.text }}</div>
+              <div class="mode-desc">{{ m.desc }}</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fault Dispatch Mode -->
+      <div class="card">
+        <div class="card-head"><h3>故障恢复策略</h3><span class="card-tag">PUT /api/admin/system/fault-dispatch-mode</span></div>
+        <div class="card-body">
+          <div class="mode-group">
+            <button v-for="m in faultModes" :key="m.key" class="mode-btn" :class="{ active: config.fault_dispatch_mode === m.key }" @click="changeFault(m.key)">
+              <div class="mode-title">{{ m.text }}</div>
+              <div class="mode-desc">{{ m.desc }}</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted } from 'vue'
+import { getSystemConfig, setDispatchMode, setFaultDispatchMode } from '@/api/charging'
+import { DISPATCH_MODE, DISPATCH_MODE_TEXT, FAULT_DISPATCH_MODE, FAULT_DISPATCH_MODE_TEXT } from '@/constants/enums'
 
-const clock = ref('')
-let clockInterval = null
+const config = ref(null)
+const loading = ref(false)
 
-onMounted(() => {
-  updateClock()
-  clockInterval = setInterval(updateClock, 1000)
-})
+const dispatchModes = [
+  { key: DISPATCH_MODE.NORMAL, text: DISPATCH_MODE_TEXT.NORMAL, desc: '按最短完成时间策略分配' },
+  { key: DISPATCH_MODE.EXT_SINGLE_BATCH, text: DISPATCH_MODE_TEXT.EXT_SINGLE_BATCH, desc: '对当前等候区做一次联合优化' },
+  { key: DISPATCH_MODE.EXT_FULL_BATCH, text: DISPATCH_MODE_TEXT.EXT_FULL_BATCH, desc: '对所有待分配请求做批量调度' },
+]
 
-onUnmounted(() => {
-  if (clockInterval) clearInterval(clockInterval)
-})
+const faultModes = [
+  { key: FAULT_DISPATCH_MODE.PRIORITY, text: FAULT_DISPATCH_MODE_TEXT.PRIORITY, desc: '故障桩队列车辆优先重排到其他桩' },
+  { key: FAULT_DISPATCH_MODE.TIME_ORDER, text: FAULT_DISPATCH_MODE_TEXT.TIME_ORDER, desc: '故障桩队列车辆按提交时间重排' },
+]
 
-function updateClock() {
-  clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+async function loadConfig() {
+  loading.value = true
+  try {
+    const res = await getSystemConfig()
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) { loading.value = false; return }
+    config.value = data
+  } catch (_) { /* silent */ }
+  loading.value = false
 }
 
-function notifyStaticAction(section) {
-  ElMessage.info(`${section} 目前是静态演示区，真实保存接口待后续接入`)
+async function changeDispatch(mode) {
+  if (config.value.dispatch_mode === mode) return
+  try {
+    const res = await setDispatchMode({ dispatch_mode: mode })
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
+    await loadConfig()
+  } catch (e) { alert(e?.response?.data?.message || '切换失败') }
 }
+
+async function changeFault(mode) {
+  if (config.value.fault_dispatch_mode === mode) return
+  try {
+    const res = await setFaultDispatchMode({ fault_dispatch_mode: mode })
+    const data = res.data || res
+    if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
+    await loadConfig()
+  } catch (e) { alert(e?.response?.data?.message || '切换失败') }
+}
+
+onMounted(loadConfig)
 </script>
 
 <style scoped>
-.admin-wrapper {
-  --bg: #faf8f5; --card: #ffffff; --primary: #2d6a4f; --secondary: #c45d3e;
-  --accent: #d4a853; --text: #2c2c2c; --text2: #7a7a7a; --shadow: 0 4px 12px rgba(120,80,40,0.08);
-  --nav-bg: #f5f0e8; --radius: 10px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column;
-}
-h2, h3, h4 { font-family: Georgia, serif; }
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
+.page-head { margin-bottom: 24px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #111827; }
+.page-head p { font-size: 14px; color: #6b7280; margin-top: 4px; }
+.loading-text { color: #9ca3af; font-size: 14px; padding: 40px 0; text-align: center; }
 
-/* NAV */
-.topnav { background: var(--nav-bg); border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 56px; position: sticky; top: 0; z-index: 100; }
-.topnav .brand { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
-.topnav .tabs { display: flex; gap: 4px; position: absolute; left: 50%; transform: translateX(-50%); }
-.topnav .tabs .nav-tab { padding: 8px 18px; border-radius: 6px; text-decoration: none; color: var(--text2); font-size: 14px; transition: all .2s; cursor: pointer; }
-.topnav .tabs .nav-tab:hover { background: rgba(45,106,79,.08); color: var(--primary); }
-.topnav .tabs .nav-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
-.topnav .right { display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--text2); white-space: nowrap; }
-.topnav .alert-badge { position: relative; cursor: pointer; }
-.topnav .alert-badge .dot { background: var(--secondary); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: 2px; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; }
+.card-head h3 { font-size: 14px; font-weight: 600; color: #111827; }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: #059669; padding: 3px 8px; border-radius: 6px; background: #ecfdf5; border: 1px solid #d1fae5; }
+.card-body { padding: 20px; }
 
-/* CONTENT */
-.page-content { padding: 32px 40px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
-.header-section { margin-bottom: 24px; }
-.header-section h2 { font-size: 24px; color: var(--primary); margin-bottom: 6px; }
-.subtitle { font-size: 14px; color: var(--text2); }
+.btn-refresh { padding: 5px 12px; border-radius: 6px; border: 1px solid #e5e7eb; background: white; font-size: 11px; font-weight: 600; color: #6b7280; cursor: pointer; transition: 0.12s; }
+.btn-refresh:hover { border-color: #10b981; color: #059669; }
 
-.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.config-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
-.config-card.full-width { grid-column: 1 / -1; }
-.card-header { padding: 16px 24px; background: var(--nav-bg); border-bottom: 1px solid #e8e0d8; display: flex; justify-content: space-between; align-items: center; }
-.card-header h3 { font-size: 16px; color: var(--primary); margin: 0; }
-.card-body { padding: 24px; flex: 1; }
+.param-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.param { padding: 16px; border-radius: 10px; background: #f8faf9; border: 1px solid #e5e7eb; }
+.p-label { display: block; font-size: 11px; color: #9ca3af; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+.p-val { display: block; font-size: 22px; font-weight: 700; color: #111827; margin-top: 6px; }
 
-.action-btn { padding: 6px 16px; border: none; border-radius: 6px; background: var(--primary); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-.action-btn:hover { opacity: 0.9; }
-
-.form-group { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-.form-group label { font-size: 13px; color: var(--text); font-weight: 500; }
-.form-input { padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; transition: border-color 0.2s; outline: none; }
-.form-input:focus { border-color: var(--primary); }
-
-.divider { height: 1px; background: #e8e0d8; border: none; margin: 20px 0; }
-
-.price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
-.price-col h4 { font-size: 14px; color: var(--secondary); margin-bottom: 16px; white-space: pre-wrap; line-height: 1.5; }
+.mode-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.mode-btn { flex: 1; min-width: 200px; padding: 18px; border-radius: 10px; border: 2px solid #e5e7eb; background: white; cursor: pointer; text-align: left; transition: 0.15s; }
+.mode-btn:hover { border-color: #10b981; }
+.mode-btn.active { border-color: #10b981; background: #ecfdf5; }
+.mode-title { font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+.mode-desc { font-size: 12px; color: #6b7280; line-height: 1.5; }
+.mode-btn.active .mode-title { color: #059669; }
 </style>

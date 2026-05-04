@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 排队状态</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #ffffff; --bg-alt: #f8fafb; --primary: #16a34a; --primary-dark: #15803d;
+  --primary-light: #22c55e; --primary-pale: #dcfce7; --dark: #0f172a; --dark2: #1e293b;
+  --text: #334155; --text2: #64748b; --text-light: #94a3b8; --border: #e2e8f0;
+  --error: #dc2626; --blue: #3b82f6; --amber: #f59e0b; --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); color: var(--text); background: var(--bg-alt); line-height: 1.6; overflow-x: hidden; }
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--dark); }
+.nav-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-right a { color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; transition: .2s; }
+.nav-right a.active, .nav-right a:hover { color: var(--primary-dark); background: var(--primary-pale); }
+.user-chip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: var(--primary-pale); color: var(--primary-dark); font-size: 13px; font-weight: 700; }
+.shell { width: 100%; padding: 92px 24px 32px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px; background: var(--primary-pale); color: var(--primary-dark); font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+h1 { font-size: 32px; color: var(--dark); line-height: 1.2; margin-bottom: 8px; }
+.page-head p { color: var(--text2); font-size: 15px; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { border: none; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 700; cursor: pointer; transition: 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 14px rgba(22,163,74,0.24); }
+.btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.btn-ghost { background: #fff; color: var(--dark); border: 1px solid var(--border); }
+.btn-danger { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
+.grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; align-items: start; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 28px rgba(15,23,42,0.04); }
+.card-pad { padding: 22px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.section-title h2 { font-size: 18px; color: var(--dark); }
+.section-title span { color: var(--text-light); font-size: 13px; }
+.status-hero { display: grid; grid-template-columns: 1fr 260px; gap: 18px; margin-bottom: 18px; }
+.status-main { padding: 24px; border-left: 4px solid var(--primary); }
+.status-main h2 { font-size: 22px; color: var(--dark); margin-bottom: 8px; }
+.status-main p { color: var(--text2); font-size: 14px; max-width: 720px; }
+.status-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+.meta { padding: 13px; border-radius: 11px; background: var(--bg-alt); }
+.meta span { display: block; color: var(--text2); font-size: 12px; margin-bottom: 4px; }
+.meta strong { color: var(--dark); font-size: 18px; }
+.rank-card { padding: 22px; display: grid; align-content: center; text-align: center; }
+.rank-card span { color: var(--text2); font-size: 13px; }
+.rank-card strong { display: block; color: var(--primary-dark); font-size: 54px; line-height: 1; margin: 8px 0; }
+.queue-table { display: grid; gap: 10px; }
+.queue-item { display: grid; grid-template-columns: 64px 1fr 92px 82px; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 11px; }
+.queue-item.me { border-color: var(--primary); background: #f0fdf4; }
+.queue-item strong { color: var(--dark); font-size: 14px; }
+.queue-item span { color: var(--text2); font-size: 12px; }
+.queue-tag { justify-self: end; padding: 5px 9px; border-radius: 999px; color: var(--primary-dark); background: var(--primary-pale); font-size: 12px; font-weight: 700; }
+.bar { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--primary-light)); }
+.pile { display: grid; gap: 12px; }
+.pile-row { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; padding: 13px; border-radius: 11px; background: var(--bg-alt); }
+.pile-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--primary-pale); color: var(--primary-dark); font-weight: 800; }
+.pile-row strong { display: block; color: var(--dark); font-size: 14px; }
+.pile-row span { color: var(--text2); font-size: 12px; }
+.pile-row b { color: var(--dark); font-size: 14px; }
+.station-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.station { padding: 12px 8px; border: 1px solid var(--border); border-radius: 11px; text-align: center; background: #fff; }
+.station.available { border-color: var(--primary); background: #f0fdf4; }
+.station.busy { background: var(--bg-alt); }
+.station.fault { border-color: #fecdd3; background: #fff1f2; }
+.station strong { display: block; color: var(--dark); font-size: 13px; }
+.station span { display: block; color: var(--text2); font-size: 11px; margin-top: 3px; }
+.timeline { display: grid; gap: 12px; }
+.step { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: start; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: none; padding-bottom: 0; }
+.dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--primary); font-size: 13px; font-weight: 800; }
+.pending .dot { color: var(--text2); background: var(--bg-alt); border: 1px solid var(--border); }
+.step strong { display: block; color: var(--dark); font-size: 14px; }
+.step span, .step time { color: var(--text2); font-size: 12px; }
+.note { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-size: 13px; font-weight: 600; }
+@media (max-width: 980px) {
+  .nav { padding: 12px 20px; }
+  .nav-right a { display: none; }
+  .shell { padding: 88px 20px 32px; }
+  .grid, .status-hero { grid-template-columns: 1fr; }
+  .status-meta { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  .status-meta, .station-grid { grid-template-columns: 1fr 1fr; }
+  .queue-item { grid-template-columns: 1fr; }
+  .queue-tag { justify-self: start; }
+  h1 { font-size: 26px; }
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-brand"><div class="nav-logo">&#9889;</div>充电调度系统</div>
+  <div class="nav-right">
+    <a href="user-dashboard.html">首页</a>
+    <a href="user-dashboard.html#request">提交请求</a>
+    <a class="active" href="queue-status.html">排队状态</a>
+    <a href="order-detail.html">我的订单</a>
+    <a href="user-dashboard.html#billing">计费预览</a>
+    <div class="user-chip">用户：car_user</div>
+  </div>
+</nav>
+
+<main class="shell">
+  <header class="page-head">
+    <div>
+      <div class="eyebrow">排队状态详情</div>
+      <h1>当前快充队列正在等待桩位释放</h1>
+      <p>系统根据队列顺序、桩位功率和订单状态实时计算预计开始时间。</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="location.href='user-dashboard.html'">返回首页</button>
+      <button class="btn btn-danger" onclick="alert('DELETE /api/charge/request/{id}\\n取消当前排队请求')">取消排队</button>
+    </div>
+  </header>
+
+  <section class="status-hero">
+    <div class="card status-main">
+      <h2>订单 #C20260503018 · 排队中</h2>
+      <p>您的车辆已进入快充队列，当前前方还有 3 辆车。若切换到慢充队列，预计等待时间将增加至 18 分钟。</p>
+      <div class="status-meta">
+        <div class="meta"><span>队列类型</span><strong>快充</strong></div>
+        <div class="meta"><span>预计开始</span><strong>19:46</strong></div>
+        <div class="meta"><span>预计充电</span><strong>42 分钟</strong></div>
+        <div class="meta"><span>目标电量</span><strong>90%</strong></div>
+      </div>
+    </div>
+    <div class="card rank-card">
+      <span>当前排队位置</span>
+      <strong>3</strong>
+      <span>预计等待 8 分钟</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card card-pad">
+      <div class="section-title"><h2>快充队列</h2><span>实时顺序</span></div>
+      <div class="queue-table">
+        <div class="queue-item"><strong>#1</strong><div><div class="bar"><i style="width:88%"></i></div><span>车辆 A102 · 即将进入充电</span></div><span>约 2 分钟</span><div class="queue-tag">等待</div></div>
+        <div class="queue-item"><strong>#2</strong><div><div class="bar"><i style="width:74%"></i></div><span>车辆 B311 · 前方 1 辆</span></div><span>约 5 分钟</span><div class="queue-tag">等待</div></div>
+        <div class="queue-item me"><strong>#3</strong><div><div class="bar"><i style="width:62%"></i></div><span>我的车辆 · 订单 #C20260503018</span></div><span>约 8 分钟</span><div class="queue-tag">当前</div></div>
+        <div class="queue-item"><strong>#4</strong><div><div class="bar"><i style="width:38%"></i></div><span>车辆 C208 · 后方 1 辆</span></div><span>约 14 分钟</span><div class="queue-tag">等待</div></div>
+      </div>
+      <div class="note">系统将自动监听空闲桩位，轮到您时无需重复提交请求。</div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>桩位状态</h2><span>快充区 5 个桩位</span></div>
+      <div class="station-grid">
+        <div class="station busy"><strong>F01</strong><span>充电中</span></div>
+        <div class="station busy"><strong>F02</strong><span>充电中</span></div>
+        <div class="station busy"><strong>F03</strong><span>结算中</span></div>
+        <div class="station available"><strong>F04</strong><span>即将空闲</span></div>
+        <div class="station fault"><strong>F05</strong><span>维护中</span></div>
+      </div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>调度时间线</h2><span>订单流转</span></div>
+      <div class="timeline">
+        <div class="step"><div class="dot">1</div><div><strong>请求已提交</strong><span>记录电池容量 60 kWh，目标电量 90%</span></div><time>19:32</time></div>
+        <div class="step"><div class="dot">2</div><div><strong>进入快充队列</strong><span>系统分配快充队列，位置第 3</span></div><time>19:33</time></div>
+        <div class="step pending"><div class="dot">3</div><div><strong>等待桩位释放</strong><span>预计 F04 桩位完成结算后释放</span></div><time>当前</time></div>
+        <div class="step pending"><div class="dot">4</div><div><strong>开始充电</strong><span>充电开始后进入订单计费阶段</span></div><time>预计 19:46</time></div>
+      </div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>可选操作</h2><span>状态约束</span></div>
+      <div class="pile">
+        <div class="pile-row"><div class="pile-icon">↔</div><div><strong>切换到慢充队列</strong><span>等待时间更长，但服务费更低。</span></div><b>18 分钟</b></div>
+        <div class="pile-row"><div class="pile-icon">×</div><div><strong>取消当前请求</strong><span>取消后才可以重新提交新的充电请求。</span></div><b>可操作</b></div>
+        <div class="pile-row"><div class="pile-icon">¥</div><div><strong>查看费用预估</strong><span>预估已包含可能跨越峰时时段的溢价。</span></div><b>¥42</b></div>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

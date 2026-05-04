@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 V4.1 - 商业版</title>
+<style>
+/* ================= 基础重置 ================= */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* 科技感配色方案 */
+  --bg: #f8fafc;              /* 冷灰白背景 */
+  --primary: #00e676;         /* 电光绿（核心高亮） */
+  --primary-light: #69f0ae;
+  --primary-dark: #00b248;
+  --secondary: #0f172a;       /* 深岩蓝（极具科技感的深色） */
+  --secondary-light: #1e293b;
+  --accent: #3b82f6;          /* 亮蓝辅助色 */
+  --text: #334155;            /* 主文本色 */
+  --text2: #64748b;           /* 辅助文本色 */
+  --white: #ffffff;
+  --error: #ef4444;
+  --radius: 16px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); color: var(--text); background: var(--bg); overflow-x: hidden; }
+h1, h2, h3 { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+
+/* ================= 导航栏 ================= */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 60px;
+  background: rgba(248, 250, 252, 0.85);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+  transition: box-shadow 0.3s, padding 0.3s;
+}
+.nav.scrolled { 
+  box-shadow: 0 4px 30px rgba(15, 23, 42, 0.05); 
+  padding: 12px 60px; 
+}
+.nav-brand {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 19px; font-weight: 700;
+  color: var(--secondary); letter-spacing: 0.5px;
+}
+.nav-brand-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--secondary), var(--secondary-light));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: var(--primary);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+}
+.nav-links { display: flex; align-items: center; gap: 36px; }
+.nav-links a {
+  color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 600;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--secondary); }
+.nav-login {
+  padding: 10px 28px; border-radius: 10px; border: none;
+  background: var(--secondary); color: var(--white);
+  font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.nav-login:hover { background: var(--secondary-light); transform: translateY(-1px); box-shadow: 0 6px 15px rgba(15, 23, 42, 0.15); }
+
+/* ================= 首屏 (Hero) ================= */
+.hero {
+  min-height: 100vh; padding: 140px 60px 80px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 60px; position: relative;
+}
+/* 氛围光效 */
+.hero::before {
+  content: ''; position: absolute; width: 600px; height: 600px;
+  top: -150px; right: -100px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 230, 118, 0.08) 0%, transparent 70%);
+  filter: blur(40px); z-index: 0; pointer-events: none;
+}
+.hero::after {
+  content: ''; position: absolute; width: 500px; height: 500px;
+  bottom: 0; left: -100px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+  filter: blur(40px); z-index: 0; pointer-events: none;
+}
+.hero-content { max-width: 580px; position: relative; z-index: 1; }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px; border-radius: 20px;
+  background: rgba(15, 23, 42, 0.06); color: var(--secondary);
+  font-size: 13px; font-weight: 700; margin-bottom: 24px; letter-spacing: 0.5px;
+}
+.hero-tag::before { content: ''; width: 8px; height: 8px; background: var(--primary); border-radius: 50%; box-shadow: 0 0 8px var(--primary); }
+.hero-content h1 {
+  font-size: 52px; line-height: 1.15; margin-bottom: 24px;
+  color: var(--secondary); font-weight: 800; letter-spacing: -1px;
+}
+.hero-content h1 span { 
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--primary-dark) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+}
+.hero-desc {
+  font-size: 18px; line-height: 1.7; color: var(--text2); margin-bottom: 40px;
+}
+.hero-actions { display: flex; gap: 16px; align-items: center; }
+.btn-cta {
+  padding: 16px 36px; border-radius: 12px; border: none;
+  background: var(--primary); color: var(--secondary); 
+  font: inherit; font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  box-shadow: 0 10px 25px rgba(0, 230, 118, 0.3);
+}
+.btn-cta:hover { background: var(--primary-light); transform: translateY(-2px); box-shadow: 0 15px 35px rgba(0, 230, 118, 0.4); }
+.btn-ghost {
+  padding: 15px 36px; border-radius: 12px;
+  border: 2px solid rgba(15, 23, 42, 0.1); background: transparent;
+  color: var(--secondary); font: inherit; font-size: 16px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-ghost:hover { border-color: var(--secondary); background: rgba(15, 23, 42, 0.03); }
+
+/* ==== 首屏 3D 仪表盘视觉 ==== */
+.hero-visual {
+  position: relative; z-index: 1; width: 520px;
+  perspective: 1200px; 
+}
+.mockup-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 20px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,1);
+}
+
+/* 主数据大屏卡片 */
+.main-board {
+  padding: 24px;
+  transform: rotateY(-8deg) rotateX(4deg);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hero-visual:hover .main-board { transform: rotateY(0deg) rotateX(0deg); }
+
+.board-header { display: flex; align-items: center; margin-bottom: 20px; }
+.dots span { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+.dots span:nth-child(1) { background: #ef4444; }
+.dots span:nth-child(2) { background: #f59e0b; }
+.dots span:nth-child(3) { background: #10b981; }
+.board-title { margin-left: 12px; font-size: 14px; font-weight: 700; color: var(--secondary); }
+
+/* CSS 波形图 */
+.chart-area {
+  height: 140px; background: #f1f5f9; border-radius: 12px; position: relative; overflow: hidden; margin-bottom: 20px;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+}
+.chart-line {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  border-bottom: 2px solid var(--primary);
+  clip-path: polygon(0 40%, 20% 60%, 40% 30%, 60% 70%, 80% 20%, 100% 50%, 100% 0, 0 0);
+  background: transparent; z-index: 2;
+}
+.chart-fill {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 100%;
+  background: linear-gradient(180deg, rgba(0, 230, 118, 0.2) 0%, transparent 100%);
+  clip-path: polygon(0 40%, 20% 60%, 40% 30%, 60% 70%, 80% 20%, 100% 50%, 100% 100%, 0 100%);
+}
+
+.kpi-row { display: flex; gap: 16px; }
+.kpi { flex: 1; background: var(--white); padding: 16px; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+.kpi span { font-size: 13px; color: var(--text2); font-weight: 500; }
+.kpi strong { font-size: 24px; color: var(--secondary); margin-top: 6px; font-weight: 800; }
+
+/* ======== 悬浮车况卡片 (重点修改：加入避让逻辑) ======== */
+.float-card {
+  position: absolute; bottom: -40px; right: -30px;
+  padding: 20px; width: 320px;
+  transform: translateZ(60px); 
+  background: rgba(15, 23, 42, 0.95); /* 深色面板 */
+  color: white; border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.3);
+  /* 加入平滑的过渡动画，用于处理避让效果 */
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 核心优化：当鼠标悬停在大视觉区时，小卡片自动变得半透明并往下躲开 */
+.hero-visual:hover .float-card {
+  opacity: 0.15; /* 变得几乎透明，不再遮挡数据 */
+  transform: translateZ(60px) translateY(30px); /* 往底部移动躲开视线 */
+  pointer-events: none; /* 鼠标可以直接穿透它去点击背后的主卡片 */
+}
+
+.car-status { display: flex; align-items: center; gap: 16px; }
+.status-icon { font-size: 28px; background: rgba(0, 230, 118, 0.15); width: 48px; height: 48px; display: flex; justify-content: center; align-items: center; border-radius: 12px; color: var(--primary); }
+.status-info { flex: 1; }
+.plate { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.soc-bar { height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; margin-bottom: 8px; overflow: hidden;}
+.soc-fill { height: 100%; background: var(--primary); border-radius: 3px; width: 68%; position: relative; }
+.soc-fill::after { content: ''; position: absolute; top:0; right:0; bottom:0; left:0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); animation: shimmer 2s infinite; }
+.soc-text { font-size: 12px; color: #94a3b8; }
+
+@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+/* ================= 功能区 (Features) ================= */
+.features { padding: 120px 60px; background: var(--white); }
+.section-header { text-align: center; margin-bottom: 80px; }
+.section-header h2 { font-size: 36px; color: var(--secondary); margin-bottom: 16px; font-weight: 800; }
+.section-header p { font-size: 18px; color: var(--text2); }
+
+/* 顶部三栏小卡片 */
+.feat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 30px; max-width: 1200px; margin: 0 auto;
+}
+.feat-card {
+  padding: 40px 32px; border-radius: 20px;
+  background: var(--bg); border: 1px solid rgba(15, 23, 42, 0.04);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.feat-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06); }
+.feat-icon {
+  width: 56px; height: 56px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; margin-bottom: 24px;
+}
+.feat-icon.green { background: rgba(0, 230, 118, 0.12); color: var(--primary-dark); }
+.feat-icon.blue { background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+.feat-icon.dark { background: rgba(15, 23, 42, 0.06); color: var(--secondary); }
+.feat-card h3 { font-size: 20px; margin-bottom: 12px; color: var(--secondary); font-weight: 700; }
+.feat-card p { font-size: 15px; color: var(--text2); line-height: 1.7; }
+
+/* Z字型交替布局 */
+.feature-showcase { max-width: 1200px; margin: 120px auto 0; }
+.showcase-row { display: flex; align-items: center; gap: 80px; margin-bottom: 100px; }
+.showcase-row.reverse { flex-direction: row-reverse; }
+.sc-text { flex: 1; }
+.sc-text h3 { font-size: 32px; color: var(--secondary); margin-bottom: 20px; font-weight: 800; }
+.sc-text p { font-size: 16px; color: var(--text2); line-height: 1.8; margin-bottom: 24px; }
+.sc-visual {
+  flex: 1.2; height: 380px; border-radius: 24px;
+  background: var(--bg); display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.05); box-shadow: inset 0 0 40px rgba(15, 23, 42, 0.02);
+  position: relative; overflow: hidden;
+}
+.sc-visual::before { content: ''; position: absolute; width: 100%; height: 100%; background: radial-gradient(circle at center, rgba(0,230,118,0.05) 0%, transparent 70%); }
+.placeholder-ui {
+  padding: 20px 40px; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+  font-weight: 600; color: var(--text2); border: 1px solid #e2e8f0; z-index: 1;
+}
+
+/* ================= 数据统计 (Stats) ================= */
+.stats { padding: 100px 60px; display: flex; justify-content: center; gap: 100px; background: var(--secondary); color: white; }
+.stat-item { text-align: center; }
+.stat-item .num { font-size: 48px; font-weight: 800; color: var(--primary); margin-bottom: 8px; }
+.stat-item .label { font-size: 15px; color: #94a3b8; font-weight: 500; }
+
+/* ================= 页脚 (Footer) ================= */
+.page-footer { padding: 40px 60px; text-align: center; font-size: 14px; color: var(--text2); background: var(--white); border-top: 1px solid #e2e8f0; }
+
+/* ================= 模态框 (Modal) & 表单 ================= */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+.modal-card {
+  width: 440px; background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(32px); border: 1px solid rgba(255,255,255,1);
+  border-radius: 24px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+  padding: 40px;
+  transform: scale(0.95); 
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+}
+.modal-overlay.active .modal-card { transform: scale(1); }
+
+.modal-close {
+  position: absolute; top: 20px; right: 20px;
+  width: 36px; height: 36px; border-radius: 10px; background: #f1f5f9;
+  border: none; font-size: 20px; color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+}
+.modal-close:hover { background: #e2e8f0; color: var(--secondary); }
+
+.modal-header { text-align: center; margin-bottom: 28px; }
+.modal-header h2 { font-size: 24px; color: var(--secondary); font-weight: 800; margin-bottom: 6px; }
+.modal-header p { font-size: 14px; color: var(--text2); }
+
+.tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 28px;
+  border-radius: 12px; background: #f1f5f9; position: relative;
+}
+.tab-btn {
+  flex: 1; z-index: 1; padding: 12px 0; border: none; background: none;
+  font: inherit; font-weight: 600; font-size: 14px;
+  color: var(--text2); cursor: pointer; transition: color 0.3s;
+}
+.tab-btn.active { color: var(--secondary); }
+.tab-ind {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+  border-radius: 10px; background: var(--white);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tab-ind.reg { left: 50%; }
+
+.form-wrap { position: relative; min-height: 280px; }
+.auth-form {
+  position: absolute; top: 0; left: 0; width: 100%;
+  opacity: 0; pointer-events: none; transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.auth-form.active { opacity: 1; pointer-events: auto; position: relative; transform: translateY(0); }
+
+.fg { margin-bottom: 20px; }
+.fg label { display: block; font-size: 13px; color: var(--secondary); margin-bottom: 8px; font-weight: 600; }
+.fg input {
+  width: 100%; padding: 14px 16px; border: 1px solid #cbd5e1;
+  border-radius: 12px; background: var(--white);
+  font: inherit; font-size: 14px; color: var(--secondary);
+  outline: none; transition: all 0.2s;
+}
+.fg input:focus { border-color: var(--primary-dark); box-shadow: 0 0 0 4px rgba(0, 230, 118, 0.15); }
+.fg input.err { border-color: var(--error); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
+
+/* 电池容量专属输入框组 */
+.input-group { position: relative; display: flex; align-items: center; }
+.input-group input { padding-right: 50px; }
+.input-suffix { position: absolute; right: 16px; font-size: 14px; color: var(--text2); pointer-events: none; }
+
+.err-msg { display: none; font-size: 12px; color: var(--error); margin-top: 6px; font-weight: 500;}
+.fg input.err ~ .err-msg { display: block; }
+.hint { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+.btn-submit {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; margin-top: 8px;
+}
+.btn-submit.login { background: var(--secondary); color: white; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2); }
+.btn-submit.login:hover { background: var(--secondary-light); transform: translateY(-1px); }
+.btn-submit.register { background: var(--primary); color: var(--secondary); box-shadow: 0 8px 20px rgba(0, 230, 118, 0.25); }
+.btn-submit.register:hover { background: var(--primary-light); transform: translateY(-1px); }
+
+.switch-text { text-align: center; margin-top: 20px; font-size: 14px; color: var(--text2); }
+.switch-text a { color: var(--secondary); font-weight: 700; text-decoration: none; cursor: pointer; transition: color 0.2s;}
+.switch-text a:hover { color: var(--primary-dark); }
+
+/* ================= 响应式适配 (Mobile & Tablet) ================= */
+@media (max-width: 1024px) {
+  .hero { flex-direction: column; text-align: center; padding: 140px 40px 60px; }
+  .hero-actions { justify-content: center; }
+  .hero-visual { width: 100%; max-width: 520px; margin-top: 40px; }
+  .float-card { right: 0; bottom: -20px; }
+  .stats { gap: 40px; flex-wrap: wrap; }
+}
+@media (max-width: 768px) {
+  .nav { padding: 16px 20px; }
+  .nav-links a:not(.nav-login) { display: none; } 
+  .feat-grid { grid-template-columns: 1fr; }
+  .showcase-row, .showcase-row.reverse { flex-direction: column; gap: 40px; text-align: center; }
+  .sc-visual { width: 100%; height: 260px; }
+  .features { padding: 80px 20px; }
+  .hero { padding: 120px 20px 60px; }
+  .hero-content h1 { font-size: 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 导航 -->
+<nav class="nav" id="nav">
+  <div class="nav-brand">
+    <div class="nav-brand-icon">⚡</div>
+    调度计费系统
+  </div>
+  <div class="nav-links">
+    <a href="#features">功能特点</a>
+    <a href="#stats">实时数据</a>
+    <button class="nav-login" onclick="openModal()">登录 / 注册</button>
+  </div>
+</nav>
+
+<!-- 首屏 -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-tag">Enterprise SaaS V4.1</div>
+    <h1>全场景新能源汽车<br><span>智能调度与计费引擎</span></h1>
+    <p class="hero-desc">
+      抛弃传统的粗放管理。基于最优化算法自动分配站位，实现毫秒级故障转移与精确至分的高阶峰谷计费策略。
+    </p>
+    <div class="hero-actions">
+      <button class="btn-cta" onclick="openModal()">进入控制台</button>
+      <button class="btn-ghost" onclick="document.getElementById('features').scrollIntoView()">了解更多</button>
+    </div>
+  </div>
+  
+  <!-- 3D 悬浮仪表盘 -->
+  <div class="hero-visual">
+    <div class="mockup-card main-board">
+      <div class="board-header">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="board-title">全网终端调度监控 (排队: 12辆)</div>
+      </div>
+      <div class="chart-area">
+        <div class="chart-line"></div>
+        <div class="chart-fill"></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><span>快充站占用率</span><strong>88%</strong></div>
+        <div class="kpi"><span>全网平均等待</span><strong>6.5m</strong></div>
+      </div>
+    </div>
+    
+    <div class="mockup-card float-card">
+      <div class="car-status">
+        <div class="status-icon">⚡</div>
+        <div class="status-info">
+          <div class="plate">充电中 - 终端 #04 (京A·DE231)</div>
+          <div class="soc-bar"><div class="soc-fill"></div></div>
+          <div class="soc-text">当前 SOC: 68% | 预估还需 12 分钟</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 功能区 -->
+<section class="features" id="features">
+  <div class="section-header">
+    <h2>专为充电场站构建的核心能力</h2>
+    <p>打通用户端与运营端，让调度更智能，账单更透明</p>
+  </div>
+  
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon green">🧠</div>
+      <h3>智能调度引擎</h3>
+      <p>内置「最短完成时间」统筹策略，自动匹配快充/慢充桩位资源，大幅降低整体场站车辆排队等待时间。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon blue">📊</div>
+      <h3>实时状态大屏</h3>
+      <p>排队号码、前方等待车辆、预估等待时间及实时充电功率全端同步，打破用户里程与等待焦虑。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon dark">👥</div>
+      <h3>多角色权限体系</h3>
+      <p>统一账号路由。车主端极简提交充电请求，管理员端全面掌控桩位启停与多维运营数据报表。</p>
+    </div>
+  </div>
+
+  <!-- Z字型高级特性展示 -->
+  <div class="feature-showcase">
+    <!-- 左文右图 -->
+    <div class="showcase-row">
+      <div class="sc-text">
+        <h3>多维分时计费策略</h3>
+        <p>不再局限于单一电价。系统内置高精度的计费引擎，支持自定义峰、平、谷三段式复杂费率设定。</p>
+        <p>车辆拔枪后，系统毫秒级自动生成结构化流水单据，包含基础电费与阶梯服务费，每一分钱均可溯源，保障场站收益绝对精准。</p>
+      </div>
+      <div class="sc-visual">
+        <div class="placeholder-ui">📄 阶梯计费流向明细账单 UI</div>
+      </div>
+    </div>
+
+    <!-- 左图右文 -->
+    <div class="showcase-row reverse">
+      <div class="sc-text">
+        <h3>高可用自动故障降级</h3>
+        <p>充电场站的稳定性是运营底线。当终端意外掉线或发生硬件故障时，系统哨兵会立即触发异常捕捉。</p>
+        <p>通过底层的 PRIORITY 与 TIME_ORDER 策略，受影响的排队车辆将被平滑转移至邻近可用终端，整个重调度过程对车主近乎无感。</p>
+      </div>
+      <div class="sc-visual">
+        <div class="placeholder-ui">🔄 终端故障自动转移拓扑图</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 数据展示 -->
+<section class="stats" id="stats">
+  <div class="stat-item"><div class="num">99.9%</div><div class="label">系统调度可用性</div></div>
+  <div class="stat-item"><div class="num">120kW</div><div class="label">单桩峰值承载功率</div></div>
+  <div class="stat-item"><div class="num">&lt;2s</div><div class="label">异常状态转移延迟</div></div>
+</section>
+
+<!-- 页脚 -->
+<footer class="page-footer">
+  &copy; 2026 新能源汽车智能调度计费系统 &middot; 专属定制版本
+</footer>
+
+<!-- 登录/注册 模态框 -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-header">
+      <h2>欢迎访问控制台</h2>
+      <p>验证身份以管理您的车辆与调度任务</p>
+    </div>
+    
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="login" onclick="switchTab('login')">账 号 登 录</button>
+      <button class="tab-btn" data-tab="register" onclick="switchTab('register')">新 用 户 注 册</button>
+      <div class="tab-ind" id="tabInd"></div>
+    </div>
+    
+    <div class="form-wrap">
+      <!-- 登录表单 -->
+      <form class="auth-form active" id="loginForm" onsubmit="return handleLogin(event)">
+        <div class="fg">
+          <label for="lUser">用户名</label>
+          <input type="text" id="lUser" placeholder="输入系统账号">
+          <span class="err-msg">请输入有效的用户名</span>
+        </div>
+        <div class="fg">
+          <label for="lPwd">安全密码</label>
+          <input type="password" id="lPwd" placeholder="输入密码">
+          <span class="err-msg">密码不能为空</span>
+        </div>
+        <button type="submit" class="btn-submit login">安 全 登 录</button>
+        <div class="switch-text">还没配置接入账号？<a onclick="switchTab('register')">免费注册</a></div>
+      </form>
+      
+      <!-- 注册表单 -->
+      <form class="auth-form" id="regForm" onsubmit="return handleReg(event)">
+        <div class="fg">
+          <label for="rUser">设定用户名</label>
+          <input type="text" id="rUser" placeholder="创建系统账号">
+          <span class="err-msg">用户名格式不正确</span>
+        </div>
+        <div class="fg">
+          <label for="rPwd">设定密码</label>
+          <input type="password" id="rPwd" placeholder="设置至少8位密码">
+          <span class="err-msg">密码必须填写</span>
+        </div>
+        <div class="fg">
+          <label for="rPwd2">确认密码</label>
+          <input type="password" id="rPwd2" placeholder="再次输入确认">
+          <span class="err-msg">两次输入的密码不一致</span>
+        </div>
+        <div class="fg">
+          <label for="rCap">车辆电池总容量</label>
+          <div class="input-group">
+            <input type="number" id="rCap" placeholder="例如 60.5" min="1" step="0.1">
+            <span class="input-suffix">kWh</span>
+          </div>
+          <span class="err-msg">请填写车辆电池容量</span>
+          <div class="hint">调度算法将依此计算您的预估充电时间。</div>
+        </div>
+        <button type="submit" class="btn-submit register">立 即 注 册</button>
+        <div class="switch-text">已有入网账号？<a onclick="switchTab('login')">返回登录</a></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// 导航栏滚动阴影控制
+window.addEventListener('scroll', function() {
+  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 20);
+});
+
+// 模态框控制逻辑
+function openModal() {
+  document.getElementById('modal').classList.add('active');
+  document.body.style.overflow = 'hidden'; 
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+  document.body.style.overflow = '';
+}
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+// 登录/注册 Tab 切换动画
+function switchTab(t) {
+  var lf = document.getElementById('loginForm');
+  var rf = document.getElementById('regForm');
+  var ind = document.getElementById('tabInd');
+  document.querySelectorAll('.tab-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.tab === t);
+  });
+  if (t === 'login') {
+    ind.classList.remove('reg');
+    lf.classList.add('active'); rf.classList.remove('active');
+  } else {
+    ind.classList.add('reg');
+    rf.classList.add('active'); lf.classList.remove('active');
+  }
+  clearErr();
+}
+
+function vali(ids) {
+  var ok = true;
+  ids.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el.value.trim()) { el.classList.add('err'); ok = false; }
+    else { el.classList.remove('err'); }
+  });
+  return ok;
+}
+function clearErr() { document.querySelectorAll('.err').forEach(function(e) { e.classList.remove('err'); }); }
+
+function handleLogin(e) {
+  e.preventDefault();
+  if (vali(['lUser','lPwd'])) {
+    console.log('登录请求:', { user: lUser.value });
+    alert('请求成功：登录接口已触发');
+  }
+  return false;
+}
+function handleReg(e) {
+  e.preventDefault();
+  if (!vali(['rUser','rPwd','rPwd2','rCap'])) return false;
+  if (document.getElementById('rPwd').value !== document.getElementById('rPwd2').value) {
+    document.getElementById('rPwd2').classList.add('err'); 
+    return false;
+  }
+  console.log('注册请求:', { user: rUser.value, capacity: rCap.value });
+  alert('请求成功：注册接口已触发');
+  return false;
+}
+</script>
+</body>
+</html>
