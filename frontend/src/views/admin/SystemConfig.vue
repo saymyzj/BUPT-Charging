@@ -53,6 +53,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getSystemConfig, setDispatchMode, setFaultDispatchMode } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { DISPATCH_MODE, DISPATCH_MODE_TEXT, FAULT_DISPATCH_MODE, FAULT_DISPATCH_MODE_TEXT } from '@/constants/enums'
 
 const config = ref(null)
@@ -73,7 +74,7 @@ async function loadConfig() {
   loading.value = true
   try {
     const res = await getSystemConfig()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { loading.value = false; return }
     config.value = data
   } catch (_) { /* silent */ }
@@ -84,7 +85,7 @@ async function changeDispatch(mode) {
   if (config.value.dispatch_mode === mode) return
   try {
     const res = await setDispatchMode({ dispatch_mode: mode })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
     await loadConfig()
   } catch (e) { alert(e?.response?.data?.message || '切换失败') }
@@ -94,7 +95,7 @@ async function changeFault(mode) {
   if (config.value.fault_dispatch_mode === mode) return
   try {
     const res = await setFaultDispatchMode({ fault_dispatch_mode: mode })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
     await loadConfig()
   } catch (e) { alert(e?.response?.data?.message || '切换失败') }

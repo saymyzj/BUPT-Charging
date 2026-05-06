@@ -25,4 +25,11 @@ service.interceptors.response.use(
   }
 );
 
+export function unwrapResponseData(res) {
+  if (res && typeof res === 'object' && 'code' in res) {
+    return res.code === 0 ? (res.data ?? {}) : res
+  }
+  return res
+}
+
 export default service;

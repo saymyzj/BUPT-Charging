@@ -58,6 +58,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getRequestStatus, getStations, getStationQueue } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
 const stations = ref([])
@@ -73,7 +74,7 @@ async function loadStations() {
   loading.value = true
   try {
     const res = await getStations()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     stations.value = Array.isArray(data) ? data : (data.stations || [])
   } catch (_) { /* silent */ }
   loading.value = false
@@ -88,11 +89,11 @@ async function viewQueue(code) {
   queueData.value = []
   try {
     const res = await getStationQueue(code)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     queueData.value = Array.isArray(data) ? data : (data.queue || [])
     if (currentStation.value?.current_request_id) {
       const statusRes = await getRequestStatus(currentStation.value.current_request_id)
-      const status = statusRes.data || statusRes
+      const status = unwrapResponseData(statusRes)
       if (status.code === undefined || status.code === 0) {
         currentFinishTime.value = status.estimated_finish_time || null
       }

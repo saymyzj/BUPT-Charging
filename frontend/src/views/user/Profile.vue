@@ -82,6 +82,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { getProfile, getRequestDetail } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS_TEXT } from '@/constants/enums'
 
 const profile = ref({})
@@ -150,7 +151,7 @@ async function loadProfile() {
   loading.value = true
   try {
     const res = await getProfile()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code === undefined || data.code === 0) {
       profile.value = data
       if (data.username) localStorage.setItem('username', data.username)
@@ -165,7 +166,7 @@ async function loadBills() {
   for (const requestId of rememberedRequestIds()) {
     try {
       const res = await getRequestDetail(requestId)
-      const data = res.data || res
+      const data = unwrapResponseData(res)
       if (data.code === undefined || data.code === 0) {
         loaded.push({ ...data, request_id: data.request_id || requestId })
       }

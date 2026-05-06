@@ -92,6 +92,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getProfile, getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
 
 const req = ref(null)
@@ -192,7 +193,7 @@ async function refresh() {
   if (!rid) { req.value = null; return }
   try {
     const res = await getRequestStatus(rid)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) {
       if (data.code === 1002) {
         localStorage.removeItem('request_id')
@@ -210,7 +211,7 @@ async function refresh() {
 async function loadProfile() {
   try {
     const res = await getProfile()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return
     batteryCapacity.value = Number(data.battery_capacity)
   } catch (_) { /* silent */ }
@@ -221,7 +222,7 @@ async function editMode() {
   if (!confirm(`切换为 ${CHARGE_MODE_TEXT[newMode]}？将回到等候区重新排队。`)) return
   try {
     const res = await updateChargeMode({ request_id: req.value.request_id, charge_mode: newMode })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
     await refresh()
   } catch (e) { alert(e?.response?.data?.message || '修改失败') }
@@ -238,7 +239,7 @@ async function editEnergy() {
   }
   try {
     const res = await updateRequestEnergy({ request_id: req.value.request_id, request_energy: num })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
     await refresh()
   } catch (e) { alert(e?.response?.data?.message || '修改失败') }
@@ -248,7 +249,7 @@ async function cancelReq() {
   if (!confirm('确认取消当前请求？')) return
   try {
     const res = await cancelRequest({ request_id: req.value.request_id })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '取消失败'); return }
     await refresh()
   } catch (e) { alert(e?.response?.data?.message || '取消失败') }
@@ -261,7 +262,7 @@ async function stopReq() {
       request_id: req.value.request_id,
       stop_time: formatLocalDateTime()
     })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '操作失败'); return }
     await refresh()
   } catch (e) { alert(e?.response?.data?.message || '操作失败') }

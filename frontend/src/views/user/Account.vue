@@ -80,6 +80,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { getRequestDetail } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
 const detail = ref(null)
@@ -161,7 +162,7 @@ async function loadDetail() {
   loading.value = true
   try {
     const res = await getRequestDetail(rid)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { loading.value = false; return }
     detail.value = data
     loadLocalPayment()

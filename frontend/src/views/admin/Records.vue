@@ -60,6 +60,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getStations, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
 const stations = ref([])
@@ -69,7 +70,7 @@ async function loadStations() {
   loading.value = true
   try {
     const res = await getStations()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     stations.value = Array.isArray(data) ? data : (data.stations || [])
   } catch (_) { /* silent */ }
   loading.value = false
@@ -81,7 +82,7 @@ async function doAction(code, action) {
   if (!fn) return
   try {
     const res = await fn(code)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '操作失败'); return }
     await loadStations()
   } catch (e) {

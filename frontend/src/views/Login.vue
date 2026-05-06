@@ -139,6 +139,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getProfile, login, register } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 
 const router = useRouter()
 const scrolled = ref(false)
@@ -171,7 +172,7 @@ async function handleLogin() {
   loading.value = true
   try {
     const res = await login({ username: loginForm.value.username.trim(), password: loginForm.value.password })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { showMsgFn(data.message || '登录失败'); return }
     localStorage.setItem('auth_token', data.token)
     localStorage.setItem('user_role', data.role)
@@ -179,7 +180,7 @@ async function handleLogin() {
     localStorage.setItem('username', loginForm.value.username.trim())
     try {
       const profileRes = await getProfile()
-      const profile = profileRes.data || profileRes
+      const profile = unwrapResponseData(profileRes)
       if (profile.code === undefined || profile.code === 0) {
         localStorage.setItem('username', profile.username || loginForm.value.username.trim())
       }
@@ -201,7 +202,7 @@ async function handleRegister() {
   loading.value = true
   try {
     const res = await register({ username: regForm.value.username.trim(), password: regForm.value.password, battery_capacity: regForm.value.battery_capacity })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { showMsgFn(data.message || '注册失败'); return }
     showMsgFn('注册成功，请登录', false)
     activeTab.value = 'login'

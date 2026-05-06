@@ -83,6 +83,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 
 const users = ref([])
 const loading = ref(false)
@@ -103,7 +104,7 @@ async function loadUsers() {
   loading.value = true
   try {
     const res = await getUsers()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     users.value = Array.isArray(data) ? data : (data.users || [])
   } catch (_) { /* silent */ }
   loading.value = false
@@ -114,7 +115,7 @@ async function viewDetail(userId) {
   userDetail.value = null
   try {
     const res = await getUserDetail(userId)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     userDetail.value = data
   } catch (_) { /* silent */ }
 }
@@ -128,7 +129,7 @@ async function editCapacity(u) {
   if (!num || num <= 0) { alert('容量必须大于 0'); return }
   try {
     const res = await updateBatteryCapacity(u.user_id, { battery_capacity: num })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
     await loadUsers()
   } catch (e) {

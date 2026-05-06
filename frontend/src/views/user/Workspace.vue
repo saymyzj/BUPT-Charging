@@ -90,6 +90,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { createChargeRequest, getProfile, getRequestStatus } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 
 const form = ref({ charge_mode: 'FAST', request_energy: null })
@@ -122,7 +123,7 @@ const estWaitDisplay = computed(() => {
 async function loadProfile() {
   try {
     const res = await getProfile()
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return
     batteryCapacity.value = Number(data.battery_capacity)
   } catch (_) { /* silent */ }
@@ -177,7 +178,7 @@ async function submitRequest() {
       request_energy: form.value.request_energy,
       request_time: formatLocalDateTime()
     })
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) {
       errMsg.value = data.message || '提交失败'
       return
@@ -214,7 +215,7 @@ async function pollStatus() {
   if (!rid) return
   try {
     const res = await getRequestStatus(rid)
-    const data = res.data || res
+    const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) {
       if (data.code === 1002) {
         localStorage.removeItem('request_id')
