@@ -46,25 +46,40 @@ const router = createRouter({
   routes
 })
 
+function clearAuthState() {
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('user_role')
+  localStorage.removeItem('user_id')
+  localStorage.removeItem('username')
+}
+
 router.beforeEach((to, from, next) => {
   // 页面标题
   if (to.meta.title) document.title = to.meta.title
 
   const token = localStorage.getItem('auth_token')
   const role = localStorage.getItem('user_role')
+  const hasValidRole = role === 'USER' || role === 'ADMIN'
+  const requiresAuth = to.matched.some(r => r.meta.requiresAuth)
 
   // 需要登录但未登录 → 跳登录
-  if (to.matched.some(r => r.meta.requiresAuth) && !token) {
+  if (requiresAuth && !token) {
+    return next('/login')
+  }
+
+  // 有 token 但角色缺失/异常，多半是旧缓存；清理后回登录页，避免无限重定向
+  if (requiresAuth && token && !hasValidRole) {
+    clearAuthState()
     return next('/login')
   }
 
   // 已登录访问登录页 → 跳对应首页
-  if (to.meta.guest && token) {
+  if (to.meta.guest && token && hasValidRole) {
     return next(role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
   }
 
   // 角色不匹配 → 跳对应首页
-  if (to.matched.some(r => r.meta.role) && token) {
+  if (to.matched.some(r => r.meta.role) && token && hasValidRole) {
     const requiredRole = to.matched.find(r => r.meta.role)?.meta.role
     if (requiredRole && requiredRole !== role) {
       return next(role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
