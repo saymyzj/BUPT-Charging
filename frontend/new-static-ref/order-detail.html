@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能充电桩调度计费系统 - 订单详单</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #ffffff; --bg-alt: #f8fafb; --primary: #16a34a; --primary-dark: #15803d;
+  --primary-light: #22c55e; --primary-pale: #dcfce7; --dark: #0f172a; --dark2: #1e293b;
+  --text: #334155; --text2: #64748b; --text-light: #94a3b8; --border: #e2e8f0;
+  --error: #dc2626; --blue: #3b82f6; --amber: #f59e0b; --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); color: var(--text); background: var(--bg-alt); line-height: 1.6; overflow-x: hidden; }
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--dark); }
+.nav-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-right a { color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; transition: .2s; }
+.nav-right a.active, .nav-right a:hover { color: var(--primary-dark); background: var(--primary-pale); }
+.user-chip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: var(--primary-pale); color: var(--primary-dark); font-size: 13px; font-weight: 700; }
+.shell { width: 100%; padding: 92px 24px 32px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px; background: var(--primary-pale); color: var(--primary-dark); font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+h1 { font-size: 32px; color: var(--dark); line-height: 1.2; margin-bottom: 8px; }
+.page-head p { color: var(--text2); font-size: 15px; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { border: none; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 700; cursor: pointer; transition: 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 14px rgba(22,163,74,0.24); }
+.btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.btn-ghost { background: #fff; color: var(--dark); border: 1px solid var(--border); }
+.grid { display: grid; grid-template-columns: 1.06fr .94fr; gap: 18px; align-items: start; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 28px rgba(15,23,42,0.04); }
+.card-pad { padding: 22px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.section-title h2 { font-size: 18px; color: var(--dark); }
+.section-title span { color: var(--text-light); font-size: 13px; }
+.summary { display: grid; grid-template-columns: 1fr 320px; gap: 18px; margin-bottom: 18px; }
+.summary-main { padding: 24px; border-left: 4px solid var(--primary); }
+.summary-main h2 { font-size: 22px; color: var(--dark); margin-bottom: 8px; }
+.summary-main p { color: var(--text2); font-size: 14px; }
+.summary-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+.meta { padding: 13px; border-radius: 11px; background: var(--bg-alt); }
+.meta span { display: block; color: var(--text2); font-size: 12px; margin-bottom: 4px; }
+.meta strong { color: var(--dark); font-size: 16px; }
+.total-card { padding: 22px; background: var(--dark); color: #fff; display: grid; align-content: center; }
+.total-card span { color: var(--text-light); font-size: 13px; }
+.total-card strong { display: block; color: var(--primary-light); font-size: 42px; line-height: 1.1; margin: 8px 0; }
+.total-card p { color: var(--text-light); font-size: 12px; }
+.fee-table { display: grid; gap: 10px; }
+.fee-row { display: grid; grid-template-columns: 1fr 110px 110px; gap: 12px; align-items: center; padding: 13px 14px; border: 1px solid var(--border); border-radius: 11px; }
+.fee-row strong { color: var(--dark); font-size: 14px; }
+.fee-row span { color: var(--text2); font-size: 12px; }
+.fee-row b { justify-self: end; color: var(--dark); }
+.fee-row.total { border-color: var(--primary); background: #f0fdf4; }
+.segment { display: grid; gap: 12px; }
+.segment-row { display: grid; grid-template-columns: 86px 1fr 82px; gap: 12px; align-items: center; padding: 12px; border-radius: 11px; background: var(--bg-alt); }
+.segment-row strong { color: var(--dark); font-size: 14px; }
+.segment-row span { color: var(--text2); font-size: 12px; }
+.bar { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: inherit; }
+.bar .flat { background: var(--primary); }
+.bar .peak { background: var(--amber); }
+.bar .service { background: var(--blue); }
+.timeline { display: grid; gap: 12px; }
+.step { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: start; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: none; padding-bottom: 0; }
+.dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--primary); font-size: 13px; font-weight: 800; }
+.pending .dot { color: var(--text2); background: var(--bg-alt); border: 1px solid var(--border); }
+.step strong { display: block; color: var(--dark); font-size: 14px; }
+.step span, .step time { color: var(--text2); font-size: 12px; }
+.note { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--primary-pale); color: var(--primary-dark); font-size: 13px; font-weight: 600; }
+.invoice { display: grid; gap: 10px; }
+.invoice-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.invoice-row:last-child { border-bottom: none; }
+.invoice-row span { color: var(--text2); }
+.invoice-row strong { color: var(--dark); }
+@media (max-width: 980px) {
+  .nav { padding: 12px 20px; }
+  .nav-right a { display: none; }
+  .shell { padding: 88px 20px 32px; }
+  .grid, .summary { grid-template-columns: 1fr; }
+  .summary-meta { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  h1 { font-size: 26px; }
+  .summary-meta, .fee-row, .segment-row { grid-template-columns: 1fr; }
+  .fee-row b { justify-self: start; }
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-brand"><div class="nav-logo">&#9889;</div>充电调度系统</div>
+  <div class="nav-right">
+    <a href="user-dashboard.html">首页</a>
+    <a href="user-dashboard.html#request">提交请求</a>
+    <a href="queue-status.html">排队状态</a>
+    <a class="active" href="order-detail.html">我的订单</a>
+    <a href="#billing">计费预览</a>
+    <div class="user-chip">用户：car_user</div>
+  </div>
+</nav>
+
+<main class="shell">
+  <header class="page-head">
+    <div>
+      <div class="eyebrow">订单计费详单</div>
+      <h1>订单 #C20260503018 的费用明细与状态流转</h1>
+      <p>展示充电请求、队列、计费分段、服务费和最终合计，方便用户核对费用来源。</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="location.href='user-dashboard.html'">返回首页</button>
+      <button class="btn btn-primary" onclick="alert('GET /api/orders/C20260503018/export\\n导出订单详单')">导出详单</button>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="card summary-main">
+      <h2>当前订单 · 排队中</h2>
+      <p>该订单尚未完成结算，以下费用为根据当前平时电价、预计充电量和可能跨越峰时时段的动态预估。</p>
+      <div class="summary-meta">
+        <div class="meta"><span>车辆容量</span><strong>60 kWh</strong></div>
+        <div class="meta"><span>目标电量</span><strong>90%</strong></div>
+        <div class="meta"><span>预计电量</span><strong>45 kWh</strong></div>
+        <div class="meta"><span>预计时长</span><strong>42 分钟</strong></div>
+      </div>
+    </div>
+    <div class="card total-card">
+      <span>预计应付合计</span>
+      <strong>¥42.00</strong>
+      <p>含电费、服务费与跨峰时段修正</p>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card card-pad" id="billing">
+      <div class="section-title"><h2>费用构成</h2><span>动态预估</span></div>
+      <div class="fee-table">
+        <div class="fee-row"><div><strong>平时电费</strong><span>预计 38 kWh × 0.7 元/kWh</span></div><span>主计费段</span><b>¥26.60</b></div>
+        <div class="fee-row"><div><strong>峰时溢价</strong><span>预计跨越 7 kWh × 1.0 元/kWh</span></div><span>时段修正</span><b>¥7.00</b></div>
+        <div class="fee-row"><div><strong>服务费</strong><span>充电服务费与调度服务费</span></div><span>固定规则</span><b>¥8.40</b></div>
+        <div class="fee-row total"><div><strong>预计合计</strong><span>实际结算以充电完成时间为准</span></div><span>待结算</span><b>¥42.00</b></div>
+      </div>
+      <div class="note">计费引擎会根据实际开始/结束时间重新分段，若未跨越峰时时段，溢价部分将自动扣除。</div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>计费时段预览</h2><span>峰平谷分段</span></div>
+      <div class="segment">
+        <div class="segment-row"><strong>平时</strong><div><div class="bar"><i class="flat" style="width:78%"></i></div><span>预计覆盖主要充电阶段</span></div><b>38 kWh</b></div>
+        <div class="segment-row"><strong>峰时</strong><div><div class="bar"><i class="peak" style="width:24%"></i></div><span>可能跨入峰时时段</span></div><b>7 kWh</b></div>
+        <div class="segment-row"><strong>服务</strong><div><div class="bar"><i class="service" style="width:42%"></i></div><span>按充电时长与调度服务计算</span></div><b>¥8.40</b></div>
+      </div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>订单流转</h2><span>生命周期</span></div>
+      <div class="timeline">
+        <div class="step"><div class="dot">1</div><div><strong>请求创建</strong><span>记录车辆容量、当前 SOC 和目标 SOC</span></div><time>19:32</time></div>
+        <div class="step"><div class="dot">2</div><div><strong>进入队列</strong><span>快充队列第 3 位，等待桩位释放</span></div><time>19:33</time></div>
+        <div class="step pending"><div class="dot">3</div><div><strong>开始充电</strong><span>桩位分配后开始计算实际费用</span></div><time>预计 19:46</time></div>
+        <div class="step pending"><div class="dot">4</div><div><strong>完成结算</strong><span>生成最终账单并开放支付/查看</span></div><time>待完成</time></div>
+      </div>
+    </section>
+
+    <section class="card card-pad">
+      <div class="section-title"><h2>订单基础信息</h2><span>只读</span></div>
+      <div class="invoice">
+        <div class="invoice-row"><span>订单编号</span><strong>C20260503018</strong></div>
+        <div class="invoice-row"><span>用户账号</span><strong>car_user</strong></div>
+        <div class="invoice-row"><span>请求类型</span><strong>系统自动分配</strong></div>
+        <div class="invoice-row"><span>当前状态</span><strong>排队中</strong></div>
+        <div class="invoice-row"><span>计费状态</span><strong>预估未结算</strong></div>
+        <div class="invoice-row"><span>创建时间</span><strong>2026-05-03 19:32</strong></div>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

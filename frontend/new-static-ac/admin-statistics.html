@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>报表统计 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--dark); font-size: 12px; font-weight: 600; color: white; }
+
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; display: flex; align-items: center; justify-content: space-between; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; transition: 0.2s; }
+.stat:hover { border-color: var(--primary-light); box-shadow: 0 2px 12px rgba(16,185,129,0.06); }
+.stat-label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 8px; }
+.stat-val { font-size: 26px; font-weight: 700; color: var(--dark); letter-spacing: -1px; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 6px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: 0.2s; margin-bottom: 16px; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.card-body { padding: 20px; }
+
+/* TAB */
+.tabs { display: flex; gap: 4px; }
+.tab { padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border); background: white; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; transition: 0.15s; }
+.tab.active { background: var(--primary-wash); border-color: var(--primary-pale); color: var(--primary-dark); }
+.tab:hover:not(.active) { background: #f3f4f6; }
+
+/* TABLE */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 12px 14px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text2); }
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--primary-wash); }
+table.t td strong { color: var(--text); font-weight: 600; }
+
+/* CHARTS */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.chart-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.chart-title { font-size: 12px; font-weight: 600; color: var(--dark); margin-bottom: 14px; }
+.bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 200px; padding: 20px 0 4px; border-bottom: 1px solid var(--border); }
+.bar-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.bar { width: 100%; max-width: 40px; border-radius: 4px 4px 0 0; transition: 0.3s; min-height: 2px; }
+.bar-label { font-size: 10px; color: var(--text3); margin-top: 8px; font-weight: 500; }
+.bar-val { font-size: 10px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统 · 管理端
+  </div>
+  <div class="nav-links">
+    <a href="admin-overview.html">总览</a>
+    <a href="admin-config.html">系统配置</a>
+    <a href="admin-faults.html">设备控制</a>
+    <a href="admin-users.html">用户管理</a>
+    <a class="active" href="admin-statistics.html">报表统计</a>
+  </div>
+  <div class="nav-admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+    admin
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <div><h1>报表统计</h1><p>按日、周、月查看各桩运营数据</p></div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('day',this)">日报</button>
+      <button class="tab" onclick="switchTab('week',this)">周报</button>
+      <button class="tab" onclick="switchTab('month',this)">月报</button>
+    </div>
+  </div>
+
+  <div class="stats" id="summaryBar"></div>
+
+  <div class="card">
+    <div class="card-head"><h3>充电桩报表</h3><span class="card-tag">GET /api/admin/reports?granularity=</span></div>
+    <div class="card-body" style="padding:0;">
+      <table class="t">
+        <thead><tr><th>时间</th><th>桩编号</th><th>充电次数</th><th>时长(s)</th><th>电量(kWh)</th><th>充电费(¥)</th><th>服务费(¥)</th><th>总费用(¥)</th></tr></thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>数据可视化</h3></div>
+    <div class="card-body">
+      <div class="charts-grid">
+        <div class="chart-card"><div class="chart-title">各桩充电电量 (kWh)</div><div class="bar-chart" id="chartEnergy"></div></div>
+        <div class="chart-card"><div class="chart-title">各桩总费用 (¥)</div><div class="bar-chart" id="chartFee"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var mockReports={
+  day:[
+    {time_key:'2026-05-03',station_code:'FAST_01',count:8,seconds:14400,energy:120,charge_fee:96,service_fee:96,total:192},
+    {time_key:'2026-05-03',station_code:'FAST_02',count:6,seconds:10800,energy:90,charge_fee:72,service_fee:72,total:144},
+    {time_key:'2026-05-03',station_code:'FAST_03',count:0,seconds:0,energy:0,charge_fee:0,service_fee:0,total:0},
+    {time_key:'2026-05-03',station_code:'FAST_04',count:7,seconds:12600,energy:105,charge_fee:84,service_fee:84,total:168},
+    {time_key:'2026-05-03',station_code:'FAST_05',count:0,seconds:0,energy:0,charge_fee:0,service_fee:0,total:0},
+    {time_key:'2026-05-03',station_code:'SLOW_01',count:5,seconds:18000,energy:50,charge_fee:35,service_fee:40,total:75},
+    {time_key:'2026-05-03',station_code:'SLOW_02',count:4,seconds:14400,energy:40,charge_fee:28,service_fee:32,total:60},
+    {time_key:'2026-05-03',station_code:'SLOW_03',count:0,seconds:0,energy:0,charge_fee:0,service_fee:0,total:0},
+    {time_key:'2026-05-03',station_code:'SLOW_04',count:0,seconds:0,energy:0,charge_fee:0,service_fee:0,total:0},
+    {time_key:'2026-05-03',station_code:'SLOW_05',count:3,seconds:10800,energy:30,charge_fee:21,service_fee:24,total:45}
+  ],
+  week:[
+    {time_key:'2026-W18',station_code:'FAST_01',count:42,seconds:75600,energy:630,charge_fee:504,service_fee:504,total:1008},
+    {time_key:'2026-W18',station_code:'FAST_02',count:35,seconds:63000,energy:525,charge_fee:420,service_fee:420,total:840},
+    {time_key:'2026-W18',station_code:'SLOW_01',count:28,seconds:100800,energy:280,charge_fee:196,service_fee:224,total:420},
+    {time_key:'2026-W18',station_code:'SLOW_02',count:22,seconds:79200,energy:220,charge_fee:154,service_fee:176,total:330}
+  ],
+  month:[
+    {time_key:'2026-04',station_code:'FAST_01',count:128,seconds:230400,energy:1920,charge_fee:1536,service_fee:1536,total:3072},
+    {time_key:'2026-04',station_code:'FAST_02',count:95,seconds:171000,energy:1425,charge_fee:1140,service_fee:1140,total:2280},
+    {time_key:'2026-04',station_code:'SLOW_01',count:100,seconds:360000,energy:1000,charge_fee:700,service_fee:800,total:1500},
+    {time_key:'2026-04',station_code:'SLOW_02',count:85,seconds:306000,energy:850,charge_fee:595,service_fee:680,total:1275}
+  ]
+};
+
+var currentG='day';
+
+function switchTab(g,btn){
+  currentG=g;
+  document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  renderReport();
+}
+
+function renderReport(){
+  var data=mockReports[currentG];
+  var body=document.getElementById('reportBody');
+  body.innerHTML='';
+  var totalCount=0,totalEnergy=0,totalFee=0;
+  data.forEach(function(r){
+    totalCount+=r.count; totalEnergy+=r.energy; totalFee+=r.total;
+    body.innerHTML+='<tr><td>'+r.time_key+'</td><td><strong>'+r.station_code+'</strong></td><td>'+r.count+'</td><td>'+r.seconds.toLocaleString()+'</td><td>'+r.energy+'</td><td>'+r.charge_fee.toFixed(2)+'</td><td>'+r.service_fee.toFixed(2)+'</td><td><strong>'+r.total.toFixed(2)+'</strong></td></tr>';
+  });
+
+  document.getElementById('summaryBar').innerHTML=
+    '<div class="stat"><div class="stat-label">统计桩位</div><div class="stat-val">'+data.length+'</div><div class="stat-sub">当前粒度</div></div>'
+    +'<div class="stat"><div class="stat-label">总充电次数</div><div class="stat-val">'+totalCount+'</div><div class="stat-sub">所有桩合计</div></div>'
+    +'<div class="stat"><div class="stat-label">总电量</div><div class="stat-val">'+totalEnergy.toLocaleString()+' kWh</div><div class="stat-sub">所有桩合计</div></div>'
+    +'<div class="stat"><div class="stat-label">总费用</div><div class="stat-val">¥'+totalFee.toLocaleString()+'</div><div class="stat-sub">充电费+服务费</div></div>';
+
+  renderCharts(data);
+}
+
+function renderCharts(data){
+  var maxE=Math.max.apply(null,data.map(function(d){return d.energy;}))||1;
+  var maxF=Math.max.apply(null,data.map(function(d){return d.total;}))||1;
+  var ce=document.getElementById('chartEnergy'); ce.innerHTML='';
+  var cf=document.getElementById('chartFee'); cf.innerHTML='';
+
+  data.forEach(function(d){
+    var hE=Math.max(2,(d.energy/maxE)*160);
+    var hF=Math.max(2,(d.total/maxF)*160);
+    var label=d.station_code.replace('_','');
+    ce.innerHTML+='<div class="bar-item"><div class="bar-val">'+d.energy+'</div><div class="bar" style="height:'+hE+'px;background:linear-gradient(180deg,var(--primary-light),var(--primary));"></div><div class="bar-label">'+label+'</div></div>';
+    cf.innerHTML+='<div class="bar-item"><div class="bar-val">'+d.total+'</div><div class="bar" style="height:'+hF+'px;background:linear-gradient(180deg,#fbbf24,#f59e0b);"></div><div class="bar-label">'+label+'</div></div>';
+  });
+}
+
+window.onload=renderReport;
+</script>
+</body>
+</html>

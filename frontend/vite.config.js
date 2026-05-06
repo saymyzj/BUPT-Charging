@@ -14,11 +14,11 @@ export default defineConfig({
     host: '0.0.0.0', // Ensure accessible via both 127.0.0.1 and localhost
     proxy: {
       '/health': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true
       },
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true
       }
     }

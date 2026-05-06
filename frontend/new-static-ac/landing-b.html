@@ -1,0 +1,446 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>智能充电桩调度计费系统 V3.0</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #ffffff; --bg-alt: #f8fafb; --primary: #16a34a; --primary-dark: #15803d;
+  --primary-light: #22c55e; --primary-pale: #dcfce7; --dark: #0f172a; --dark2: #1e293b;
+  --text: #334155; --text2: #64748b; --text-light: #94a3b8; --border: #e2e8f0;
+  --error: #dc2626; --blue: #3b82f6; --amber: #f59e0b; --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.6; overflow-x: hidden; }
+
+/* ===== NAV ===== */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 48px; background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border); transition: box-shadow 0.3s;
+}
+.nav.scrolled { box-shadow: 0 1px 12px rgba(0,0,0,0.04); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--dark); }
+.nav-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.nav-right { display: flex; align-items: center; gap: 24px; }
+.nav-right a { color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+.nav-right a:hover { color: var(--dark); }
+.btn-nav { padding: 9px 20px; border-radius: 8px; border: none; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+.btn-nav-outline { background: none; border: 1px solid var(--border); color: var(--dark); }
+.btn-nav-outline:hover { border-color: var(--dark); }
+.btn-nav-fill { background: var(--primary); color: #fff; }
+.btn-nav-fill:hover { background: var(--primary-dark); }
+
+/* ===== HERO ===== */
+.hero {
+  padding: 140px 48px 80px; display: flex; align-items: center; justify-content: space-between;
+  gap: 60px; max-width: 1200px; margin: 0 auto;
+}
+.hero-left { max-width: 520px; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 20px;
+  background: var(--primary-pale); color: var(--primary-dark);
+  font-size: 13px; font-weight: 600; margin-bottom: 24px;
+}
+.hero-badge::before { content: ''; width: 6px; height: 6px; background: var(--primary); border-radius: 50%; }
+.hero-left h1 { font-size: 46px; font-weight: 800; line-height: 1.18; color: var(--dark); margin-bottom: 20px; letter-spacing: -0.5px; }
+.hero-left h1 span { color: var(--primary); }
+.hero-desc { font-size: 17px; color: var(--text2); margin-bottom: 32px; line-height: 1.7; }
+.hero-actions { display: flex; gap: 14px; }
+.btn-hero { padding: 14px 30px; border-radius: 10px; border: none; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+.btn-hero-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 14px rgba(22,163,74,0.3); }
+.btn-hero-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.btn-hero-ghost { background: var(--bg); color: var(--dark); border: 1px solid var(--border); }
+.btn-hero-ghost:hover { border-color: var(--dark); }
+.hero-trust { margin-top: 40px; font-size: 13px; color: var(--text-light); }
+.hero-trust span { font-weight: 600; color: var(--text2); }
+
+/* hero visual */
+.hero-right { flex: 1; max-width: 560px; }
+.hero-mockup { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.07); background: var(--bg-alt); }
+.mockup-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border); }
+.mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mockup-dot:nth-child(1) { background: #f87171; } .mockup-dot:nth-child(2) { background: #fbbf24; } .mockup-dot:nth-child(3) { background: #34d399; }
+.mockup-body { padding: 24px; }
+.mock-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.mock-card { padding: 16px; border-radius: 10px; background: #fff; border: 1px solid var(--border); }
+.mock-card-title { font-size: 11px; color: var(--text2); margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+.mock-card-val { font-size: 24px; font-weight: 800; color: var(--dark); }
+.mock-card-sub { font-size: 11px; color: var(--primary); margin-top: 4px; font-weight: 600; }
+.mock-timeline { background: #fff; border-radius: 10px; border: 1px solid var(--border); padding: 16px; }
+.mock-timeline-title { font-size: 11px; color: var(--text2); margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.tl-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; position: relative; }
+.tl-fill { height: 100%; width: 65%; background: linear-gradient(90deg, var(--primary), var(--primary-light)); border-radius: 3px; }
+.tl-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--text-light); }
+
+
+/* ===== FEATURES ===== */
+.features { padding: 100px 48px; max-width: 1200px; margin: 0 auto; }
+.section-header { text-align: center; margin-bottom: 60px; }
+.section-header h2 { font-size: 34px; font-weight: 800; color: var(--dark); margin-bottom: 12px; }
+.section-header p { font-size: 16px; color: var(--text2); max-width: 500px; margin: 0 auto; }
+.feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.feat-card { padding: 32px 24px; border-radius: var(--radius); border: 1px solid var(--border); transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; }
+.feat-card:hover { border-color: var(--primary); box-shadow: 0 8px 24px rgba(22,163,74,0.06); transform: translateY(-3px); }
+.feat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 18px; }
+.feat-icon.green { background: var(--primary-pale); color: var(--primary-dark); }
+.feat-icon.blue { background: #dbeafe; color: var(--blue); }
+.feat-icon.amber { background: #fef3c7; color: #b45309; }
+.feat-card h3 { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
+.feat-card p { font-size: 14px; color: var(--text2); line-height: 1.65; }
+
+/* ===== HOW IT WORKS ===== */
+.how-section { padding: 100px 48px; background: var(--bg-alt); }
+.how-section .section-header { margin-bottom: 60px; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; max-width: 1100px; margin: 0 auto; position: relative; }
+.steps::before { content: ''; position: absolute; top: 36px; left: 60px; right: 60px; height: 2px; background: var(--border); z-index: 0; }
+.step { text-align: center; position: relative; z-index: 1; }
+.step-num { width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; margin: 0 auto 16px; box-shadow: 0 4px 12px rgba(22,163,74,0.25); }
+.step h4 { font-size: 15px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+.step p { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+/* ===== SHOWCASE (alternating) ===== */
+.showcase { padding: 100px 48px; max-width: 1100px; margin: 0 auto; }
+.showcase-row { display: flex; align-items: center; gap: 80px; margin-bottom: 80px; }
+.showcase-row:last-child { margin-bottom: 0; }
+.showcase-row.reverse { flex-direction: row-reverse; }
+.sc-text { flex: 1; }
+.sc-text h3 { font-size: 28px; font-weight: 800; color: var(--dark); margin-bottom: 16px; line-height: 1.3; }
+.sc-text p { font-size: 15px; color: var(--text2); line-height: 1.7; margin-bottom: 16px; }
+.sc-list { list-style: none; }
+.sc-list li { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; font-size: 14px; color: var(--text); }
+.sc-list li::before { content: '✓'; color: var(--primary); font-weight: 700; margin-top: 1px; }
+.sc-visual { flex: 1; min-height: 300px; border-radius: 16px; background: var(--bg-alt); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+.sc-visual-inner { padding: 24px; text-align: center; }
+.sc-visual-icon { font-size: 48px; margin-bottom: 12px; }
+.sc-visual-label { font-size: 14px; color: var(--text2); font-weight: 500; }
+
+/* ===== PRICING / BILLING PREVIEW ===== */
+.billing-section { padding: 80px 48px; background: var(--dark); color: #fff; }
+.billing-section .section-header h2 { color: #fff; }
+.billing-section .section-header p { color: var(--text-light); }
+.bill-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 900px; margin: 0 auto; }
+.bill-card { padding: 28px 24px; border-radius: var(--radius); background: var(--dark2); border: 1px solid rgba(255,255,255,0.06); }
+.bill-card-label { font-size: 12px; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.bill-card-val { font-size: 28px; font-weight: 800; color: var(--primary-light); margin-bottom: 4px; }
+.bill-card-unit { font-size: 13px; color: var(--text-light); }
+
+/* ===== STATS ===== */
+.stats { padding: 80px 48px; display: flex; justify-content: center; gap: 64px; max-width: 1000px; margin: 0 auto; flex-wrap: wrap; }
+.stat-item { text-align: center; min-width: 140px; }
+.stat-num { font-size: 42px; font-weight: 800; color: var(--primary); }
+.stat-label { font-size: 14px; color: var(--text2); margin-top: 4px; }
+.stat-item .stat-icon { font-size: 24px; margin-bottom: 8px; }
+
+/* ===== CTA ===== */
+.cta-section { padding: 80px 48px; text-align: center; background: linear-gradient(180deg, var(--bg) 0%, #f0fdf4 100%); }
+.cta-section h2 { font-size: 32px; font-weight: 800; color: var(--dark); margin-bottom: 16px; }
+.cta-section p { font-size: 16px; color: var(--text2); margin-bottom: 32px; }
+.cta-section .btn-hero-primary { padding: 16px 40px; font-size: 17px; }
+
+/* ===== FOOTER ===== */
+.footer { padding: 40px 48px; border-top: 1px solid var(--border); }
+.footer-inner { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto; }
+.footer-left { font-size: 13px; color: var(--text2); }
+.footer-links { display: flex; gap: 24px; }
+.footer-links a { font-size: 13px; color: var(--text2); text-decoration: none; }
+.footer-links a:hover { color: var(--dark); }
+
+/* ===== MODAL ===== */
+.modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-card { width: 420px; background: #fff; border-radius: 16px; padding: 36px 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.18); transform: translateY(16px); transition: transform 0.3s cubic-bezier(0.2,0.8,0.2,1); position: relative; }
+.modal-overlay.active .modal-card { transform: translateY(0); }
+.modal-close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 8px; background: var(--bg-alt); border: none; font-size: 18px; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: var(--border); }
+.modal-header { margin-bottom: 24px; }
+.modal-header h2 { font-size: 22px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+.modal-header p { font-size: 14px; color: var(--text2); }
+.tabs { display: flex; padding: 3px; margin-bottom: 24px; background: var(--bg-alt); border-radius: 10px; position: relative; }
+.tab-btn { flex: 1; z-index: 1; padding: 10px 0; border: none; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--text2); cursor: pointer; transition: color 0.25s; }
+.tab-btn.active { color: var(--dark); }
+.tab-ind { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 8px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.08); transition: left 0.3s cubic-bezier(0.4,0,0.2,1); }
+.tab-ind.reg { left: 50%; }
+.form-wrap { position: relative; min-height: 260px; }
+.auth-form { position: absolute; top: 0; left: 0; width: 100%; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity 0.25s, transform 0.25s; }
+.auth-form.active { opacity: 1; pointer-events: auto; position: relative; transform: translateY(0); }
+.fg { margin-bottom: 16px; }
+.fg label { display: block; font-size: 13px; font-weight: 600; color: var(--dark); margin-bottom: 6px; }
+.fg input { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 14px; color: var(--dark); outline: none; transition: border-color 0.2s, box-shadow 0.2s; background: #fff; }
+.fg input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(22,163,74,0.1); }
+.fg input.err { border-color: var(--error); }
+.err-msg { display: none; font-size: 12px; color: var(--error); margin-top: 4px; }
+.fg input.err ~ .err-msg { display: block; }
+.hint { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.btn-submit { width: 100%; padding: 12px; border: none; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 8px; }
+.btn-submit.login { background: var(--primary); color: #fff; }
+.btn-submit.login:hover { background: var(--primary-dark); }
+.btn-submit.register { background: var(--dark); color: #fff; }
+.btn-submit.register:hover { background: var(--dark2); }
+.switch-text { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text2); }
+.switch-text a { color: var(--primary); font-weight: 600; text-decoration: none; cursor: pointer; }
+</style>
+<link rel="stylesheet" href="ui-v4.css">
+</head>
+<body class="public-app">
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <div class="nav-brand"><div class="nav-logo">&#9889;</div>充电调度系统</div>
+  <div class="nav-right">
+    <a href="#features">功能</a>
+    <a href="#how">流程</a>
+    <a href="#billing">计费</a>
+    <button class="btn-nav btn-nav-outline" onclick="openModal()">登录</button>
+    <button class="btn-nav btn-nav-fill" onclick="openModal('register')">免费注册</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-badge">智能充电桩调度计费系统 · V3.0</div>
+    <h1>让每一度电<br>都被<span>智能调度</span></h1>
+    <p class="hero-desc">
+      基于最优化算法自动分配快充/慢充桩位，最小化等待时间。峰平谷分时计费引擎自动生成结构化详单，每一笔费用清晰可查。
+    </p>
+    <div class="hero-actions">
+      <button class="btn-hero btn-hero-primary" onclick="openModal()">立即开始</button>
+      <button class="btn-hero btn-hero-ghost" onclick="document.getElementById('features').scrollIntoView()">了解更多</button>
+    </div>
+    <div class="hero-trust">已用于 <span>课程演示</span> · 支持 <span>10 桩位</span> 并发调度</div>
+  </div>
+  <div class="hero-right">
+    <div class="hero-mockup">
+      <div class="mockup-bar"><span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span></div>
+      <div class="mockup-body">
+        <div class="mock-row">
+          <div class="mock-card"><div class="mock-card-title">快充在线</div><div class="mock-card-val">5/5</div><div class="mock-card-sub">30kW × 5</div></div>
+          <div class="mock-card"><div class="mock-card-title">慢充在线</div><div class="mock-card-val">5/5</div><div class="mock-card-sub">10kW × 5</div></div>
+          <div class="mock-card"><div class="mock-card-title">排队中</div><div class="mock-card-val">3</div><div class="mock-card-sub">预估 8min</div></div>
+        </div>
+        <div class="mock-timeline">
+          <div class="mock-timeline-title">当前充电进度 · 桩位 F-03</div>
+          <div class="tl-bar"><div class="tl-fill"></div></div>
+          <div class="tl-labels"><span>0 kWh</span><span>已充 39 kWh</span><span>目标 60 kWh</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="section-header">
+    <h2>六大核心能力</h2>
+    <p>覆盖用户侧与管理侧的全流程智能服务</p>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon green">&#9889;</div>
+      <h3>智能调度引擎</h3>
+      <p>基于「最短完成时间」策略，自动匹配快充/慢充桩位，支持正常、故障、扩展三种调度模式切换。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon blue">&#128202;</div>
+      <h3>实时状态监控</h3>
+      <p>排队号、前车数量、预估等待时间、当前充电功率全端实时同步，用户信息完全透明。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon amber">&#128176;</div>
+      <h3>分时计费详单</h3>
+      <p>峰/平/谷三段电价 + 服务费自动计算，充电完成即生成精确到分钟的结构化费用明细。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon green">&#128274;</div>
+      <h3>故障自动恢复</h3>
+      <p>充电桩故障时自动触发 PRIORITY / TIME_ORDER 策略，受影响车辆平滑转移至可用桩位。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon blue">&#128100;</div>
+      <h3>双角色权限体系</h3>
+      <p>用户端提交充电请求、查看排队进度；管理员端控制桩位启停、查看运营报表与统计。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon amber">&#128203;</div>
+      <h3>多维运营报表</h3>
+      <p>按日/周/月统计充电量、营收、桩位利用率，支持数据导出，辅助管理决策。</p>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="section-header">
+    <h2>使用流程</h2>
+    <p>从注册到完成充电，仅需四步</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h4>注册登录</h4>
+      <p>填写用户名、密码与电池容量完成注册</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h4>提交请求</h4>
+      <p>选择充电模式与目标电量，系统分配排队号</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h4>自动调度</h4>
+      <p>引擎实时计算最优桩位，叫号后确认上桩</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h4>计费结算</h4>
+      <p>充电完成自动生成详单，查看并确认离场</p>
+    </div>
+  </div>
+</section>
+
+<!-- SHOWCASE -->
+<section class="showcase">
+  <div class="showcase-row">
+    <div class="sc-text">
+      <h3>最优化调度，<br>最小化等待</h3>
+      <p>系统内置「最短完成时间」调度策略，综合考虑桩位当前负载、排队车辆电量需求、充电功率差异进行全局最优分配。</p>
+      <ul class="sc-list">
+        <li>快充 30kW × 5 + 慢充 10kW × 5 混合桩位</li>
+        <li>等候区容量上限管控，避免资源浪费</li>
+        <li>故障时自动重新调度，无需人工干预</li>
+      </ul>
+    </div>
+    <div class="sc-visual">
+      <div class="sc-visual-inner">
+        <div class="sc-visual-icon">&#128640;</div>
+        <div class="sc-visual-label">调度引擎实时决策视图</div>
+      </div>
+    </div>
+  </div>
+  <div class="showcase-row reverse">
+    <div class="sc-text">
+      <h3>透明计费，<br>每度电有据可查</h3>
+      <p>系统严格按峰/平/谷时段拆分充电电量，分别套用对应电价与服务费率，充电结束立即生成完整详单。</p>
+      <ul class="sc-list">
+        <li>峰时 1.0元/kWh · 平时 0.7元/kWh · 谷时 0.4元/kWh</li>
+        <li>服务费 0.8元/kWh 统一费率</li>
+        <li>详单包含起止时间、各时段电量、总费用</li>
+      </ul>
+    </div>
+    <div class="sc-visual">
+      <div class="sc-visual-inner">
+        <div class="sc-visual-icon">&#128203;</div>
+        <div class="sc-visual-label">结构化计费详单预览</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BILLING -->
+<section class="billing-section" id="billing">
+  <div class="section-header">
+    <h2>费率标准</h2>
+    <p>峰平谷分时电价 + 统一服务费</p>
+  </div>
+  <div class="bill-grid">
+    <div class="bill-card">
+      <div class="bill-card-label">峰时电价</div>
+      <div class="bill-card-val">1.0</div>
+      <div class="bill-card-unit">元 / kWh（10:00–15:00, 18:00–21:00）</div>
+    </div>
+    <div class="bill-card">
+      <div class="bill-card-label">平时电价</div>
+      <div class="bill-card-val">0.7</div>
+      <div class="bill-card-unit">元 / kWh（07:00–10:00, 15:00–18:00, 21:00–23:00）</div>
+    </div>
+    <div class="bill-card">
+      <div class="bill-card-label">谷时电价</div>
+      <div class="bill-card-val">0.4</div>
+      <div class="bill-card-unit">元 / kWh（23:00–07:00）</div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+  <div class="stat-item"><div class="stat-icon">&#9889;</div><div class="stat-num">10</div><div class="stat-label">充电桩总数</div></div>
+  <div class="stat-item"><div class="stat-icon">&#128296;</div><div class="stat-num">30kW</div><div class="stat-label">快充功率</div></div>
+  <div class="stat-item"><div class="stat-icon">&#128260;</div><div class="stat-num">3</div><div class="stat-label">调度模式</div></div>
+  <div class="stat-item"><div class="stat-icon">&#128337;</div><div class="stat-num">24/7</div><div class="stat-label">不间断服务</div></div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>准备好开始了吗？</h2>
+  <p>注册账号即可体验完整的智能充电调度与计费流程</p>
+  <button class="btn-hero btn-hero-primary" onclick="openModal('register')">免费注册</button>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-left">&copy; 2026 智能充电桩调度计费系统 · 北京邮电大学 课程项目</div>
+    <div class="footer-links">
+      <a href="#features">功能</a>
+      <a href="#how">流程</a>
+      <a href="#billing">计费</a>
+    </div>
+  </div>
+</footer>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <div class="modal-header"><h2>欢迎使用</h2><p>请登录或注册您的账号</p></div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="login" onclick="switchTab('login')">登录</button>
+      <button class="tab-btn" data-tab="register" onclick="switchTab('register')">注册</button>
+      <div class="tab-ind" id="tabInd"></div>
+    </div>
+    <div class="form-wrap">
+      <form class="auth-form active" id="loginForm" onsubmit="return handleLogin(event)">
+        <div class="fg"><label>用户名</label><input type="text" id="lUser" placeholder="请输入用户名"><span class="err-msg">请输入用户名</span></div>
+        <div class="fg"><label>密码</label><input type="password" id="lPwd" placeholder="请输入密码"><span class="err-msg">请输入密码</span></div>
+        <button type="submit" class="btn-submit login">登 录</button>
+        <div class="switch-text">没有账号？<a onclick="switchTab('register')">立即注册</a></div>
+      </form>
+      <form class="auth-form" id="regForm" onsubmit="return handleReg(event)">
+        <div class="fg"><label>用户名</label><input type="text" id="rUser" placeholder="请输入用户名"><span class="err-msg">请输入用户名</span></div>
+        <div class="fg"><label>密码</label><input type="password" id="rPwd" placeholder="请输入密码"><span class="err-msg">请输入密码</span></div>
+        <div class="fg"><label>确认密码</label><input type="password" id="rPwd2" placeholder="再次输入密码"><span class="err-msg">两次密码不一致</span></div>
+        <div class="fg"><label>电池容量 (kWh)</label><input type="number" id="rCap" placeholder="例如 60" min="1" step="0.1"><span class="err-msg">请输入电池容量</span><div class="hint">系统据此计算预估充电时间</div></div>
+        <button type="submit" class="btn-submit register">注 册</button>
+        <div class="switch-text">已有账号？<a onclick="switchTab('login')">返回登录</a></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('scroll', function() { document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 10); });
+function openModal(tab) { document.getElementById('modal').classList.add('active'); document.body.style.overflow = 'hidden'; if (tab) switchTab(tab); }
+function closeModal() { document.getElementById('modal').classList.remove('active'); document.body.style.overflow = ''; }
+document.getElementById('modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+function switchTab(t) {
+  var lf = document.getElementById('loginForm'), rf = document.getElementById('regForm'), ind = document.getElementById('tabInd');
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === t); });
+  if (t === 'login') { ind.classList.remove('reg'); lf.classList.add('active'); rf.classList.remove('active'); }
+  else { ind.classList.add('reg'); rf.classList.add('active'); lf.classList.remove('active'); }
+  clearErr();
+}
+function vali(ids) { var ok = true; ids.forEach(function(id) { var el = document.getElementById(id); if (!el.value.trim()) { el.classList.add('err'); ok = false; } else { el.classList.remove('err'); } }); return ok; }
+function clearErr() { document.querySelectorAll('.err').forEach(function(e) { e.classList.remove('err'); }); }
+function handleLogin(e) { e.preventDefault(); if (!vali(['lUser','lPwd'])) return false; var u = document.getElementById('lUser').value.trim(); alert('POST /api/auth/login\n{ username: "'+u+'", password: "***" }\n\n模拟: 保存 token, user_id, role'); if (u === 'admin') { location.href = 'admin-overview.html'; } else { location.href = 'user-workspace.html'; } return false; }
+function handleReg(e) { e.preventDefault(); if (!vali(['rUser','rPwd','rPwd2','rCap'])) return false; if (document.getElementById('rPwd').value !== document.getElementById('rPwd2').value) { document.getElementById('rPwd2').classList.add('err'); return false; } var cap = document.getElementById('rCap').value; if (parseFloat(cap) <= 0) { document.getElementById('rCap').classList.add('err'); return false; } alert('POST /api/auth/register\n{ username, password, battery_capacity: '+cap+' }\n\n注册成功，跳转用户工作台'); location.href = 'user-workspace.html'; return false; }
+</script>
+</body>
+</html>

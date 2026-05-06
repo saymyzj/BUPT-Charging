@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>管理总览 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--dark); font-size: 12px; font-weight: 600; color: white; }
+
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; transition: 0.2s; }
+.stat:hover { border-color: var(--primary-light); box-shadow: 0 2px 12px rgba(16,185,129,0.06); }
+.stat-label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.stat-label::before { content: ""; width: 6px; height: 6px; border-radius: 2px; }
+.stat-label.green::before { background: var(--primary); }
+.stat-label.amber::before { background: var(--amber); }
+.stat-label.red::before { background: var(--error); }
+.stat-label.blue::before { background: var(--blue); }
+.stat-label.gray::before { background: var(--text3); }
+.stat-val { font-size: 26px; font-weight: 700; color: var(--dark); letter-spacing: -1px; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 6px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.full { margin-bottom: 16px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: 0.2s; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.card-body { padding: 20px; }
+
+/* STATION GRID */
+.station-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.sg-item { padding: 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); text-align: center; cursor: pointer; transition: 0.15s; }
+.sg-item:hover { border-color: var(--primary); background: var(--primary-wash); }
+.sg-name { font-size: 14px; font-weight: 700; color: var(--dark); }
+.sg-type { font-size: 10px; color: var(--text3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.sg-status { font-size: 11px; font-weight: 600; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.sg-status::before { content:""; width: 6px; height: 6px; border-radius: 50%; }
+.sg-status.on { color: var(--primary-dark); }
+.sg-status.on::before { background: var(--primary); }
+.sg-status.off { color: var(--text3); }
+.sg-status.off::before { background: var(--text3); }
+.sg-status.err { color: var(--error); }
+.sg-status.err::before { background: var(--error); }
+.sg-queue { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+/* WAITING AREA */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text2); }
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--primary-wash); }
+table.t td strong { color: var(--text); font-weight: 600; }
+
+/* MODAL */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(17,24,39,0.4); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 28px; width: 480px; max-height: 80vh; overflow-y: auto; box-shadow: 0 24px 48px rgba(0,0,0,0.12); }
+.modal h3 { font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 16px; }
+.modal-close { float: right; background: none; border: none; font-size: 18px; color: var(--text3); cursor: pointer; }
+.modal-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.modal-row:last-child { border-bottom: none; }
+.modal-row .mk { color: var(--text2); }
+.modal-row .mv { font-weight: 600; color: var(--dark); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统 · 管理端
+  </div>
+  <div class="nav-links">
+    <a class="active" href="admin-overview.html">总览</a>
+    <a href="admin-config.html">系统配置</a>
+    <a href="admin-faults.html">设备控制</a>
+    <a href="admin-users.html">用户管理</a>
+    <a href="admin-statistics.html">报表统计</a>
+  </div>
+  <div class="nav-admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+    admin
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>管理总览</h1>
+    <p>充电桩运行状态、等候区与队列实时概况</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label green">运行中</div><div class="stat-val">7</div><div class="stat-sub">正常运行桩位</div></div>
+    <div class="stat"><div class="stat-label gray">已关闭</div><div class="stat-val">2</div><div class="stat-sub">手动关闭桩位</div></div>
+    <div class="stat"><div class="stat-label red">故障</div><div class="stat-val">1</div><div class="stat-sub">FAST_03</div></div>
+    <div class="stat"><div class="stat-label amber">等候区</div><div class="stat-val">12 / 20</div><div class="stat-sub">当前等候车辆</div></div>
+    <div class="stat"><div class="stat-label blue">总队列</div><div class="stat-val">8</div><div class="stat-sub">各桩队列车辆之和</div></div>
+  </div>
+
+  <div class="full">
+    <div class="card">
+      <div class="card-head"><h3>充电桩状态</h3><span class="card-tag">GET /api/admin/stations</span></div>
+      <div class="card-body">
+        <div class="station-grid" id="stationGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>等候区车辆</h3><span class="card-tag">GET /api/admin/waiting-area</span></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>排队号</th><th>用户</th><th>模式</th><th>电量</th><th>提交时间</th></tr></thead>
+          <tbody>
+            <tr><td><strong>F1</strong></td><td>car_user_01</td><td>快充</td><td>50 kWh</td><td>09:45</td></tr>
+            <tr><td><strong>F2</strong></td><td>car_user_04</td><td>快充</td><td>30 kWh</td><td>09:52</td></tr>
+            <tr><td><strong>F3</strong></td><td>car_user_02</td><td>快充</td><td>45 kWh</td><td>10:05</td></tr>
+            <tr><td><strong>T1</strong></td><td>car_user_03</td><td>慢充</td><td>25 kWh</td><td>10:10</td></tr>
+            <tr><td><strong>T2</strong></td><td>car_user_05</td><td>慢充</td><td>60 kWh</td><td>10:18</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>系统事件</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>时间</th><th>事件</th></tr></thead>
+          <tbody>
+            <tr><td>10:15</td><td>FAST_03 标记故障，队列 2 车回等候区</td></tr>
+            <tr><td>10:12</td><td>car_user_04 请求进入等候区 (F2)</td></tr>
+            <tr><td>10:08</td><td>FAST_01 充电完成，car_user_06 结算 ¥72.50</td></tr>
+            <tr><td>10:05</td><td>car_user_02 请求进入等候区 (F3)</td></tr>
+            <tr><td>09:58</td><td>调度: F1→FAST_04 桩队列</td></tr>
+            <tr><td>09:52</td><td>car_user_04 请求进入等候区 (F2)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Queue Detail Modal -->
+<div class="modal-overlay" id="queueModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <h3 id="modalTitle">桩队列详情</h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+var stations = [
+  {code:'FAST_01',type:'FAST',status:'RUNNING',current:'REQ_006',queue:2},
+  {code:'FAST_02',type:'FAST',status:'RUNNING',current:'REQ_008',queue:1},
+  {code:'FAST_03',type:'FAST',status:'FAULT',current:null,queue:0},
+  {code:'FAST_04',type:'FAST',status:'RUNNING',current:'REQ_010',queue:2},
+  {code:'FAST_05',type:'FAST',status:'SHUTDOWN',current:null,queue:0},
+  {code:'SLOW_01',type:'SLOW',status:'RUNNING',current:'REQ_012',queue:1},
+  {code:'SLOW_02',type:'SLOW',status:'RUNNING',current:'REQ_014',queue:1},
+  {code:'SLOW_03',type:'SLOW',status:'RUNNING',current:'REQ_016',queue:1},
+  {code:'SLOW_04',type:'SLOW',status:'SHUTDOWN',current:null,queue:0},
+  {code:'SLOW_05',type:'SLOW',status:'RUNNING',current:null,queue:0}
+];
+
+(function render(){
+  var grid = document.getElementById('stationGrid');
+  grid.innerHTML = '';
+  stations.forEach(function(s,i){
+    var sc = s.status==='RUNNING'?'on':s.status==='FAULT'?'err':'off';
+    var st = s.status==='RUNNING'?'运行中':s.status==='FAULT'?'故障':'已关闭';
+    grid.innerHTML += '<div class="sg-item" onclick="showQueue('+i+')">'
+      +'<div class="sg-name">'+s.code+'</div>'
+      +'<div class="sg-type">'+(s.type==='FAST'?'快充 30kW':'慢充 10kW')+'</div>'
+      +'<div class="sg-status '+sc+'">'+st+'</div>'
+      +'<div class="sg-queue">当前: '+(s.current||'空闲')+' · 队列: '+s.queue+'</div>'
+      +'</div>';
+  });
+})();
+
+function showQueue(i){
+  var s = stations[i];
+  document.getElementById('modalTitle').textContent = s.code + ' · 队列详情';
+  document.getElementById('modalBody').innerHTML =
+    '<div class="modal-row"><span class="mk">桩编号</span><span class="mv">'+s.code+'</span></div>'
+    +'<div class="modal-row"><span class="mk">类型</span><span class="mv">'+(s.type==='FAST'?'快充 30kW':'慢充 10kW')+'</span></div>'
+    +'<div class="modal-row"><span class="mk">状态</span><span class="mv">'+s.status+'</span></div>'
+    +'<div class="modal-row"><span class="mk">正在服务</span><span class="mv">'+(s.current||'无')+'</span></div>'
+    +'<div class="modal-row"><span class="mk">队列长度</span><span class="mv">'+s.queue+' / 3</span></div>';
+  document.getElementById('queueModal').classList.add('active');
+}
+function closeModal(){ document.getElementById('queueModal').classList.remove('active'); }
+document.getElementById('queueModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+</script>
+</body>
+</html>
