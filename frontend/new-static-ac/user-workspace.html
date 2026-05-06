@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>用户工作台 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-deeper: #047857;
+  --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-user { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; font-weight: 500; text-decoration: none; color: var(--text2); transition: 0.15s; }
+.nav-user:hover { border-color: var(--primary); color: var(--primary-dark); }
+
+/* PAGE */
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+
+/* HEADER */
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; transition: border-color 0.2s, box-shadow 0.2s; }
+.stat:hover { border-color: var(--primary-light); box-shadow: 0 2px 12px rgba(16,185,129,0.06); }
+.stat-label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.stat-label::before { content: ""; width: 6px; height: 6px; border-radius: 2px; }
+.stat-label.green::before { background: var(--primary); }
+.stat-label.blue::before { background: var(--blue); }
+.stat-label.amber::before { background: var(--amber); }
+.stat-label.gray::before { background: var(--text3); }
+.stat-val { font-size: 26px; font-weight: 700; color: var(--dark); letter-spacing: -1px; line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 6px; }
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+/* CARD */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); letter-spacing: -0.2px; }
+.card-tag { font-size: 11px; font-family: "SF Mono", "Fira Code", monospace; color: var(--text3); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); color: var(--primary-dark); }
+.card-body { padding: 20px; }
+
+/* FORM */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.field label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 6px; }
+.field select, .field input { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: var(--font); color: var(--text); outline: none; transition: 0.15s; appearance: none; -webkit-appearance: none; }
+.field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236b7280' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.field select:focus, .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+
+/* BUTTONS */
+.btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
+.btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary-dark); }
+
+/* RESULT */
+.result { display: none; margin-top: 16px; padding: 16px; border-radius: 10px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.result.show { display: block; animation: fadeUp 0.2s ease; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+.result-title { font-size: 12px; font-weight: 600; color: var(--primary-dark); margin-bottom: 12px; }
+.result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.r-item { padding: 10px 12px; border-radius: 8px; background: white; border: 1px solid var(--primary-pale); }
+.r-item .rl { font-size: 10px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.r-item .rv { font-size: 15px; font-weight: 700; color: var(--dark); margin-top: 2px; }
+
+.error-box { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: var(--error); font-size: 13px; font-weight: 500; }
+.error-box.show { display: block; }
+
+/* BADGE */
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge::before { content:""; width: 6px; height: 6px; border-radius: 50%; }
+.badge-amber { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.badge-amber::before { background: var(--amber); }
+.badge-green { background: var(--primary-wash); color: var(--primary-dark); border: 1px solid var(--primary-pale); }
+.badge-green::before { background: var(--primary); }
+
+/* METRICS */
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.metric { padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); }
+.metric .m-label { font-size: 11px; color: var(--text3); font-weight: 500; }
+.metric .m-val { font-size: 18px; font-weight: 700; color: var(--dark); margin-top: 4px; letter-spacing: -0.3px; }
+
+/* TABLE */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text2); }
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--primary-wash); }
+table.t td strong { color: var(--text); font-weight: 600; }
+
+/* PILE GRID */
+.piles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.pile { padding: 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); text-align: center; transition: 0.15s; }
+.pile:hover { border-color: var(--primary-light); }
+.pile-name { font-size: 13px; font-weight: 700; color: var(--dark); }
+.pile-status { font-size: 11px; margin-top: 4px; font-weight: 500; }
+.pile-status.on { color: var(--primary-dark); }
+.pile-status.off { color: var(--text3); }
+.pile-status.err { color: var(--error); }
+.pile-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+
+/* PRICE LIST */
+.price-row { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.price-row:last-child { border-bottom: none; }
+.price-dot { width: 8px; height: 8px; border-radius: 3px; margin-right: 14px; flex-shrink: 0; }
+.price-info { flex: 1; }
+.price-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.price-time { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.price-val { font-size: 16px; font-weight: 700; color: var(--primary-dark); letter-spacing: -0.3px; }
+
+/* FLOW */
+.flow-item { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.flow-item:last-child { border-bottom: none; }
+.flow-num { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.flow-text { font-size: 13px; font-weight: 500; color: var(--text); }
+.flow-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统
+  </div>
+  <div class="nav-links">
+    <a class="active" href="user-workspace.html">工作台</a>
+    <a href="user-task.html">当前请求</a>
+    <a href="user-account.html">详单与账户</a>
+  </div>
+  <a href="user-account.html" class="nav-user">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+    car_user
+  </a>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>工作台</h1>
+    <p>提交充电请求，实时追踪调度状态</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-label green">快充桩</div><div class="stat-val">5</div><div class="stat-sub">30kW × 5 座</div></div>
+    <div class="stat"><div class="stat-label blue">慢充桩</div><div class="stat-val">5</div><div class="stat-sub">10kW × 5 座</div></div>
+    <div class="stat"><div class="stat-label amber">等候区</div><div class="stat-val">20</div><div class="stat-sub">容量上限</div></div>
+    <div class="stat"><div class="stat-label gray">排队中</div><div class="stat-val">12</div><div class="stat-sub">当前等待车辆</div></div>
+    <div class="stat"><div class="stat-label green">我的充电</div><div class="stat-val">7</div><div class="stat-sub">累计完成次数</div></div>
+  </div>
+
+  <!-- Row 1 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>提交充电请求</h3><span class="card-tag">POST /api/request/create</span></div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field"><label>充电模式</label><select id="chargeMode"><option value="FAST">快充 (FAST) — 30kW</option><option value="SLOW">慢充 (SLOW) — 10kW</option></select></div>
+          <div class="field"><label>请求电量 (kWh)</label><input type="number" id="requestEnergy" value="40" min="0.1" max="300" step="0.1"></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="submitRequest()">提交请求</button>
+          <button class="btn btn-secondary" onclick="location.href='user-task.html'">查看当前请求 →</button>
+        </div>
+        <div class="error-box" id="errorBox"></div>
+        <div class="result" id="resultBox">
+          <div class="result-title">&#10003; 请求提交成功</div>
+          <div class="result-grid">
+            <div class="r-item"><div class="rl">请求编号</div><div class="rv" id="resId">--</div></div>
+            <div class="r-item"><div class="rl">排队号</div><div class="rv" id="resQueue">--</div></div>
+            <div class="r-item"><div class="rl">状态</div><div class="rv" id="resStatus">--</div></div>
+            <div class="r-item"><div class="rl">模式</div><div class="rv" id="resMode">--</div></div>
+            <div class="r-item"><div class="rl">电量</div><div class="rv" id="resEnergy">--</div></div>
+            <div class="r-item"><div class="rl">前车数量</div><div class="rv" id="resFront">--</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>当前请求</h3><span class="badge badge-amber">等候区等待</span></div>
+      <div class="card-body">
+        <div class="metrics">
+          <div class="metric"><div class="m-label">排队号</div><div class="m-val">F3</div></div>
+          <div class="metric"><div class="m-label">前车数量</div><div class="m-val">2</div></div>
+          <div class="metric"><div class="m-label">充电模式</div><div class="m-val">快充</div></div>
+          <div class="metric"><div class="m-label">请求电量</div><div class="m-val">45 kWh</div></div>
+          <div class="metric"><div class="m-label">预计等待</div><div class="m-val">~8 min</div></div>
+          <div class="metric"><div class="m-label">桩位</div><div class="m-val">分配中</div></div>
+        </div>
+        <div style="margin-top:16px;"><button class="btn btn-secondary" onclick="location.href='user-task.html'" style="width:100%;justify-content:center;">查看完整详情 →</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>近期充电记录</h3><span class="card-tag">GET /api/request/detail</span></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>时间</th><th>桩位</th><th>电量</th><th>充电费</th><th>服务费</th><th>合计</th></tr></thead>
+          <tbody>
+            <tr><td>05-03 11:05</td><td><strong>FAST_02</strong></td><td>42.5 kWh</td><td>¥31.75</td><td>¥34.00</td><td><strong>¥65.75</strong></td></tr>
+            <tr><td>05-02 09:30</td><td><strong>SLOW_01</strong></td><td>28.0 kWh</td><td>¥19.60</td><td>¥22.40</td><td><strong>¥42.00</strong></td></tr>
+            <tr><td>05-01 14:20</td><td><strong>FAST_04</strong></td><td>55.0 kWh</td><td>¥41.25</td><td>¥44.00</td><td><strong>¥85.25</strong></td></tr>
+            <tr><td>04-30 08:15</td><td><strong>SLOW_03</strong></td><td>35.0 kWh</td><td>¥24.50</td><td>¥28.00</td><td><strong>¥52.50</strong></td></tr>
+            <tr><td>04-29 20:00</td><td><strong>FAST_01</strong></td><td>60.0 kWh</td><td>¥48.00</td><td>¥48.00</td><td><strong>¥96.00</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>充电桩状态</h3></div>
+      <div class="card-body">
+        <div style="font-size:11px;color:var(--text3);font-weight:500;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">快充桩</div>
+        <div class="piles">
+          <div class="pile"><div class="pile-name">F01</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">F02</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">F03</div><div class="pile-status err"><span class="pile-dot" style="background:var(--error);"></span>故障</div></div>
+          <div class="pile"><div class="pile-name">F04</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">F05</div><div class="pile-status off"><span class="pile-dot" style="background:var(--text3);"></span>关闭</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);font-weight:500;margin:14px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">慢充桩</div>
+        <div class="piles">
+          <div class="pile"><div class="pile-name">S01</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">S02</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">S03</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+          <div class="pile"><div class="pile-name">S04</div><div class="pile-status off"><span class="pile-dot" style="background:var(--text3);"></span>关闭</div></div>
+          <div class="pile"><div class="pile-name">S05</div><div class="pile-status on"><span class="pile-dot" style="background:var(--primary);"></span>运行</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>电价时段</h3></div>
+      <div class="card-body">
+        <div class="price-row"><div class="price-dot" style="background:#ef4444;"></div><div class="price-info"><div class="price-name">峰时</div><div class="price-time">10:00–15:00, 18:00–21:00</div></div><div class="price-val">¥1.0/kWh</div></div>
+        <div class="price-row"><div class="price-dot" style="background:#f59e0b;"></div><div class="price-info"><div class="price-name">平时</div><div class="price-time">07:00–10:00, 15:00–18:00, 21:00–23:00</div></div><div class="price-val">¥0.7/kWh</div></div>
+        <div class="price-row"><div class="price-dot" style="background:#3b82f6;"></div><div class="price-info"><div class="price-name">谷时</div><div class="price-time">23:00–07:00</div></div><div class="price-val">¥0.4/kWh</div></div>
+        <div class="price-row"><div class="price-dot" style="background:var(--primary);"></div><div class="price-info"><div class="price-name">服务费</div><div class="price-time">全时段固定费率</div></div><div class="price-val">¥0.8/kWh</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>充电流程</h3></div>
+      <div class="card-body">
+        <div class="flow-item"><div class="flow-num">1</div><div><div class="flow-text">提交充电请求</div><div class="flow-sub">选择快充/慢充，填写请求电量 (0, 300] kWh</div></div></div>
+        <div class="flow-item"><div class="flow-num">2</div><div><div class="flow-text">等候区排队</div><div class="flow-sub">按提交时间排序，容量上限 20 辆</div></div></div>
+        <div class="flow-item"><div class="flow-num">3</div><div><div class="flow-text">调度分配桩位</div><div class="flow-sub">最短完成时间策略自动分配</div></div></div>
+        <div class="flow-item"><div class="flow-num">4</div><div><div class="flow-text">充电中</div><div class="flow-sub">到达桩队列首位后自动启动</div></div></div>
+        <div class="flow-item"><div class="flow-num">5</div><div><div class="flow-text">完成 · 结算</div><div class="flow-sub">各时段电量×电价 + 服务费 = 总费用</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 检查是否有活跃请求（排队中/充电中），有则禁用提交表单
+function checkActiveRequest() {
+  var stored = sessionStorage.getItem('current_request');
+  if (!stored) return false;
+  var req = JSON.parse(stored);
+  var activeStates = ['WAITING_AREA', 'IN_STATION_QUEUE', 'CHARGING'];
+  return activeStates.indexOf(req.request_status) !== -1;
+}
+
+function lockForm() {
+  var btn = document.querySelector('.btn-primary');
+  var fields = document.querySelectorAll('#chargeMode, #requestEnergy');
+  btn.disabled = true;
+  btn.textContent = '当前有进行中的请求';
+  btn.style.opacity = '0.4';
+  btn.style.cursor = 'not-allowed';
+  fields.forEach(function(f) { f.disabled = true; f.style.opacity = '0.5'; });
+  // 显示提示
+  var errBox = document.getElementById('errorBox');
+  errBox.innerHTML = '您已有进行中的充电请求，完成或取消后方可提交新请求。<a href="user-task.html" style="color:var(--primary-dark);font-weight:600;margin-left:6px;">查看当前请求 →</a>';
+  errBox.className = 'error-box show';
+  errBox.style.background = '#fffbeb';
+  errBox.style.borderColor = '#fde68a';
+  errBox.style.color = '#92400e';
+}
+
+function submitRequest() {
+  if (checkActiveRequest()) { lockForm(); return; }
+
+  var mode = document.getElementById('chargeMode').value;
+  var energy = parseFloat(document.getElementById('requestEnergy').value);
+  var errBox = document.getElementById('errorBox');
+  var resBox = document.getElementById('resultBox');
+  errBox.className = 'error-box'; errBox.removeAttribute('style');
+  resBox.className = 'result';
+
+  if (!energy || energy <= 0 || energy > 300) {
+    errBox.innerHTML = '请求电量不合法，请输入 0–300 kWh 之间的数值';
+    errBox.className = 'error-box show'; return;
+  }
+
+  var q = mode==='FAST' ? 'F'+(Math.floor(Math.random()*9)+1) : 'T'+(Math.floor(Math.random()*9)+1);
+  var id = 'REQ_' + Date.now().toString(36).toUpperCase();
+  var f = Math.floor(Math.random()*6);
+  document.getElementById('resId').textContent = id;
+  document.getElementById('resQueue').textContent = q;
+  document.getElementById('resStatus').textContent = '等候区等待';
+  document.getElementById('resMode').textContent = mode==='FAST' ? '快充' : '慢充';
+  document.getElementById('resEnergy').textContent = energy + ' kWh';
+  document.getElementById('resFront').textContent = f + ' 辆';
+  resBox.className = 'result show';
+
+  sessionStorage.setItem('current_request', JSON.stringify({
+    request_id:id, queue_number:q, charge_mode:mode, request_energy:energy,
+    request_status:'WAITING_AREA', front_waiting_count:f,
+    station_code:null, station_queue_position:null,
+    estimated_wait_seconds:600+Math.floor(Math.random()*600),
+    estimated_start_time:'2026-05-04T10:20:00', estimated_finish_time:'2026-05-04T11:40:00'
+  }));
+
+  // 提交成功后立即锁定表单
+  lockForm();
+}
+
+// 页面加载时检查
+window.addEventListener('DOMContentLoaded', function() {
+  if (checkActiveRequest()) { lockForm(); }
+});
+</script>
+</body>
+</html>

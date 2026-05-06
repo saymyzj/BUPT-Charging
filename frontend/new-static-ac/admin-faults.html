@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>设备控制 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--dark); font-size: 12px; font-weight: 600; color: white; }
+
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+.grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.full { margin-bottom: 16px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: 0.2s; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.card-body { padding: 20px; }
+
+/* DEVICE LIST */
+.device-list { display: flex; flex-direction: column; gap: 8px; }
+.device-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); transition: 0.15s; }
+.device-row:hover { border-color: var(--primary-pale); background: var(--primary-wash); }
+.dr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dr-dot.on { background: var(--primary); box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+.dr-dot.err { background: var(--error); box-shadow: 0 0 6px rgba(239,68,68,0.4); }
+.dr-dot.off { background: var(--text3); }
+.dr-info { flex: 1; }
+.dr-code { font-size: 14px; font-weight: 700; color: var(--dark); }
+.dr-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.dr-meta strong { color: var(--dark); }
+
+.dr-badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.dr-badge.on { background: var(--primary-wash); color: var(--primary-dark); border: 1px solid var(--primary-pale); }
+.dr-badge.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+.dr-badge.off { background: #f9fafb; color: var(--text3); border: 1px solid var(--border); }
+
+.dr-actions { display: flex; gap: 6px; }
+.btn { padding: 7px 14px; border-radius: 7px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+.btn-green { background: var(--primary); color: white; }
+.btn-green:hover { background: var(--primary-dark); }
+.btn-amber { background: var(--amber); color: white; }
+.btn-amber:hover { background: #d97706; }
+.btn-outline { background: white; border: 1px solid var(--border); color: var(--text2); }
+.btn-outline:hover { border-color: var(--dark); color: var(--dark); }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* RULES TABLE */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 10px 14px; font-size: 12px; border-bottom: 1px solid var(--border); }
+table.t tr:last-child td { border-bottom: none; }
+table.t code { font-size: 11px; background: var(--bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统 · 管理端
+  </div>
+  <div class="nav-links">
+    <a href="admin-overview.html">总览</a>
+    <a href="admin-config.html">系统配置</a>
+    <a class="active" href="admin-faults.html">设备控制</a>
+    <a href="admin-users.html">用户管理</a>
+    <a href="admin-statistics.html">报表统计</a>
+  </div>
+  <div class="nav-admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+    admin
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>设备控制</h1>
+    <p>启动、关闭、标记故障或恢复充电桩</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>设备控制面板</h3><span class="card-tag">POST /api/admin/stations/{code}/{action}</span></div>
+      <div class="card-body">
+        <div class="device-list" id="device-list"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>操作规则</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>当前状态</th><th>条件</th><th>可用操作</th></tr></thead>
+          <tbody>
+            <tr><td><code>SHUTDOWN</code></td><td>任意</td><td>启动</td></tr>
+            <tr><td><code>RUNNING</code></td><td>空闲且队列空</td><td>关闭、标记故障</td></tr>
+            <tr><td><code>RUNNING</code></td><td>有车/队列非空</td><td>标记故障</td></tr>
+            <tr><td><code>FAULT</code></td><td>任意</td><td>恢复</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var stations = [
+  {code:'FAST_01',type:'FAST',status:'RUNNING',current:'REQ_003',queue:2},
+  {code:'FAST_02',type:'FAST',status:'RUNNING',current:null,queue:0},
+  {code:'FAST_03',type:'FAST',status:'FAULT',current:null,queue:0},
+  {code:'FAST_04',type:'FAST',status:'RUNNING',current:'REQ_010',queue:1},
+  {code:'FAST_05',type:'FAST',status:'SHUTDOWN',current:null,queue:0},
+  {code:'SLOW_01',type:'SLOW',status:'RUNNING',current:'REQ_012',queue:3},
+  {code:'SLOW_02',type:'SLOW',status:'RUNNING',current:null,queue:0},
+  {code:'SLOW_03',type:'SLOW',status:'RUNNING',current:'REQ_018',queue:1},
+  {code:'SLOW_04',type:'SLOW',status:'SHUTDOWN',current:null,queue:0},
+  {code:'SLOW_05',type:'SLOW',status:'RUNNING',current:'REQ_020',queue:1}
+];
+
+function render(){
+  var list=document.getElementById('device-list');
+  list.innerHTML='';
+  stations.forEach(function(s,i){
+    var sc=s.status==='RUNNING'?'on':s.status==='FAULT'?'err':'off';
+    var st=s.status==='RUNNING'?'运行中':s.status==='FAULT'?'故障':'已关闭';
+    var hasWork=s.current||s.queue>0;
+    var actions='';
+    if(s.status==='SHUTDOWN') actions='<button class="btn btn-green" onclick="doAction('+i+',\'start\')">启动</button>';
+    else if(s.status==='FAULT') actions='<button class="btn btn-green" onclick="doAction('+i+',\'recover\')">恢复</button>';
+    else actions='<button class="btn btn-outline" onclick="doAction('+i+',\'shutdown\')"'+(hasWork?' disabled':'')+'>关闭</button><button class="btn btn-amber" onclick="doAction('+i+',\'fault\')">标记故障</button>';
+
+    list.innerHTML+='<div class="device-row">'
+      +'<div class="dr-dot '+sc+'"></div>'
+      +'<div class="dr-info"><div class="dr-code">'+s.code+'</div><div class="dr-meta">'+(s.type==='FAST'?'快充 30kW':'慢充 10kW')+' · 服务: <strong>'+(s.current||'空闲')+'</strong> · 队列: <strong>'+s.queue+'</strong></div></div>'
+      +'<div class="dr-badge '+sc+'">'+st+'</div>'
+      +'<div class="dr-actions">'+actions+'</div>'
+      +'</div>';
+  });
+}
+
+function doAction(idx,action){
+  var s=stations[idx];
+  if(action==='shutdown'&&(s.current||s.queue>0)){alert('不可关闭: 有车或队列不为空');return;}
+  alert('POST /api/admin/stations/'+s.code+'/'+action);
+  if(action==='start')s.status='RUNNING';
+  else if(action==='shutdown')s.status='SHUTDOWN';
+  else if(action==='fault'){s.status='FAULT';s.current=null;}
+  else if(action==='recover')s.status='RUNNING';
+  render();
+}
+window.onload=render;
+</script>
+</body>
+</html>

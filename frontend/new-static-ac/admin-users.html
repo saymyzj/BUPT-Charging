@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>用户管理 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-admin { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--dark); font-size: 12px; font-weight: 600; color: white; }
+
+.page { max-width: 1100px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: 0.2s; margin-bottom: 16px; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.card-body { padding: 0; }
+
+/* TABLE */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: middle; }
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--primary-wash); }
+table.t td strong { color: var(--text); font-weight: 600; }
+
+.badge-sm { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.badge-sm::before { content:""; width: 5px; height: 5px; border-radius: 50%; }
+.badge-active { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.badge-active::before { background: var(--amber); }
+.badge-idle { background: #f9fafb; color: var(--text3); border: 1px solid var(--border); }
+.badge-idle::before { background: var(--text3); }
+
+.btn { padding: 6px 12px; border-radius: 6px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.15s; }
+.btn-outline { background: white; border: 1px solid var(--border); color: var(--text2); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary-dark); }
+.btn-blue { background: var(--blue); color: white; }
+.btn-blue:hover { background: #2563eb; }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* MODAL */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(17,24,39,0.4); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 28px; width: 480px; box-shadow: 0 24px 48px rgba(0,0,0,0.12); }
+.modal h3 { font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 16px; }
+.modal-close { float: right; background: none; border: none; font-size: 18px; color: var(--text3); cursor: pointer; }
+.modal-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.modal-row:last-child { border-bottom: none; }
+.modal-row .mk { color: var(--text2); }
+.modal-row .mv { font-weight: 600; color: var(--dark); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统 · 管理端
+  </div>
+  <div class="nav-links">
+    <a href="admin-overview.html">总览</a>
+    <a href="admin-config.html">系统配置</a>
+    <a href="admin-faults.html">设备控制</a>
+    <a class="active" href="admin-users.html">用户管理</a>
+    <a href="admin-statistics.html">报表统计</a>
+  </div>
+  <div class="nav-admin">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+    admin
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>用户管理</h1>
+    <p>查看用户详情，管理车辆电池容量</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>用户列表</h3><span class="card-tag">GET /api/admin/users</span></div>
+    <div class="card-body">
+      <table class="t" id="userTable">
+        <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>电池容量</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead>
+        <tbody id="userBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <h3 id="modalTitle">用户详情</h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+var users=[
+  {user_id:1,username:'car_user_01',battery_capacity:60,role:'USER',created_at:'2026-04-01 10:00',has_active_request:true},
+  {user_id:2,username:'car_user_02',battery_capacity:75,role:'USER',created_at:'2026-04-02 14:30',has_active_request:false},
+  {user_id:3,username:'car_user_03',battery_capacity:50,role:'USER',created_at:'2026-04-03 09:15',has_active_request:false},
+  {user_id:4,username:'car_user_04',battery_capacity:100,role:'USER',created_at:'2026-04-05 16:20',has_active_request:true},
+  {user_id:5,username:'car_user_05',battery_capacity:45,role:'USER',created_at:'2026-04-06 11:45',has_active_request:false},
+  {user_id:10,username:'admin',battery_capacity:null,role:'ADMIN',created_at:'2026-03-01 08:00',has_active_request:false}
+];
+
+function render(){
+  var body=document.getElementById('userBody');
+  body.innerHTML='';
+  users.forEach(function(u,i){
+    var canEdit=!u.has_active_request&&u.role!=='ADMIN';
+    body.innerHTML+='<tr>'
+      +'<td><strong>'+u.user_id+'</strong></td>'
+      +'<td><strong>'+u.username+'</strong></td>'
+      +'<td>'+u.role+'</td>'
+      +'<td>'+(u.battery_capacity?u.battery_capacity+' kWh':'--')+'</td>'
+      +'<td><span class="badge-sm '+(u.has_active_request?'badge-active':'badge-idle')+'">'+(u.has_active_request?'活跃':'空闲')+'</span></td>'
+      +'<td>'+u.created_at+'</td>'
+      +'<td><button class="btn btn-outline" onclick="showDetail('+i+')">详情</button> <button class="btn btn-blue"'+(canEdit?'':' disabled')+' onclick="editBattery('+i+')">改容量</button></td>'
+      +'</tr>';
+  });
+}
+
+function showDetail(i){
+  var u=users[i];
+  document.getElementById('modalTitle').textContent=u.username;
+  document.getElementById('modalBody').innerHTML=
+    '<div class="modal-row"><span class="mk">用户ID</span><span class="mv">'+u.user_id+'</span></div>'
+    +'<div class="modal-row"><span class="mk">用户名</span><span class="mv">'+u.username+'</span></div>'
+    +'<div class="modal-row"><span class="mk">电池容量</span><span class="mv">'+(u.battery_capacity||'--')+' kWh</span></div>'
+    +'<div class="modal-row"><span class="mk">角色</span><span class="mv">'+u.role+'</span></div>'
+    +'<div class="modal-row"><span class="mk">注册时间</span><span class="mv">'+u.created_at+'</span></div>'
+    +'<div class="modal-row"><span class="mk">活跃请求</span><span class="mv">'+(u.has_active_request?'是':'否')+'</span></div>';
+  document.getElementById('userModal').classList.add('active');
+}
+
+function editBattery(i){
+  var u=users[i];
+  if(u.has_active_request){alert('用户有活跃请求，不可修改');return;}
+  var val=prompt('修改 '+u.username+' 电池容量 (当前 '+u.battery_capacity+' kWh):',u.battery_capacity);
+  if(!val)return;
+  var num=parseFloat(val);
+  if(!num||num<=0){alert('容量必须大于 0');return;}
+  alert('PUT /api/admin/users/'+u.user_id+'/battery-capacity\n{ battery_capacity: '+num+' }');
+  users[i].battery_capacity=num;
+  render();
+}
+
+function closeModal(){document.getElementById('userModal').classList.remove('active');}
+document.getElementById('userModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+window.onload=render;
+</script>
+</body>
+</html>

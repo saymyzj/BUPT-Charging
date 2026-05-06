@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>详单与账户 - 智能充电桩调度计费系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8faf9; --bg-card: #ffffff;
+  --primary: #10b981; --primary-dark: #059669; --primary-deeper: #047857;
+  --primary-light: #34d399; --primary-pale: #d1fae5; --primary-wash: #ecfdf5;
+  --dark: #111827; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --border: #e5e7eb; --border-hover: #d1d5db;
+  --error: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
+}
+body { font-family: var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: -0.3px; }
+.nav-brand svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: 0.15s; }
+.nav-links a.active { color: var(--primary-dark); background: var(--primary-wash); font-weight: 600; }
+.nav-links a:hover:not(.active) { color: var(--text); background: #f3f4f6; }
+.nav-user { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; font-weight: 500; text-decoration: none; color: var(--text2); transition: 0.15s; }
+.nav-user:hover { border-color: var(--primary); color: var(--primary-dark); }
+
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--dark); }
+.page-head p { font-size: 14px; color: var(--text2); margin-top: 4px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.full { margin-bottom: 16px; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+.card:hover { border-color: var(--border-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.card-head { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: 14px; font-weight: 600; color: var(--dark); }
+.card-tag { font-size: 11px; font-family: "SF Mono", "Fira Code", monospace; color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; background: var(--primary-wash); border: 1px solid var(--primary-pale); }
+.card-body { padding: 20px; }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; transition: border-color 0.2s; }
+.stat:hover { border-color: var(--primary-light); box-shadow: 0 2px 12px rgba(16,185,129,0.06); }
+.stat-label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 8px; }
+.stat-val { font-size: 26px; font-weight: 700; color: var(--dark); letter-spacing: -1px; line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 6px; }
+
+/* DETAIL GRID */
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.dg-item { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+.dg-item:nth-child(odd) { border-right: 1px solid var(--border); }
+.dg-key { font-size: 13px; color: var(--text2); }
+.dg-val { font-size: 13px; font-weight: 600; color: var(--dark); }
+
+/* FEE TABLE */
+table.t { width: 100%; border-collapse: collapse; }
+table.t th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text2); }
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--primary-wash); }
+table.t td strong { color: var(--text); font-weight: 600; }
+table.t tfoot td { font-weight: 700; color: var(--dark); border-top: 2px solid var(--border); }
+
+/* RULES */
+.rules { display: flex; flex-direction: column; gap: 0; }
+.rule-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.rule-item:last-child { border-bottom: none; }
+.rule-num { width: 22px; height: 22px; border-radius: 50%; background: var(--primary-wash); border: 1px solid var(--primary-pale); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--primary-dark); flex-shrink: 0; margin-top: 1px; }
+.rule-text { font-size: 13px; color: var(--text); line-height: 1.6; }
+.rule-text code { font-size: 12px; background: var(--bg); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-family: "SF Mono", monospace; }
+
+/* ORDERS TABLE */
+.badge-sm { display: inline-flex; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.badge-sm-green { background: var(--primary-wash); color: var(--primary-dark); }
+.badge-sm-gray { background: #f3f4f6; color: var(--text3); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="var(--primary)"/></svg>
+    充电调度系统
+  </div>
+  <div class="nav-links">
+    <a href="user-workspace.html">工作台</a>
+    <a href="user-task.html">当前请求</a>
+    <a class="active" href="user-account.html">详单与账户</a>
+  </div>
+  <a href="user-account.html" class="nav-user">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+    car_user
+  </a>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>详单与账户</h1>
+    <p>查看充电详单、费用明细与账户信息</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-label">累计充电</div><div class="stat-val">7 次</div><div class="stat-sub">2026年4月至今</div></div>
+    <div class="stat"><div class="stat-label">总电量</div><div class="stat-val">303 kWh</div><div class="stat-sub">快充 215 / 慢充 88</div></div>
+    <div class="stat"><div class="stat-label">总费用</div><div class="stat-val">¥541.50</div><div class="stat-sub">充电费 ¥278 + 服务费 ¥263</div></div>
+    <div class="stat"><div class="stat-label">电池容量</div><div class="stat-val">75 kWh</div><div class="stat-sub">注册时设置</div></div>
+  </div>
+
+  <!-- Order Detail + Fee Breakdown -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>最近一笔详单</h3><span class="card-tag">GET /api/request/detail/{id}</span></div>
+      <div class="card-body" style="padding:0;">
+        <div class="detail-grid">
+          <div class="dg-item"><span class="dg-key">订单编号</span><span class="dg-val">REQ_20260503B</span></div>
+          <div class="dg-item"><span class="dg-key">充电模式</span><span class="dg-val">快充 (FAST)</span></div>
+          <div class="dg-item"><span class="dg-key">请求电量</span><span class="dg-val">45.0 kWh</span></div>
+          <div class="dg-item"><span class="dg-key">实际电量</span><span class="dg-val">42.5 kWh</span></div>
+          <div class="dg-item"><span class="dg-key">充电桩</span><span class="dg-val">FAST_02</span></div>
+          <div class="dg-item"><span class="dg-key">开始时间</span><span class="dg-val">10:22</span></div>
+          <div class="dg-item"><span class="dg-key">结束时间</span><span class="dg-val">11:47</span></div>
+          <div class="dg-item"><span class="dg-key">充电时长</span><span class="dg-val">85 min</span></div>
+          <div class="dg-item"><span class="dg-key">充电费</span><span class="dg-val">¥31.75</span></div>
+          <div class="dg-item"><span class="dg-key">服务费</span><span class="dg-val">¥34.00</span></div>
+          <div class="dg-item" style="grid-column:1/-1;border-right:none;"><span class="dg-key">总费用</span><span class="dg-val" style="font-size:16px;color:var(--primary-dark);">¥65.75</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>费用明细（分时段）</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>时段</th><th>时间范围</th><th>电量</th><th>单价</th><th>电费</th><th>服务费</th></tr></thead>
+          <tbody>
+            <tr><td><strong>峰时</strong></td><td>10:22–11:00</td><td>19.0 kWh</td><td>¥1.0</td><td>¥19.00</td><td>¥15.20</td></tr>
+            <tr><td><strong>平时</strong></td><td>11:00–11:47</td><td>23.5 kWh</td><td>¥0.7</td><td>¥16.45</td><td>¥18.80</td></tr>
+            <tr><td><strong>谷时</strong></td><td>--</td><td>0 kWh</td><td>¥0.4</td><td>¥0.00</td><td>¥0.00</td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="4">合计</td><td>¥35.45</td><td>¥34.00</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- History + Rules -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>历史充电记录</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table class="t">
+          <thead><tr><th>编号</th><th>日期</th><th>桩位</th><th>电量</th><th>费用</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td><strong>REQ_03B</strong></td><td>05-03</td><td>FAST_02</td><td>42.5</td><td>¥65.75</td><td><span class="badge-sm badge-sm-green">完成</span></td></tr>
+            <tr><td><strong>REQ_02A</strong></td><td>05-02</td><td>SLOW_01</td><td>28.0</td><td>¥42.00</td><td><span class="badge-sm badge-sm-green">完成</span></td></tr>
+            <tr><td><strong>REQ_01C</strong></td><td>05-01</td><td>FAST_04</td><td>55.0</td><td>¥85.25</td><td><span class="badge-sm badge-sm-green">完成</span></td></tr>
+            <tr><td><strong>REQ_30B</strong></td><td>04-30</td><td>SLOW_03</td><td>35.0</td><td>¥52.50</td><td><span class="badge-sm badge-sm-green">完成</span></td></tr>
+            <tr><td><strong>REQ_29A</strong></td><td>04-29</td><td>FAST_01</td><td>60.0</td><td>¥96.00</td><td><span class="badge-sm badge-sm-green">完成</span></td></tr>
+            <tr><td><strong>REQ_28X</strong></td><td>04-28</td><td>FAST_03</td><td>30.0</td><td>--</td><td><span class="badge-sm badge-sm-gray">取消</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>计费规则</h3></div>
+      <div class="card-body">
+        <div class="rules">
+          <div class="rule-item"><div class="rule-num">1</div><div class="rule-text">充电费 = 各时段实际充电量 × 对应电价<br><code>峰 ¥1.0</code> <code>平 ¥0.7</code> <code>谷 ¥0.4</code></div></div>
+          <div class="rule-item"><div class="rule-num">2</div><div class="rule-text">服务费 = 总实际充电量 × <code>0.8 元/kWh</code></div></div>
+          <div class="rule-item"><div class="rule-num">3</div><div class="rule-text">总费用 = 充电费 + 服务费</div></div>
+          <div class="rule-item"><div class="rule-num">4</div><div class="rule-text">充电跨时段时按各段实际电量分别计算</div></div>
+          <div class="rule-item"><div class="rule-num">5</div><div class="rule-text">取消或未完成的请求不产生费用</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

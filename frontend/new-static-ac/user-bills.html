@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>我的账单 - 智能充电桩调度计费系统</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f8fafc;--panel:#fff;--line:#e2e8f0;--soft:#f1f5f9;--text:#0f172a;--sub:#334155;--muted:#64748b;--green:#16a34a;--green-dark:#15803d;--green-soft:#dcfce7;--amber-soft:#fef3c7;--blue-soft:#dbeafe;--mono:Consolas,"SFMono-Regular","Cascadia Mono",monospace;--font:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.5}.nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}.brand{display:flex;align-items:center;gap:10px;font-weight:800}.logo{width:32px;height:32px;border-radius:8px;background:var(--green);color:#fff;display:grid;place-items:center}.nav-links{display:flex;gap:4px}.nav-links a{text-decoration:none;color:var(--muted);font-size:14px;font-weight:700;padding:8px 12px;border-radius:8px}.nav-links a:hover{background:var(--soft);color:var(--text)}.user-chip{text-decoration:none;color:var(--sub);border:1px solid var(--line);background:#fff;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:800}.shell{max-width:1180px;margin:0 auto;padding:28px 32px 44px}.crumb{color:var(--muted);font-size:13px;margin-bottom:8px}.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:20px}h1{font-size:28px}.page-head p{color:var(--muted);font-size:14px;margin-top:6px}.grid{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.04);padding:22px}.profile{display:grid;gap:12px}.avatar{width:54px;height:54px;border-radius:14px;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:900}.meta-row{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:9px 0;font-size:13px}.meta-row span:first-child{color:var(--muted)}.meta-row span:last-child{font-weight:900}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}.summary div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 8px 24px rgba(15,23,42,.04)}.summary span{display:block;color:var(--muted);font-size:12px}.summary strong{font-family:var(--mono);font-size:22px}.card-hd{display:flex;justify-content:space-between;margin-bottom:16px}.api{font-family:var(--mono);color:var(--muted);font-size:12px;background:var(--soft);border-radius:8px;padding:5px 8px}.bill-list{display:grid;gap:10px}.bill-item{display:grid;grid-template-columns:1.2fr .9fr .75fr .75fr auto;gap:12px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff}.bill-item.current{border-color:#bbf7d0;background:#f0fdf4}.title{font-family:var(--mono);font-weight:900}.sub{font-size:12px;color:var(--muted)}.label{font-size:11px;color:var(--muted)}.value{font-family:var(--mono);font-weight:900}.status{display:inline-flex;justify-content:center;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.done{background:var(--green-soft);color:var(--green-dark)}.pending{background:var(--amber-soft);color:#92400e}.interrupted{background:var(--blue-soft);color:#1d4ed8}.btn{background:var(--green);color:#fff;text-decoration:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:900;text-align:center}
+@media(max-width:900px){.nav{padding:0 18px}.nav-links{display:none}.shell{padding:24px 18px}.page-head{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr}.summary{grid-template-columns:1fr}.bill-item{grid-template-columns:1fr 1fr}}
+</style>
+<link rel="stylesheet" href="ui-v4.css">
+</head>
+<body class="user-app">
+<nav class="nav">
+  <div class="brand"><div class="logo">E</div>充电调度系统</div>
+  <div class="nav-links">
+    <a href="user-workspace.html">发起调度</a>
+    <a href="user-task.html">实时监控台</a>
+    <a href="user-account.html">本次账单</a>
+  </div>
+  <a href="user-bills.html" class="user-chip">car_user</a>
+</nav>
+<main class="shell">
+  <div class="crumb">用户端 / 我的账单</div>
+  <header class="page-head">
+    <div><h1>我的账单</h1><p>头像入口展示用户维度的历史详单摘要，本次未确认账单仍在「本次账单」单独处理。</p></div>
+  </header>
+  <section class="grid">
+    <aside class="card profile">
+      <div class="avatar">U</div>
+      <div><h2>car_user</h2><p style="color:var(--muted);font-size:13px;">普通用户 · 电池容量 80 kWh</p></div>
+      <div class="meta-row"><span>历史详单</span><span>5 单</span></div>
+      <div class="meta-row"><span>累计充电</span><span>183.4 kWh</span></div>
+      <div class="meta-row"><span>累计费用</span><span>¥ 286.42</span></div>
+      <div class="meta-row"><span>最近账单</span><span>待确认</span></div>
+    </aside>
+    <section>
+      <div class="summary">
+        <div><span>最近未确认</span><strong>¥65.75</strong></div>
+        <div><span>本月充电</span><strong>96.8</strong></div>
+        <div><span>本月费用</span><strong>¥151.20</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><h2>历史详单</h2><span class="api">request_detail</span></div>
+        <div class="bill-list">
+          <div class="bill-item current"><div><div class="title">DTL_20260504_001</div><div class="sub">REQ_20260504_018 · FAST_02</div></div><div><div class="label">生成时间</div><div class="value">2026-05-04 11:05</div></div><div><div class="label">充电量</div><div class="value">42.5</div></div><div><div class="label">总费用</div><div class="value">¥65.75</div></div><a class="btn" href="user-account.html">查看</a></div>
+          <div class="bill-item"><div><div class="title">DTL_20260503_004</div><div class="sub">REQ_20260503_021 · SLOW_01</div></div><div><div class="label">生成时间</div><div class="value">2026-05-03 18:30</div></div><div><div class="label">充电量</div><div class="value">31.2</div></div><div><div class="label">总费用</div><div class="value">¥46.56</div></div><span class="status done">已确认</span></div>
+          <div class="bill-item"><div><div class="title">DTL_20260502_009</div><div class="sub">REQ_20260502_014 · FAST_04</div></div><div><div class="label">生成时间</div><div class="value">2026-05-02 09:42</div></div><div><div class="label">充电量</div><div class="value">10.0</div></div><div><div class="label">总费用</div><div class="value">¥15.80</div></div><span class="status interrupted">故障中断</span></div>
+          <div class="bill-item"><div><div class="title">DTL_20260501_006</div><div class="sub">REQ_20260501_012 · FAST_03</div></div><div><div class="label">生成时间</div><div class="value">2026-05-01 21:18</div></div><div><div class="label">充电量</div><div class="value">56.4</div></div><div><div class="label">总费用</div><div class="value">¥88.31</div></div><span class="status done">已确认</span></div>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>
+</body>
+</html>
