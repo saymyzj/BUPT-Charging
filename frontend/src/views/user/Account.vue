@@ -79,7 +79,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { getRequestDetail, getRequestDetails } from '@/api/charging'
+import { getRequestDetails } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
@@ -94,7 +94,7 @@ const payTip = computed(() => {
 })
 
 function billKey() {
-  const id = detail.value?.detail_id || detail.value?.request_id || localStorage.getItem('request_id')
+  const id = detail.value?.detail_id || detail.value?.request_id
   return id ? `bill_paid_${id}` : ''
 }
 
@@ -157,20 +157,12 @@ function fmtMoney(value) {
 }
 
 async function loadDetail() {
-  const rid = localStorage.getItem('request_id')
   loading.value = true
   try {
-    if (rid) {
-      const res = await getRequestDetail(rid)
-      const data = unwrapResponseData(res)
-      if (data.code === undefined || data.code === 0) detail.value = data
-    }
-    if (!detail.value) {
-      const res = await getRequestDetails()
-      const data = unwrapResponseData(res)
-      const details = Array.isArray(data) ? data : []
-      detail.value = details[0] || null
-    }
+    const res = await getRequestDetails()
+    const data = unwrapResponseData(res)
+    const details = Array.isArray(data) ? data : []
+    detail.value = details[0] || null
     loadLocalPayment()
   } catch (_) { /* silent */ }
   loading.value = false

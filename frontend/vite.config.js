@@ -2,6 +2,8 @@
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
+const apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000'
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -14,11 +16,11 @@ export default defineConfig({
     host: '0.0.0.0', // Ensure accessible via both 127.0.0.1 and localhost
     proxy: {
       '/health': {
-        target: 'http://127.0.0.1:5000',
+        target: apiTarget,
         changeOrigin: true
       },
       '/api': {
-        target: 'http://127.0.0.1:5000',
+        target: apiTarget,
         changeOrigin: true
       }
     }

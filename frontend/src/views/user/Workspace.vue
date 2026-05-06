@@ -21,25 +21,22 @@
           <div class="form-grid">
             <div class="field">
               <label>充电模式</label>
-              <select v-model="form.charge_mode" :disabled="hasActive || activeConflict">
+              <select v-model="form.charge_mode" :disabled="hasActive || syncingActive">
                 <option value="FAST">快充 (30kW)</option>
                 <option value="SLOW">慢充 (10kW)</option>
               </select>
             </div>
             <div class="field">
               <label>请求电量 (kWh)</label>
-              <input type="number" v-model.number="form.request_energy" placeholder="1 ~ 电池容量" :disabled="hasActive || activeConflict" min="1">
+              <input type="number" v-model.number="form.request_energy" placeholder="1 ~ 电池容量" :disabled="hasActive || syncingActive" min="1">
             </div>
           </div>
-          <button class="btn btn-primary" @click="submitRequest" :disabled="hasActive || activeConflict || submitting">
-            {{ hasActive || activeConflict ? '当前有进行中的请求' : submitting ? '提交中...' : '提交请求' }}
+          <button class="btn btn-primary" @click="submitRequest" :disabled="hasActive || syncingActive || submitting">
+            {{ hasActive ? '当前有进行中的请求' : syncingActive ? '同步中...' : submitting ? '提交中...' : '提交请求' }}
           </button>
 
           <!-- Error -->
           <div class="error-box" v-if="errMsg">{{ errMsg }}</div>
-          <div class="link-task" v-if="activeConflict">
-            <router-link to="/user/task">前往当前请求页重新同步状态</router-link>
-          </div>
 
           <!-- Result -->
           <div class="result" v-if="submitResult">
@@ -89,7 +86,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { createChargeRequest, getActiveRequest, getProfile, getRequestStatus } from '@/api/charging'
+import { createChargeRequest, getActiveRequest, getProfile } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 
@@ -99,7 +96,7 @@ const errMsg = ref('')
 const submitResult = ref(null)
 const currentReq = ref(null)
 const batteryCapacity = ref(null)
-const activeConflict = ref(localStorage.getItem('active_request_conflict') === '1')
+const syncingActive = ref(false)
 let pollTimer = null
 
 const hasActive = computed(() => {
@@ -138,35 +135,20 @@ function formatLocalDateTime(date = new Date()) {
   ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-function rememberActiveConflict() {
-  activeConflict.value = true
-  localStorage.setItem('active_request_conflict', '1')
-}
-
 function clearActiveConflict() {
-  activeConflict.value = false
   localStorage.removeItem('active_request_conflict')
-}
-
-function rememberRequestId(requestId) {
-  if (!requestId) return
-  let ids = []
-  try {
-    const stored = JSON.parse(localStorage.getItem('request_ids') || '[]')
-    if (Array.isArray(stored)) ids = stored
-  } catch (_) { /* ignore broken local data */ }
-  localStorage.setItem('request_ids', JSON.stringify([...new Set([requestId, ...ids])]))
 }
 
 function rememberActiveRequest(data) {
   if (!data?.request_id) return
-  localStorage.setItem('request_id', data.request_id)
-  rememberRequestId(data.request_id)
+  localStorage.removeItem('request_id')
+  localStorage.removeItem('request_ids')
   clearActiveConflict()
   currentReq.value = data
 }
 
 async function loadActiveRequest() {
+  syncingActive.value = true
   try {
     const res = await getActiveRequest()
     const data = unwrapResponseData(res)
@@ -181,6 +163,8 @@ async function loadActiveRequest() {
     return false
   } catch (_) {
     return false
+  } finally {
+    syncingActive.value = false
   }
 }
 
@@ -215,8 +199,8 @@ async function submitRequest() {
       request_energy: form.value.request_energy
     }
     submitResult.value = createdRequest
-    localStorage.setItem('request_id', data.request_id)
-    rememberRequestId(data.request_id)
+    localStorage.removeItem('request_id')
+    localStorage.removeItem('request_ids')
     clearActiveConflict()
     currentReq.value = createdRequest
     startPoll()
@@ -232,8 +216,7 @@ async function submitRequest() {
         errMsg.value = '当前用户已有进行中的请求，已自动同步到页面。'
         startPoll()
       } else {
-        rememberActiveConflict()
-        errMsg.value = '当前用户已有进行中的请求，请进入当前请求页重新同步状态。'
+        errMsg.value = '服务端提示已有进行中的请求，但当前账号未同步到请求详情，请刷新页面后重试。'
       }
     }
     else errMsg.value = msg || e?.message || '提交失败'
@@ -243,28 +226,8 @@ async function submitRequest() {
 }
 
 async function pollStatus() {
-  const rid = localStorage.getItem('request_id')
-  if (!rid) {
-    await loadActiveRequest()
-    return
-  }
-  try {
-    const res = await getRequestStatus(rid)
-    const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) {
-      if (data.code === 1002) {
-        localStorage.removeItem('request_id')
-        currentReq.value = null
-      }
-      return
-    }
-    clearActiveConflict()
-    currentReq.value = data
-    if (!ACTIVE_STATUSES.includes(data.request_status)) {
-      const synced = await loadActiveRequest()
-      if (!synced) stopPoll()
-    }
-  } catch (_) { /* silent */ }
+  const synced = await loadActiveRequest()
+  if (!synced) stopPoll()
 }
 
 function startPoll() {

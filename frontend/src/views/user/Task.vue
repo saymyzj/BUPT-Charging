@@ -10,8 +10,8 @@
       <div class="empty-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
       </div>
-      <div class="empty-title">{{ activeConflict ? '服务端已有活跃请求' : '暂无进行中的请求' }}</div>
-      <div class="empty-sub">{{ activeConflict ? '正在尝试从服务端重新同步当前请求，请刷新或稍后再试。' : '前往工作台提交充电请求' }}</div>
+      <div class="empty-title">暂无进行中的请求</div>
+      <div class="empty-sub">前往工作台提交充电请求</div>
       <router-link to="/user/workspace" class="btn btn-primary" style="width:auto;padding:10px 24px;">前往工作台</router-link>
     </div>
 
@@ -99,7 +99,6 @@ import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES,
 
 const req = ref(null)
 const batteryCapacity = ref(null)
-const activeConflict = ref(localStorage.getItem('active_request_conflict') === '1')
 let pollTimer = null
 
 const statusText = computed(() => REQUEST_STATUS_TEXT[req.value?.request_status] || req.value?.request_status || '--')
@@ -197,29 +196,7 @@ function formatLocalDateTime(date = new Date()) {
 }
 
 async function refresh() {
-  const rid = localStorage.getItem('request_id')
-  if (!rid) {
-    await syncActiveRequest()
-    return
-  }
-  try {
-    const res = await getRequestStatus(rid)
-    const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) {
-      if (data.code === 1002) {
-        localStorage.removeItem('request_id')
-        req.value = null
-      }
-      return
-    }
-    activeConflict.value = false
-    localStorage.removeItem('active_request_conflict')
-    req.value = data
-    if (!ACTIVE_STATUSES.includes(data.request_status)) {
-      const synced = await syncActiveRequest(false)
-      if (!req.value || !ACTIVE_STATUSES.includes(req.value.request_status)) stopPoll()
-    }
-  } catch (_) { /* silent */ }
+  await syncActiveRequest()
 }
 
 async function syncActiveRequest(clearWhenNone = true) {
@@ -228,14 +205,12 @@ async function syncActiveRequest(clearWhenNone = true) {
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return false
     if (data.request_id && ACTIVE_STATUSES.includes(data.request_status)) {
-      localStorage.setItem('request_id', data.request_id)
-      activeConflict.value = false
+      localStorage.removeItem('request_id')
       localStorage.removeItem('active_request_conflict')
       req.value = data
       return true
     }
     localStorage.removeItem('request_id')
-    activeConflict.value = false
     localStorage.removeItem('active_request_conflict')
     if (clearWhenNone) req.value = null
     return false

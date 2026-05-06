@@ -34,6 +34,9 @@ function handleLogout() {
   localStorage.removeItem('user_role')
   localStorage.removeItem('user_id')
   localStorage.removeItem('username')
+  localStorage.removeItem('request_id')
+  localStorage.removeItem('request_ids')
+  localStorage.removeItem('active_request_conflict')
   router.push('/login')
 }
 </script>
