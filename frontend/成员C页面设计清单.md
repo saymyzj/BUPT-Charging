@@ -58,7 +58,8 @@
 | 通用 | 登录 / 注册 | `/login` | F-U01 | P0 |
 | 用户端 | 工作台 | `/user/workspace` | F-U02、F-U03 | P0 |
 | 用户端 | 当前请求 | `/user/task` | F-U03、F-U04、F-U05、F-U06、F-U07 | P0 |
-| 用户端 | 详单 / 账户 | `/user/account` | F-U08 | P0 |
+| 用户端 | 账户中心 | `/user/account` | F-U08 账户资料 / 历史账单入口 | P0 |
+| 用户端 | 账单详情 | `/user/bills` | F-U08 单个请求详单 | P0 |
 | 管理端 | 总览 | `/admin/overview` | F-A02、F-A03 | P0 |
 | 管理端 | 系统配置 | `/admin/config` | F-J01、F-A04、F-A05 | P0 |
 | 管理端 | 故障与设备控制 | `/admin/records` 或 `/admin/faults` | F-A01、F-A06 | P0 |
@@ -207,11 +208,21 @@
 - `CANCELLED`：已取消
 - `FAULT_INTERRUPTED`：故障中断
 
-### 4.4 详单 / 账户页
+### 4.4 账户中心 / 账单详情页
 
 - 功能编号：F-U08
-- 路由：`/user/account`
-- 页面目标：展示详单、账单费用和车辆基础信息。
+- 账户中心路由：`/user/account`
+- 账单详情路由：`/user/bills`
+- 页面目标：账户中心展示当前登录用户资料和当前浏览器记录过的历史账单入口；账单详情页展示单个请求详单和费用明细。
+
+账户中心字段：
+
+- 用户编号 `user_id`
+- 用户名 `username`
+- 用户角色 `role`
+- 电池容量 `battery_capacity`
+- 注册时间 `created_at`
+- 当前浏览器记录过的请求编号列表 `request_ids`
 
 详单字段：
 
@@ -233,11 +244,13 @@
 
 展示规则：
 
+- `/user/account` 作为账户中心，不直接承担单个详单详情展示。
+- `/user/bills` 作为账单详情页，通过已知 `request_id` 调用单个详单接口。
 - `COMPLETED` 有详单。
 - `COMPLETED_EARLY` 有详单。
 - `FAULT_INTERRUPTED` 有详单。
 - `CANCELLED` 不生成详单。
-- 本系统不单独实现支付页面，账单费用直接来自详单字段。
+- 本系统冻结接口不单独实现真实支付页面，账单费用直接来自详单字段；如保留支付按钮，应标注为前端本地模拟状态。
 
 ## 5. 管理端页面设计
 

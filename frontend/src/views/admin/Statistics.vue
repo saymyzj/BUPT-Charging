@@ -128,7 +128,7 @@ async function loadData() {
   try {
     const res = await getReports(granularity.value)
     const data = res.data || res
-    reports.value = Array.isArray(data) ? data : (data.reports || [])
+    reports.value = Array.isArray(data) ? data : (data.rows || data.reports || [])
   } catch (_) { /* silent */ }
   loading.value = false
 }
