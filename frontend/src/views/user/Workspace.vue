@@ -38,7 +38,7 @@
           <!-- Error -->
           <div class="error-box" v-if="errMsg">{{ errMsg }}</div>
           <div class="link-task" v-if="activeConflict">
-            <router-link to="/user/task">前往当前请求页查看状态</router-link>
+            <router-link to="/user/task">前往当前请求页重新同步状态</router-link>
           </div>
 
           <!-- Result -->
@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { createChargeRequest, getProfile, getRequestStatus } from '@/api/charging'
+import { createChargeRequest, getActiveRequest, getProfile, getRequestStatus } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 
@@ -158,6 +158,32 @@ function rememberRequestId(requestId) {
   localStorage.setItem('request_ids', JSON.stringify([...new Set([requestId, ...ids])]))
 }
 
+function rememberActiveRequest(data) {
+  if (!data?.request_id) return
+  localStorage.setItem('request_id', data.request_id)
+  rememberRequestId(data.request_id)
+  clearActiveConflict()
+  currentReq.value = data
+}
+
+async function loadActiveRequest() {
+  try {
+    const res = await getActiveRequest()
+    const data = unwrapResponseData(res)
+    if (data.code !== undefined && data.code !== 0) return false
+    if (data.request_id && ACTIVE_STATUSES.includes(data.request_status)) {
+      rememberActiveRequest(data)
+      return true
+    }
+    localStorage.removeItem('request_id')
+    currentReq.value = null
+    clearActiveConflict()
+    return false
+  } catch (_) {
+    return false
+  }
+}
+
 async function submitRequest() {
   errMsg.value = ''
   submitResult.value = null
@@ -201,8 +227,14 @@ async function submitRequest() {
     else if (code === 1005) errMsg.value = '当前模式无可用充电桩'
     else if (code === 1008) errMsg.value = '请求电量不合法'
     else if (code === 1003) {
-      rememberActiveConflict()
-      errMsg.value = '当前用户已有活跃请求，但本地缺少请求编号，无法直接展示详情。请进入当前请求页查看提示，或由管理员结束该请求后重试。'
+      const synced = await loadActiveRequest()
+      if (synced) {
+        errMsg.value = '当前用户已有进行中的请求，已自动同步到页面。'
+        startPoll()
+      } else {
+        rememberActiveConflict()
+        errMsg.value = '当前用户已有进行中的请求，请进入当前请求页重新同步状态。'
+      }
     }
     else errMsg.value = msg || e?.message || '提交失败'
   } finally {
@@ -212,7 +244,10 @@ async function submitRequest() {
 
 async function pollStatus() {
   const rid = localStorage.getItem('request_id')
-  if (!rid) return
+  if (!rid) {
+    await loadActiveRequest()
+    return
+  }
   try {
     const res = await getRequestStatus(rid)
     const data = unwrapResponseData(res)
@@ -226,8 +261,8 @@ async function pollStatus() {
     clearActiveConflict()
     currentReq.value = data
     if (!ACTIVE_STATUSES.includes(data.request_status)) {
-      currentReq.value = null
-      stopPoll()
+      const synced = await loadActiveRequest()
+      if (!synced) stopPoll()
     }
   } catch (_) { /* silent */ }
 }
@@ -243,11 +278,8 @@ function stopPoll() {
 
 onMounted(() => {
   loadProfile()
-  const rid = localStorage.getItem('request_id')
-  if (rid) {
-    pollStatus()
-    startPoll()
-  }
+  pollStatus()
+  startPoll()
 })
 
 onUnmounted(() => { stopPoll() })

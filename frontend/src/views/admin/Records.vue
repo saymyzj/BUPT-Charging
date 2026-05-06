@@ -17,7 +17,7 @@
           <th>编号</th>
           <th>模式</th>
           <th>状态</th>
-          <th>当前请求</th>
+          <th>当前服务</th>
           <th>队列长度</th>
           <th>操作</th>
         </tr>
@@ -27,7 +27,7 @@
           <td><strong>{{ s.station_code }}</strong></td>
           <td>{{ CHARGE_MODE_TEXT[s.charge_mode] || s.charge_mode }}</td>
           <td><span class="st-badge" :class="'badge-' + (s.station_status||'').toLowerCase()">{{ STATION_STATUS_TEXT[s.station_status] || s.station_status }}</span></td>
-          <td>{{ s.current_request_id || '--' }}</td>
+          <td>{{ currentServiceText(s) }}</td>
           <td>{{ s.queue_length ?? 0 }}</td>
           <td class="action-cell">
             <button class="btn-sm btn-green" v-if="s.station_status === 'SHUTDOWN'" @click="doAction(s.station_code, 'start')">启动</button>
@@ -90,6 +90,11 @@ async function doAction(code, action) {
     if (code === 1007) alert('充电桩未处于可关闭状态')
     else alert(e?.response?.data?.message || '操作失败')
   }
+}
+
+function currentServiceText(station) {
+  if (!station?.current_request_id) return '--'
+  return station.current_user?.username || station.current_user?.user_id || station.current_request_id
 }
 
 onMounted(loadStations)

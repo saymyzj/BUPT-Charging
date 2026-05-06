@@ -38,6 +38,28 @@ def _iso_string(value):
     return str(value).replace(" ", "T")
 
 
+def _validate_positive_float(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _has_active_request(user_pk: int) -> bool:
+    row = query_db(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM charge_request
+        WHERE user_id = ?
+          AND request_status IN ('WAITING_AREA', 'QUEUED', 'CHARGING')
+        """,
+        [user_pk],
+        one=True,
+    )
+    return bool(row and int(row["cnt"]) > 0)
+
+
 @auth_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json(silent=True) or {}
@@ -140,3 +162,30 @@ def profile():
             "created_at": _iso_string(record["created_at"]),
         }
     )
+
+
+@auth_bp.route("/profile/battery-capacity", methods=["PUT"])
+@require_auth
+def update_profile_battery_capacity():
+    current_user = get_current_user()
+    if current_user["role"] == "ADMIN":
+        return error_response(1003, "管理员账号没有电池容量")
+
+    data = request.get_json(silent=True) or {}
+    battery_capacity = _validate_positive_float(data.get("battery_capacity"))
+    if battery_capacity is None:
+        return error_response(1001, "battery_capacity 必须是正数")
+
+    if _has_active_request(int(current_user["id"])):
+        return error_response(1010, "当前有进行中的充电请求，不能修改电池容量")
+
+    execute_db(
+        """
+        UPDATE user
+        SET battery_capacity = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        [battery_capacity, current_user["id"]],
+    )
+    return success_response({"battery_capacity": battery_capacity, "updated": True})

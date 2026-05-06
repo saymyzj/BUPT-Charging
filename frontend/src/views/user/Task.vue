@@ -11,7 +11,7 @@
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
       </div>
       <div class="empty-title">{{ activeConflict ? '服务端已有活跃请求' : '暂无进行中的请求' }}</div>
-      <div class="empty-sub">{{ activeConflict ? '本地缺少请求编号，前端无法直接查询详情。请由管理员结束该请求后重新提交。' : '前往工作台提交充电请求' }}</div>
+      <div class="empty-sub">{{ activeConflict ? '正在尝试从服务端重新同步当前请求，请刷新或稍后再试。' : '前往工作台提交充电请求' }}</div>
       <router-link to="/user/workspace" class="btn btn-primary" style="width:auto;padding:10px 24px;">前往工作台</router-link>
     </div>
 
@@ -36,6 +36,7 @@
             <div class="metric"><div class="m-label">排队号</div><div class="m-val">{{ req.queue_number || '--' }}</div></div>
             <div class="metric"><div class="m-label">前车数量</div><div class="m-val">{{ req.front_waiting_count ?? '--' }}</div></div>
             <div class="metric"><div class="m-label">预计等待</div><div class="m-val">{{ estWait }}</div></div>
+            <div class="metric"><div class="m-label">已充电量</div><div class="m-val">{{ chargedEnergyText }}</div></div>
             <div class="metric"><div class="m-label">预计开始</div><div class="m-val">{{ fmtTime(req.estimated_start_time) }}</div></div>
           </div>
         </div>
@@ -50,6 +51,7 @@
               <div class="dl-item"><span class="dl-key">请求编号</span><span class="dl-val">{{ req.request_id }}</span></div>
               <div class="dl-item"><span class="dl-key">充电模式</span><span class="dl-val">{{ CHARGE_MODE_TEXT[req.charge_mode] || req.charge_mode }}</span></div>
               <div class="dl-item"><span class="dl-key">请求电量</span><span class="dl-val">{{ req.request_energy }} kWh</span></div>
+              <div class="dl-item"><span class="dl-key">已充电量</span><span class="dl-val">{{ chargedEnergyText }}</span></div>
               <div class="dl-item"><span class="dl-key">分配桩位</span><span class="dl-val">{{ req.station_code || '待分配' }}</span></div>
               <div class="dl-item"><span class="dl-key">桩队列位置</span><span class="dl-val">{{ req.station_queue_position ?? '--' }}</span></div>
               <div class="dl-item"><span class="dl-key">预计完成</span><span class="dl-val">{{ fmtTime(req.estimated_finish_time) }}</span></div>
@@ -91,7 +93,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getProfile, getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
+import { getActiveRequest, getProfile, getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
 
@@ -134,6 +136,12 @@ const bannerSub = computed(() => {
 const estWait = computed(() => {
   if (!req.value?.estimated_wait_seconds) return '--'
   return `~${Math.ceil(req.value.estimated_wait_seconds / 60)} min`
+})
+
+const chargedEnergyText = computed(() => {
+  const value = req.value?.charged_energy ?? req.value?.actual_energy
+  const n = Number(value)
+  return Number.isFinite(n) ? `${n.toFixed(2)} kWh` : '--'
 })
 
 // Timeline step
@@ -190,7 +198,10 @@ function formatLocalDateTime(date = new Date()) {
 
 async function refresh() {
   const rid = localStorage.getItem('request_id')
-  if (!rid) { req.value = null; return }
+  if (!rid) {
+    await syncActiveRequest()
+    return
+  }
   try {
     const res = await getRequestStatus(rid)
     const data = unwrapResponseData(res)
@@ -204,8 +215,33 @@ async function refresh() {
     activeConflict.value = false
     localStorage.removeItem('active_request_conflict')
     req.value = data
-    if (!ACTIVE_STATUSES.includes(data.request_status)) stopPoll()
+    if (!ACTIVE_STATUSES.includes(data.request_status)) {
+      const synced = await syncActiveRequest(false)
+      if (!req.value || !ACTIVE_STATUSES.includes(req.value.request_status)) stopPoll()
+    }
   } catch (_) { /* silent */ }
+}
+
+async function syncActiveRequest(clearWhenNone = true) {
+  try {
+    const res = await getActiveRequest()
+    const data = unwrapResponseData(res)
+    if (data.code !== undefined && data.code !== 0) return false
+    if (data.request_id && ACTIVE_STATUSES.includes(data.request_status)) {
+      localStorage.setItem('request_id', data.request_id)
+      activeConflict.value = false
+      localStorage.removeItem('active_request_conflict')
+      req.value = data
+      return true
+    }
+    localStorage.removeItem('request_id')
+    activeConflict.value = false
+    localStorage.removeItem('active_request_conflict')
+    if (clearWhenNone) req.value = null
+    return false
+  } catch (_) {
+    return false
+  }
 }
 
 async function loadProfile() {
@@ -323,7 +359,7 @@ onUnmounted(() => { stopPoll() })
 .btn-refresh { padding: 5px 12px; border-radius: 6px; border: 1px solid #e5e7eb; background: white; font-size: 11px; font-weight: 600; color: #6b7280; cursor: pointer; transition: 0.12s; }
 .btn-refresh:hover { border-color: #10b981; color: #059669; }
 
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .metric { padding: 16px; border-radius: 10px; background: #f8faf9; border: 1px solid #e5e7eb; }
 .m-label { font-size: 11px; color: #9ca3af; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
 .m-val { font-size: 20px; font-weight: 700; color: #111827; margin-top: 6px; letter-spacing: -0.3px; }

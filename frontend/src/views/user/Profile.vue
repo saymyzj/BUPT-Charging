@@ -25,6 +25,11 @@
           <div class="profile-item">
             <span class="label">电池容量</span>
             <span class="value">{{ capacityText }}</span>
+            <div v-if="(profile.role || role) !== 'ADMIN'" class="capacity-edit">
+              <input type="number" v-model.number="capacityForm" min="1" placeholder="输入新容量">
+              <button :disabled="capacitySaving" @click="saveCapacity">{{ capacitySaving ? '保存中' : '修改' }}</button>
+            </div>
+            <div v-if="capacityMsg" class="capacity-msg">{{ capacityMsg }}</div>
           </div>
           <div class="profile-item">
             <span class="label">注册时间</span>
@@ -37,7 +42,7 @@
     <div class="card bills-card">
       <div class="card-head">
         <h3>我的账单</h3>
-        <span class="hint">当前浏览器已记录的请求</span>
+        <span class="hint">来自后端数据库的历史详单</span>
       </div>
       <div class="card-body">
         <div v-if="billsLoading" class="empty">账单加载中...</div>
@@ -81,7 +86,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { getProfile, getRequestDetail } from '@/api/charging'
+import { getProfile, getRequestDetails, updateProfileBatteryCapacity } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS_TEXT } from '@/constants/enums'
 
@@ -89,6 +94,9 @@ const profile = ref({})
 const loading = ref(false)
 const bills = ref([])
 const billsLoading = ref(false)
+const capacityForm = ref(null)
+const capacitySaving = ref(false)
+const capacityMsg = ref('')
 const username = localStorage.getItem('username') || 'user'
 const role = localStorage.getItem('user_role') || 'USER'
 
@@ -136,17 +144,6 @@ function isPaid(bill) {
   return Boolean(key && localStorage.getItem(key))
 }
 
-function rememberedRequestIds() {
-  const ids = []
-  try {
-    const stored = JSON.parse(localStorage.getItem('request_ids') || '[]')
-    if (Array.isArray(stored)) ids.push(...stored)
-  } catch (_) { /* ignore broken local data */ }
-  const current = localStorage.getItem('request_id')
-  if (current) ids.push(current)
-  return [...new Set(ids.filter(Boolean))]
-}
-
 async function loadProfile() {
   loading.value = true
   try {
@@ -154,6 +151,7 @@ async function loadProfile() {
     const data = unwrapResponseData(res)
     if (data.code === undefined || data.code === 0) {
       profile.value = data
+      capacityForm.value = data.battery_capacity
       if (data.username) localStorage.setItem('username', data.username)
     }
   } catch (_) { /* silent */ }
@@ -162,22 +160,43 @@ async function loadProfile() {
 
 async function loadBills() {
   billsLoading.value = true
-  const loaded = []
-  for (const requestId of rememberedRequestIds()) {
-    try {
-      const res = await getRequestDetail(requestId)
-      const data = unwrapResponseData(res)
-      if (data.code === undefined || data.code === 0) {
-        loaded.push({ ...data, request_id: data.request_id || requestId })
-      }
-    } catch (_) { /* detail may not exist until the request ends */ }
+  try {
+    const res = await getRequestDetails()
+    const data = unwrapResponseData(res)
+    bills.value = Array.isArray(data) ? data : []
+  } catch (_) {
+    bills.value = []
   }
-  bills.value = loaded.sort((a, b) => {
+  bills.value = bills.value.sort((a, b) => {
     const at = new Date(a.detail_generated_at || a.stop_time || 0).getTime()
     const bt = new Date(b.detail_generated_at || b.stop_time || 0).getTime()
     return bt - at
   })
   billsLoading.value = false
+}
+
+async function saveCapacity() {
+  capacityMsg.value = ''
+  const value = Number(capacityForm.value)
+  if (!Number.isFinite(value) || value <= 0) {
+    capacityMsg.value = '电池容量必须大于 0'
+    return
+  }
+  capacitySaving.value = true
+  try {
+    const res = await updateProfileBatteryCapacity({ battery_capacity: value })
+    const data = unwrapResponseData(res)
+    if (data.code !== undefined && data.code !== 0) {
+      capacityMsg.value = data.message || '修改失败'
+      return
+    }
+    profile.value.battery_capacity = data.battery_capacity
+    capacityMsg.value = '已保存'
+  } catch (e) {
+    capacityMsg.value = e?.response?.data?.message || '修改失败'
+  } finally {
+    capacitySaving.value = false
+  }
 }
 
 onMounted(async () => {
@@ -199,9 +218,15 @@ onMounted(async () => {
 .card-body { padding: 20px; }
 .empty { padding: 32px; text-align: center; color: #9ca3af; }
 .profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.profile-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8faf9; }
+.profile-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8faf9; }
 .label { font-size: 13px; color: #6b7280; }
 .value { font-size: 14px; font-weight: 700; color: #111827; }
+.capacity-edit { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.capacity-edit input { min-width: 0; padding: 9px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; font-size: 13px; outline: none; }
+.capacity-edit input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+.capacity-edit button { padding: 9px 14px; border: none; border-radius: 8px; background: #10b981; color: white; font-size: 13px; font-weight: 700; cursor: pointer; }
+.capacity-edit button:disabled { opacity: 0.5; cursor: not-allowed; }
+.capacity-msg { width: 100%; color: #059669; font-size: 12px; }
 .table-wrap { overflow-x: auto; }
 .bills-table { width: 100%; border-collapse: collapse; min-width: 880px; }
 .bills-table th, .bills-table td { padding: 14px 12px; border-bottom: 1px solid #eef2f7; text-align: left; white-space: nowrap; }

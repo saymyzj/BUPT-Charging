@@ -20,7 +20,7 @@
         </div>
         <div class="st-info">
           <div class="st-row"><span>模式</span><span>{{ CHARGE_MODE_TEXT[s.charge_mode] || s.charge_mode }}</span></div>
-          <div class="st-row"><span>当前服务</span><span>{{ s.current_request_id || '空闲' }}</span></div>
+          <div class="st-row"><span>当前服务</span><span>{{ currentServiceText(s) }}</span></div>
           <div class="st-row"><span>队列长度</span><span>{{ s.queue_length ?? 0 }}</span></div>
           <div class="st-row"><span>累计次数</span><span>{{ s.total_charge_count ?? 0 }}</span></div>
           <div class="st-row"><span>累计电量</span><span>{{ (s.total_charge_energy ?? 0).toFixed(1) }} kWh</span></div>
@@ -36,10 +36,10 @@
         <div class="modal-body">
           <div v-if="queueLoading">加载中...</div>
           <table class="t" v-if="!queueLoading && queueData.length">
-            <thead><tr><th>用户ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr></thead>
+            <thead><tr><th>用户名</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr></thead>
             <tbody>
               <tr v-for="(q, index) in queueData" :key="q.queue_number">
-                <td>{{ q.user_id }}</td>
+                <td>{{ q.username || q.user_id }}</td>
                 <td>{{ q.battery_capacity }} kWh</td>
                 <td>{{ q.request_energy }} kWh</td>
                 <td><strong>{{ q.queue_number }}</strong></td>
@@ -113,6 +113,11 @@ function queueTimeText(row, index) {
   const frontCount = hasChargingHead ? index : Math.max(0, index)
   const finish = estimateFinishTime(index, now)
   return `前方 ${frontCount} 人，预计 ${finish ? fmtTime(finish) : '--'} 充完`
+}
+
+function currentServiceText(station) {
+  if (!station?.current_request_id) return '空闲'
+  return station.current_user?.username || station.current_user?.user_id || station.current_request_id
 }
 
 function remainingMinutes(time, now = new Date()) {

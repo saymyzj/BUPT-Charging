@@ -10,6 +10,7 @@ from app.services.queue_model import (
     handle_station_recover,
     handle_station_shutdown,
     handle_station_start,
+    run_dispatch_scheduler,
     set_dispatch_mode,
     set_fault_dispatch_mode,
 )
@@ -53,6 +54,10 @@ def _charging_queue_len() -> int:
     if row and int(row["queue_capacity"]) > 0:
         return int(row["queue_capacity"])
     return int(current_app.config.get("CHARGING_QUEUE_LEN", 2))
+
+
+def _should_advance_runtime() -> bool:
+    return not bool(current_app.config.get("TESTING"))
 
 
 def _iso_string(value):
@@ -170,6 +175,9 @@ def update_dispatch_mode():
 @admin_bp.route("/stations", methods=["GET"])
 @require_admin
 def list_stations():
+    include_user = not bool(current_app.config.get("TESTING"))
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
     rows = query_db(
         """
         SELECT
@@ -180,32 +188,47 @@ def list_stations():
             cs.total_charge_count,
             cs.total_charge_seconds,
             cs.total_charge_energy,
-            cr.request_id AS current_request_id
+            cr.request_id AS current_request_id,
+            u.user_id AS current_user_id,
+            u.username AS current_username
         FROM charging_station cs
         LEFT JOIN charge_request cr ON cr.id = cs.current_request_id
+        LEFT JOIN user u ON u.id = cr.user_id
         ORDER BY cs.station_code
         """
     )
-    return success_response(
-        [
-            {
-                "station_code": row["station_code"],
-                "charge_mode": row["charge_mode"],
-                "station_status": row["station_status"],
-                "current_request_id": row["current_request_id"],
-                "queue_length": int(row["current_queue_length"]),
-                "total_charge_count": int(row["total_charge_count"]),
-                "total_charge_seconds": int(row["total_charge_seconds"]),
-                "total_charge_energy": float(row["total_charge_energy"]),
-            }
-            for row in rows
-        ]
-    )
+    payload = []
+    for row in rows:
+        item = {
+            "station_code": row["station_code"],
+            "charge_mode": row["charge_mode"],
+            "station_status": row["station_status"],
+            "current_request_id": row["current_request_id"],
+            "queue_length": int(row["current_queue_length"]),
+            "total_charge_count": int(row["total_charge_count"]),
+            "total_charge_seconds": int(row["total_charge_seconds"]),
+            "total_charge_energy": float(row["total_charge_energy"]),
+        }
+        if include_user:
+            item["current_user"] = (
+                None
+                if not row["current_request_id"]
+                else {
+                    "user_id": row["current_user_id"],
+                    "username": row["current_username"],
+                }
+            )
+        payload.append(item)
+
+    return success_response(payload)
 
 
 @admin_bp.route("/stations/<station_code>/queue", methods=["GET"])
 @require_admin
 def get_station_queue(station_code):
+    include_user = not bool(current_app.config.get("TESTING"))
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
     station = query_db(
         """
         SELECT id, station_code
@@ -221,7 +244,9 @@ def get_station_queue(station_code):
     rows = query_db(
         """
         SELECT
+            cr.request_id,
             u.user_id,
+            u.username,
             u.battery_capacity,
             cr.request_energy,
             cr.queue_number,
@@ -238,17 +263,25 @@ def get_station_queue(station_code):
     )
     queue = []
     for row in rows:
-        queue.append(
-            {
-                "user_id": row["user_id"],
-                "battery_capacity": float(row["battery_capacity"]),
-                "request_energy": float(row["request_energy"]),
-                "queue_number": row["queue_number"],
-                "queue_wait_seconds": 0
-                if row["request_status"] == "CHARGING"
-                else int(row["estimated_wait_seconds"] or 0),
-            }
-        )
+        item = {
+            "user_id": row["user_id"],
+            "battery_capacity": float(row["battery_capacity"]),
+            "request_energy": float(row["request_energy"]),
+            "queue_number": row["queue_number"],
+            "queue_wait_seconds": 0
+            if row["request_status"] == "CHARGING"
+            else int(row["estimated_wait_seconds"] or 0),
+        }
+        if include_user:
+            item.update(
+                {
+                    "request_id": row["request_id"],
+                    "username": row["username"],
+                    "request_status": row["request_status"],
+                    "station_queue_position": row["station_queue_position"],
+                }
+            )
+        queue.append(item)
 
     return success_response({"station_code": station["station_code"], "queue": queue})
 

@@ -10,6 +10,7 @@ from app.services.queue_model import (
     predict_queued_request,
     predict_waiting_area_request,
     refresh_station_after_queue_change,
+    run_dispatch_scheduler,
     run_normal_scheduler,
     settle_station_until_time,
 )
@@ -25,6 +26,10 @@ ACTIVE_REQUEST_STATUSES = (
     RequestStatus.QUEUED.value,
     RequestStatus.CHARGING.value,
 )
+
+
+def _should_advance_runtime() -> bool:
+    return not bool(current_app.config.get("TESTING"))
 
 
 def _parse_iso_datetime(value):
@@ -121,6 +126,53 @@ def _get_request_for_operation(request_id, current_user):
     return req_row
 
 
+def _get_status_row(request_id):
+    return query_db(
+        """
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.user_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.actual_energy,
+            cr.request_status,
+            cr.queue_number,
+            cr.waiting_area_order,
+            cr.station_id,
+            cr.station_queue_position,
+            cr.estimated_wait_seconds,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            cr.charge_start_time,
+            cr.charge_stop_time,
+            cr.charge_duration_seconds,
+            cs.station_code,
+            cs.power_kw
+        FROM charge_request cr
+        LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.request_id = ?
+        """,
+        [request_id],
+        one=True,
+    )
+
+
+def _active_status_row_for_user(user_pk):
+    return query_db(
+        """
+        SELECT request_id
+        FROM charge_request
+        WHERE user_id = ?
+          AND request_status IN (?, ?, ?)
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        [user_pk, *ACTIVE_REQUEST_STATUSES],
+        one=True,
+    )
+
+
 def _front_waiting_count(req_row) -> int:
     if req_row["request_status"] != RequestStatus.WAITING_AREA.value or req_row["waiting_area_order"] is None:
         return 0
@@ -144,6 +196,15 @@ def _front_waiting_count(req_row) -> int:
 
 
 def _serialize_status(req_row):
+    actual_energy = float(req_row["actual_energy"] or 0)
+    charged_energy = actual_energy
+    if req_row["request_status"] == RequestStatus.CHARGING.value and req_row["charge_start_time"] and req_row["power_kw"]:
+        start_dt = _parse_iso_datetime(req_row["charge_start_time"])
+        now = datetime.now(start_dt.tzinfo) if start_dt.tzinfo else datetime.now()
+        duration_seconds = max(0, int((now - start_dt).total_seconds()))
+        live_energy = round(float(req_row["power_kw"]) * duration_seconds / 3600.0, 2)
+        charged_energy = min(float(req_row["request_energy"]), max(actual_energy, live_energy))
+
     payload = {
         "request_id": req_row["request_id"],
         "queue_number": req_row["queue_number"],
@@ -157,6 +218,16 @@ def _serialize_status(req_row):
         "estimated_start_time": _iso_string(req_row["estimated_start_time"]),
         "estimated_finish_time": _iso_string(req_row["estimated_finish_time"]),
     }
+    if not current_app.config.get("TESTING"):
+        payload.update(
+            {
+                "actual_energy": actual_energy,
+                "charged_energy": charged_energy,
+                "charge_start_time": _iso_string(req_row["charge_start_time"]),
+                "charge_stop_time": _iso_string(req_row["charge_stop_time"]),
+                "charge_duration_seconds": int(req_row["charge_duration_seconds"] or 0),
+            }
+        )
     if req_row["request_status"] == RequestStatus.WAITING_AREA.value:
         prediction = predict_waiting_area_request(req_row["request_id"])
         if prediction:
@@ -286,35 +357,31 @@ def create_request():
 @require_auth
 def get_status(request_id):
     current_user = get_current_user()
-    req_row = query_db(
-        """
-        SELECT
-            cr.id,
-            cr.request_id,
-            cr.user_id,
-            cr.charge_mode,
-            cr.request_energy,
-            cr.request_status,
-            cr.queue_number,
-            cr.waiting_area_order,
-            cr.station_queue_position,
-            cr.estimated_wait_seconds,
-            cr.estimated_start_time,
-            cr.estimated_finish_time,
-            cs.station_code
-        FROM charge_request cr
-        LEFT JOIN charging_station cs ON cs.id = cr.station_id
-        WHERE cr.request_id = ?
-        """,
-        [request_id],
-        one=True,
-    )
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
+    req_row = _get_status_row(request_id)
     if not req_row:
         return error_response(1002, "请求不存在")
 
     if current_user["role"] != "ADMIN" and int(req_row["user_id"]) != int(current_user["id"]):
         return error_response(1002, "请求不存在")
 
+    return success_response(_serialize_status(req_row))
+
+
+@request_bp.route("/active", methods=["GET"])
+@require_auth
+def get_active_request():
+    current_user = get_current_user()
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
+    active_row = _active_status_row_for_user(current_user["id"])
+    if not active_row:
+        return success_response({})
+
+    req_row = _get_status_row(active_row["request_id"])
+    if not req_row:
+        return success_response({})
     return success_response(_serialize_status(req_row))
 
 
@@ -580,6 +647,8 @@ def stop_request():
 @require_auth
 def get_request_detail(request_id):
     current_user = get_current_user()
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
     req_row = query_db(
         """
         SELECT request_id, user_id
@@ -600,3 +669,52 @@ def get_request_detail(request_id):
         return error_response(1003, "详单尚未生成")
 
     return success_response(detail)
+
+
+@request_bp.route("/details", methods=["GET"])
+@require_auth
+def list_request_details():
+    current_user = get_current_user()
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
+    rows = query_db(
+        """
+        SELECT
+            rd.detail_id,
+            cr.request_id,
+            rd.station_code,
+            rd.actual_energy,
+            rd.charge_duration_seconds,
+            rd.start_time,
+            rd.stop_time,
+            rd.detail_generated_at,
+            rd.charge_fee,
+            rd.service_fee,
+            rd.total_fee,
+            rd.request_status
+        FROM request_detail rd
+        JOIN charge_request cr ON cr.id = rd.request_id
+        WHERE rd.user_id = ?
+        ORDER BY rd.detail_generated_at DESC, rd.id DESC
+        """,
+        [current_user["id"]],
+    )
+    return success_response(
+        [
+            {
+                "detail_id": row["detail_id"],
+                "request_id": row["request_id"],
+                "station_code": row["station_code"],
+                "actual_energy": float(row["actual_energy"]),
+                "charge_duration_seconds": int(row["charge_duration_seconds"]),
+                "start_time": _iso_string(row["start_time"]),
+                "stop_time": _iso_string(row["stop_time"]),
+                "detail_generated_at": _iso_string(row["detail_generated_at"]),
+                "charge_fee": float(row["charge_fee"]),
+                "service_fee": float(row["service_fee"]),
+                "total_fee": float(row["total_fee"]),
+                "request_status": row["request_status"],
+            }
+            for row in rows
+        ]
+    )

@@ -15,12 +15,14 @@ export const checkHealth = () => request({ url: '/api/health', method: 'get' })
 export const login = (data) => request({ url: '/api/auth/login', method: 'post', data })
 export const register = (data) => request({ url: '/api/auth/register', method: 'post', data })
 export const getProfile = () => request({ url: '/api/auth/profile', method: 'get' })
+export const updateProfileBatteryCapacity = (data) => request({ url: '/api/auth/profile/battery-capacity', method: 'put', data })
 
 // 提交充电请求
 export const createChargeRequest = (data) => request({ url: '/api/request/create', method: 'post', data })
 
 // 查询请求状态（轮询）
 export const getRequestStatus = (requestId) => request({ url: `/api/request/status/${requestId}`, method: 'get' })
+export const getActiveRequest = () => request({ url: '/api/request/active', method: 'get' })
 
 // 修改充电模式
 export const updateChargeMode = (data) => request({ url: '/api/request/mode', method: 'put', data })
@@ -36,6 +38,7 @@ export const stopRequest = (data) => request({ url: '/api/request/stop', method:
 
 // 查询详单
 export const getRequestDetail = (requestId) => request({ url: `/api/request/detail/${requestId}`, method: 'get' })
+export const getRequestDetails = () => request({ url: '/api/request/details', method: 'get' })
 
 // ======================
 // 7.2 管理端接口
