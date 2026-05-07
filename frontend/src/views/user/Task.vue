@@ -161,14 +161,14 @@ const bannerSub = computed(() => {
 })
 
 const estWait = computed(() => {
-  if (!req.value?.estimated_wait_seconds) return '--'
-  return `~${Math.ceil(req.value.estimated_wait_seconds / 60)} min`
+  if (req.value?.request_status === REQUEST_STATUS.CHARGING) return '已开始'
+  const seconds = Number(req.value?.estimated_wait_seconds)
+  if (!Number.isFinite(seconds)) return '--'
+  return `${Math.ceil(Math.max(0, seconds) / 60)} min`
 })
 
 const chargedEnergyText = computed(() => {
-  const value = req.value?.charged_energy ?? req.value?.actual_energy
-  const n = Number(value)
-  return Number.isFinite(n) ? `${n.toFixed(2)} kWh` : '--'
+  return chargedEnergyNumber.value === null ? '--' : `${chargedEnergyNumber.value.toFixed(2)} kWh`
 })
 
 const chargedEnergyNumber = computed(() => {

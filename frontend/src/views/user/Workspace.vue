@@ -122,9 +122,10 @@ const statusText = computed(() => {
 })
 
 const estWaitDisplay = computed(() => {
-  if (!activeRequest.value?.estimated_wait_seconds) return '--'
-  const m = Math.ceil(activeRequest.value.estimated_wait_seconds / 60)
-  return `~${m} min`
+  if (activeRequest.value?.request_status === REQUEST_STATUS.CHARGING) return '已开始'
+  const seconds = Number(activeRequest.value?.estimated_wait_seconds)
+  if (!Number.isFinite(seconds)) return '--'
+  return `${Math.ceil(Math.max(0, seconds) / 60)} min`
 })
 
 const frontVehicleCount = computed(() => {
