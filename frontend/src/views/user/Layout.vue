@@ -34,15 +34,15 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getProfile } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
+import { clearAuthSession } from '@/utils/authSession'
 
 const router = useRouter()
 const menuOpen = ref(false)
-const username = computed(() => {
-  const value = localStorage.getItem('username')
-  return value && value !== 'undefined' ? value : 'user'
-})
+const username = ref('user')
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value
@@ -53,16 +53,22 @@ function closeMenu() {
 }
 
 function handleLogout() {
-  localStorage.removeItem('auth_token')
-  localStorage.removeItem('user_role')
-  localStorage.removeItem('user_id')
-  localStorage.removeItem('username')
-  localStorage.removeItem('request_id')
-  localStorage.removeItem('request_ids')
-  localStorage.removeItem('active_request_conflict')
+  clearAuthSession()
   closeMenu()
   router.push('/login')
 }
+
+async function loadProfile() {
+  try {
+    const res = await getProfile()
+    const data = unwrapResponseData(res)
+    if (data.code === undefined || data.code === 0) {
+      username.value = data.username || 'user'
+    }
+  } catch (_) { /* silent */ }
+}
+
+onMounted(loadProfile)
 </script>
 
 <style scoped>

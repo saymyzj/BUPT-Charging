@@ -28,14 +28,32 @@
         <span class="badge" :class="badgeClass">{{ req.request_status }}</span>
       </div>
 
+      <div class="status-summary">
+        <div class="summary-main">
+          <div class="summary-label">当前位置</div>
+          <div class="summary-title">{{ locationText }}</div>
+          <div class="summary-sub">{{ reasonText }}</div>
+        </div>
+        <div class="summary-grid">
+          <div><span>前车</span><strong>{{ frontVehicleCountText }}</strong></div>
+          <div><span>已充</span><strong>{{ chargePercentText }}</strong></div>
+          <div><span>剩余</span><strong>{{ remainingTimeText }}</strong></div>
+        </div>
+      </div>
+
       <!-- Key Metrics -->
       <div class="card full">
         <div class="card-head"><h3>关键指标</h3><button class="btn-refresh" @click="refresh">刷新</button></div>
         <div class="card-body">
           <div class="metrics">
             <div class="metric"><div class="m-label">排队号</div><div class="m-val">{{ req.queue_number || '--' }}</div></div>
-            <div class="metric"><div class="m-label">前车数量</div><div class="m-val">{{ req.front_waiting_count ?? '--' }}</div></div>
+            <div class="metric"><div class="m-label">前车数量</div><div class="m-val">{{ frontVehicleCountText }}</div></div>
             <div class="metric"><div class="m-label">预计等待</div><div class="m-val">{{ estWait }}</div></div>
+            <div class="metric progress-metric">
+              <div class="m-label">已充百分比</div>
+              <div class="m-val">{{ chargePercentText }}</div>
+              <div class="progress-track"><div class="progress-fill" :style="{ width: chargeProgressWidth }"></div></div>
+            </div>
             <div class="metric"><div class="m-label">已充电量</div><div class="m-val">{{ chargedEnergyText }}</div></div>
             <div class="metric"><div class="m-label">预计开始</div><div class="m-val">{{ fmtTime(req.estimated_start_time) }}</div></div>
           </div>
@@ -52,6 +70,7 @@
               <div class="dl-item"><span class="dl-key">充电模式</span><span class="dl-val">{{ CHARGE_MODE_TEXT[req.charge_mode] || req.charge_mode }}</span></div>
               <div class="dl-item"><span class="dl-key">请求电量</span><span class="dl-val">{{ req.request_energy }} kWh</span></div>
               <div class="dl-item"><span class="dl-key">已充电量</span><span class="dl-val">{{ chargedEnergyText }}</span></div>
+              <div class="dl-item"><span class="dl-key">已充百分比</span><span class="dl-val">{{ chargePercentText }}</span></div>
               <div class="dl-item"><span class="dl-key">分配桩位</span><span class="dl-val">{{ req.station_code || '待分配' }}</span></div>
               <div class="dl-item"><span class="dl-key">桩队列位置</span><span class="dl-val">{{ req.station_queue_position ?? '--' }}</span></div>
               <div class="dl-item"><span class="dl-key">预计完成</span><span class="dl-val">{{ fmtTime(req.estimated_finish_time) }}</span></div>
@@ -63,11 +82,13 @@
           <div class="card-head"><h3>进度时间线</h3></div>
           <div class="card-body">
             <div class="timeline">
-              <div class="tl-item" :class="tlClass(0)"><div class="tl-dot"></div><div><div class="tl-text">请求已提交</div></div></div>
-              <div class="tl-item" :class="tlClass(1)"><div class="tl-dot"></div><div><div class="tl-text">等候区排队</div></div></div>
-              <div class="tl-item" :class="tlClass(2)"><div class="tl-dot"></div><div><div class="tl-text">分配到桩队列</div></div></div>
-              <div class="tl-item" :class="tlClass(3)"><div class="tl-dot"></div><div><div class="tl-text">充电中</div></div></div>
-              <div class="tl-item" :class="tlClass(4)"><div class="tl-dot"></div><div><div class="tl-text">{{ terminalLabel }}</div></div></div>
+              <div v-for="item in timelineItems" :key="item.key" class="tl-item" :class="item.state">
+                <div class="tl-dot"></div>
+                <div>
+                  <div class="tl-text">{{ item.text }}</div>
+                  <div v-if="item.sub" class="tl-sub">{{ item.sub }}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -93,12 +114,16 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getActiveRequest, getProfile, getRequestStatus, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
+import { getActiveRequest, getProfile, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
+import { clearLegacyLocalState } from '@/utils/authSession'
 
+const ACTIVE_SNAPSHOT_KEY = 'active_request_snapshot'
+const FAULT_HANDOFF_KEY = 'active_request_fault_handoff'
 const req = ref(null)
 const batteryCapacity = ref(null)
+const faultHandoff = ref(loadFaultHandoff())
 let pollTimer = null
 
 const statusText = computed(() => REQUEST_STATUS_TEXT[req.value?.request_status] || req.value?.request_status || '--')
@@ -122,9 +147,12 @@ const badgeClass = computed(() => {
 const bannerSub = computed(() => {
   if (!req.value) return ''
   const s = req.value.request_status
-  if (s === REQUEST_STATUS.WAITING_AREA) return `排队号 ${req.value.queue_number} · 前方 ${req.value.front_waiting_count ?? 0} 辆车`
-  if (s === REQUEST_STATUS.QUEUED) return `分配至 ${req.value.station_code} · 队列第 ${req.value.station_queue_position ?? '?'} 位`
-  if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code} 充电中`
+  if (hasFaultHandoff.value && (s === REQUEST_STATUS.QUEUED || s === REQUEST_STATUS.CHARGING)) {
+    return `从 ${faultHandoff.value.fromStation || '原充电桩'} 中断后，已重新分配至 ${req.value.station_code || '新充电桩'}`
+  }
+  if (s === REQUEST_STATUS.WAITING_AREA) return `排队号 ${req.value.queue_number} · 前方 ${frontVehicleCountText.value} 辆车`
+  if (s === REQUEST_STATUS.QUEUED) return `分配至 ${req.value.station_code} · 队列第 ${req.value.station_queue_position ?? '?'} 位 · 前方 ${frontVehicleCountText.value} 辆车`
+  if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code} 充电中 · 已充 ${chargePercentText.value}`
   if (s === REQUEST_STATUS.COMPLETED) return '充电已正常完成'
   if (s === REQUEST_STATUS.COMPLETED_EARLY) return '充电已提前结束'
   if (s === REQUEST_STATUS.CANCELLED) return '请求已取消'
@@ -141,6 +169,77 @@ const chargedEnergyText = computed(() => {
   const value = req.value?.charged_energy ?? req.value?.actual_energy
   const n = Number(value)
   return Number.isFinite(n) ? `${n.toFixed(2)} kWh` : '--'
+})
+
+const chargedEnergyNumber = computed(() => {
+  const value = req.value?.charged_energy ?? req.value?.actual_energy
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.max(0, n) : null
+})
+
+const requestEnergyNumber = computed(() => {
+  const n = Number(req.value?.request_energy)
+  return Number.isFinite(n) && n > 0 ? n : null
+})
+
+const chargePercent = computed(() => {
+  if (chargedEnergyNumber.value === null || requestEnergyNumber.value === null) return null
+  return Math.min(100, Math.max(0, (chargedEnergyNumber.value / requestEnergyNumber.value) * 100))
+})
+
+const chargePercentText = computed(() => {
+  return chargePercent.value === null ? '--' : `${chargePercent.value.toFixed(1)}%`
+})
+
+const chargeProgressWidth = computed(() => {
+  return chargePercent.value === null ? '0%' : `${chargePercent.value}%`
+})
+
+const frontVehicleCount = computed(() => {
+  const s = req.value?.request_status
+  if (s === REQUEST_STATUS.QUEUED || s === REQUEST_STATUS.CHARGING) {
+    const position = Number(req.value?.station_queue_position)
+    if (Number.isFinite(position)) return Math.max(0, position - 1)
+  }
+  const count = Number(req.value?.front_waiting_count)
+  return Number.isFinite(count) ? Math.max(0, count) : null
+})
+
+const frontVehicleCountText = computed(() => {
+  return frontVehicleCount.value === null ? '--' : String(frontVehicleCount.value)
+})
+
+const hasFaultHandoff = computed(() => {
+  return Boolean(faultHandoff.value && faultHandoff.value.toRequestId === req.value?.request_id)
+})
+
+const locationText = computed(() => {
+  if (!req.value) return '--'
+  const s = req.value.request_status
+  if (s === REQUEST_STATUS.WAITING_AREA) return '等候区等待调度'
+  if (s === REQUEST_STATUS.QUEUED) return `${req.value.station_code || '充电桩'} 桩队列第 ${req.value.station_queue_position ?? '?'} 位`
+  if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code || '充电桩'} 正在充电`
+  if (s === REQUEST_STATUS.FAULT_INTERRUPTED) return '故障中断'
+  return statusText.value
+})
+
+const reasonText = computed(() => {
+  if (!req.value) return ''
+  if (hasFaultHandoff.value) return `原 ${faultHandoff.value.fromStation || '充电桩'} 故障中断后，系统已为剩余电量重新调度。`
+  const s = req.value.request_status
+  if (s === REQUEST_STATUS.WAITING_AREA) return `还未进入固定桩队列，前方 ${frontVehicleCountText.value} 辆车等待调度。`
+  if (s === REQUEST_STATUS.QUEUED) return `已分配充电桩，前方 ${frontVehicleCountText.value} 辆车完成后开始充电。`
+  if (s === REQUEST_STATUS.CHARGING) return `已充 ${chargedEnergyText.value}，目标 ${requestEnergyNumber.value ? `${requestEnergyNumber.value.toFixed(2)} kWh` : '--'}。`
+  return bannerSub.value
+})
+
+const remainingTimeText = computed(() => {
+  const finish = req.value?.estimated_finish_time
+  if (!finish) return '--'
+  const end = new Date(finish)
+  if (Number.isNaN(end.getTime())) return '--'
+  const minutes = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 60000))
+  return `${minutes} min`
 })
 
 // Timeline step
@@ -166,6 +265,47 @@ function tlClass(step) {
   if (step === activeStep.value) return 'active'
   return ''
 }
+
+const timelineItems = computed(() => {
+  const items = [
+    { key: 'submitted', text: '请求已提交', state: tlClass(0) },
+    { key: 'waiting', text: '等候区排队', state: tlClass(1) },
+  ]
+
+  if (hasFaultHandoff.value) {
+    items.push(
+      {
+        key: 'fault-interrupted',
+        text: '故障中断',
+        sub: `${faultHandoff.value.fromRequestId || '上一段任务'} 在 ${faultHandoff.value.fromStation || '原充电桩'} 被中断`,
+        state: 'done danger',
+      },
+      {
+        key: 'fault-requeue',
+        text: '重新排队',
+        sub: '系统已为剩余电量重新进入调度流程',
+        state: 'done warning',
+      },
+    )
+  }
+
+  items.push(
+    {
+      key: 'assigned',
+      text: hasFaultHandoff.value ? '已分配新充电桩' : '分配到桩队列',
+      sub: hasFaultHandoff.value ? `${req.value?.station_code || '新充电桩'} · 队列第 ${req.value?.station_queue_position ?? '?'} 位` : '',
+      state: tlClass(2),
+    },
+    {
+      key: 'charging',
+      text: hasFaultHandoff.value ? '继续充电' : '充电中',
+      state: tlClass(3),
+    },
+    { key: 'terminal', text: terminalLabel.value, state: tlClass(4) },
+  )
+
+  return items
+})
 
 // Button rules per §4.3
 const canEditMode = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA)
@@ -205,18 +345,77 @@ async function syncActiveRequest(clearWhenNone = true) {
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return false
     if (data.request_id && ACTIVE_STATUSES.includes(data.request_status)) {
-      localStorage.removeItem('request_id')
-      localStorage.removeItem('active_request_conflict')
+      clearLegacyLocalState()
+      updateFaultTrace(data)
       req.value = data
       return true
     }
-    localStorage.removeItem('request_id')
-    localStorage.removeItem('active_request_conflict')
+    clearLegacyLocalState()
+    clearFaultTrace()
     if (clearWhenNone) req.value = null
     return false
   } catch (_) {
     return false
   }
+}
+
+function activeSnapshot(data) {
+  return {
+    requestId: data.request_id,
+    status: data.request_status,
+    stationCode: data.station_code || null,
+    queueNumber: data.queue_number || null,
+    savedAt: new Date().toISOString(),
+  }
+}
+
+function loadJson(key) {
+  try {
+    const raw = sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveJson(key, value) {
+  sessionStorage.setItem(key, JSON.stringify(value))
+}
+
+function loadFaultHandoff() {
+  return loadJson(FAULT_HANDOFF_KEY)
+}
+
+function clearFaultTrace() {
+  sessionStorage.removeItem(ACTIVE_SNAPSHOT_KEY)
+  sessionStorage.removeItem(FAULT_HANDOFF_KEY)
+  faultHandoff.value = null
+}
+
+function updateFaultTrace(data) {
+  const previous = loadJson(ACTIVE_SNAPSHOT_KEY)
+  const next = activeSnapshot(data)
+  const previousHadStation = Boolean(previous?.stationCode)
+  const nextHadStation = Boolean(next.stationCode)
+  const requestChanged = previous?.requestId && previous.requestId !== next.requestId
+  const stationChanged = previous?.requestId === next.requestId && previousHadStation && nextHadStation && previous.stationCode !== next.stationCode
+
+  if ((requestChanged && previousHadStation) || stationChanged) {
+    const handoff = {
+      fromRequestId: previous.requestId,
+      toRequestId: next.requestId,
+      fromStation: previous.stationCode,
+      toStation: next.stationCode,
+      detectedAt: next.savedAt,
+    }
+    saveJson(FAULT_HANDOFF_KEY, handoff)
+    faultHandoff.value = handoff
+  } else {
+    const currentHandoff = loadFaultHandoff()
+    faultHandoff.value = currentHandoff?.toRequestId === next.requestId ? currentHandoff : null
+  }
+
+  saveJson(ACTIVE_SNAPSHOT_KEY, next)
 }
 
 async function loadProfile() {
@@ -323,6 +522,15 @@ onUnmounted(() => { stopPoll() })
 .badge-gray { background: #f9fafb; color: #9ca3af; border: 1px solid #e5e7eb; }
 .badge-gray::before { background: #9ca3af; }
 
+.status-summary { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 18px 20px; border-radius: 12px; background: white; border: 1px solid #e5e7eb; margin-bottom: 16px; }
+.summary-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; }
+.summary-title { margin-top: 5px; font-size: 20px; font-weight: 750; color: #111827; }
+.summary-sub { margin-top: 5px; font-size: 13px; line-height: 1.5; color: #6b7280; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.summary-grid div { padding: 12px; border-radius: 8px; background: #f8faf9; border: 1px solid #e5e7eb; min-width: 0; }
+.summary-grid span { display: block; font-size: 11px; color: #6b7280; }
+.summary-grid strong { display: block; margin-top: 5px; font-size: 18px; color: #111827; overflow-wrap: anywhere; }
+
 .full { margin-bottom: 16px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; transition: 0.2s; }
@@ -338,6 +546,9 @@ onUnmounted(() => { stopPoll() })
 .metric { padding: 16px; border-radius: 10px; background: #f8faf9; border: 1px solid #e5e7eb; }
 .m-label { font-size: 11px; color: #9ca3af; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
 .m-val { font-size: 20px; font-weight: 700; color: #111827; margin-top: 6px; letter-spacing: -0.3px; }
+.progress-metric { min-height: 96px; }
+.progress-track { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin-top: 12px; }
+.progress-fill { height: 100%; border-radius: inherit; background: #10b981; transition: width 0.25s ease; }
 
 /* DETAIL LIST */
 .detail-list { display: grid; grid-template-columns: 1fr 1fr; }
@@ -353,7 +564,10 @@ onUnmounted(() => { stopPoll() })
 .tl-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; border: 2px solid #10b981; background: white; }
 .tl-item.done .tl-dot { background: #10b981; }
 .tl-item.active .tl-dot { background: #10b981; box-shadow: 0 0 0 4px #d1fae5; }
+.tl-item.danger .tl-dot { border-color: #ef4444; background: #ef4444; box-shadow: 0 0 0 4px #fee2e2; }
+.tl-item.warning .tl-dot { border-color: #f59e0b; background: #f59e0b; box-shadow: 0 0 0 4px #fef3c7; }
 .tl-text { font-size: 13px; font-weight: 500; color: #1f2937; }
+.tl-sub { font-size: 12px; color: #6b7280; margin-top: 3px; line-height: 1.5; }
 
 /* ACTIONS */
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -366,4 +580,21 @@ onUnmounted(() => { stopPoll() })
 .btn-danger:hover:not(:disabled) { background: #fef2f2; }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .actions-note { font-size: 12px; color: #9ca3af; margin-top: 12px; }
+
+@media (max-width: 980px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .status-summary { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .page { padding: 20px 16px; }
+  .status-banner { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .sb-left { align-items: flex-start; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: 1fr; }
+  .detail-list { grid-template-columns: 1fr; }
+  .dl-item:nth-child(odd) { border-right: none; }
+  .actions { flex-direction: column; }
+  .btn { justify-content: center; width: 100%; }
+}
 </style>

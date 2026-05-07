@@ -51,6 +51,7 @@ export const setFaultDispatchMode = (data) => request({ url: '/api/admin/system/
 
 // 充电桩管理
 export const getStations = () => request({ url: '/api/admin/stations', method: 'get' })
+export const getStationsOverview = () => request({ url: '/api/stations/overview', method: 'get' })
 export const getStationQueue = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/queue`, method: 'get' })
 export const startStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/start`, method: 'post' })
 export const shutdownStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/shutdown`, method: 'post' })
@@ -58,7 +59,7 @@ export const faultStation = (stationCode) => request({ url: `/api/admin/stations
 export const recoverStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/recover`, method: 'post' })
 
 // 用户管理
-export const getUsers = () => request({ url: '/api/admin/users', method: 'get' })
+export const getUsers = (params) => request({ url: '/api/admin/users', method: 'get', params })
 export const getUserDetail = (userId) => request({ url: `/api/admin/users/${userId}`, method: 'get' })
 export const updateBatteryCapacity = (userId, data) => request({ url: `/api/admin/users/${userId}/battery-capacity`, method: 'put', data })
 

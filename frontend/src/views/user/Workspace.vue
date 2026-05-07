@@ -9,8 +9,17 @@
     <div class="stats">
       <div class="stat"><div class="stat-label green">当前状态</div><div class="stat-val">{{ hasActive ? statusText : '空闲' }}</div></div>
       <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ activeRequest?.queue_number || '--' }}</div></div>
-      <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ activeRequest?.front_waiting_count ?? '--' }}</div></div>
+      <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ frontVehicleCountText }}</div></div>
       <div class="stat"><div class="stat-label gray">预计等待</div><div class="stat-val">{{ estWaitDisplay }}</div></div>
+    </div>
+
+    <div class="status-strip" :class="hasActive ? 'active' : 'idle'">
+      <div>
+        <div class="strip-kicker">{{ hasActive ? '当前进度' : '当前可提交' }}</div>
+        <div class="strip-title">{{ statusHeadline }}</div>
+        <div class="strip-sub">{{ statusSubline }}</div>
+      </div>
+      <router-link v-if="hasActive" to="/user/task" class="strip-action">查看详情</router-link>
     </div>
 
     <!-- Form + Current Status -->
@@ -89,6 +98,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { createChargeRequest, getActiveRequest, getProfile } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
+import { clearLegacyLocalState } from '@/utils/authSession'
 
 const form = ref({ charge_mode: 'FAST', request_energy: null })
 const submitting = ref(false)
@@ -117,6 +127,62 @@ const estWaitDisplay = computed(() => {
   return `~${m} min`
 })
 
+const frontVehicleCount = computed(() => {
+  const request = activeRequest.value
+  if (!request) return null
+  if ([REQUEST_STATUS.QUEUED, REQUEST_STATUS.CHARGING].includes(request.request_status)) {
+    const position = Number(request.station_queue_position)
+    if (Number.isFinite(position)) return Math.max(0, position - 1)
+  }
+  const count = Number(request.front_waiting_count)
+  return Number.isFinite(count) ? Math.max(0, count) : null
+})
+
+const frontVehicleCountText = computed(() => {
+  return frontVehicleCount.value === null ? '--' : String(frontVehicleCount.value)
+})
+
+const chargedEnergy = computed(() => {
+  const n = Number(activeRequest.value?.charged_energy ?? activeRequest.value?.actual_energy)
+  return Number.isFinite(n) ? Math.max(0, n) : null
+})
+
+const chargePercentText = computed(() => {
+  const total = Number(activeRequest.value?.request_energy)
+  if (chargedEnergy.value === null || !Number.isFinite(total) || total <= 0) return '--'
+  return `${Math.min(100, Math.max(0, chargedEnergy.value / total * 100)).toFixed(1)}%`
+})
+
+const statusHeadline = computed(() => {
+  if (!hasActive.value) return '没有进行中的充电请求'
+  const request = activeRequest.value
+  if (request.request_status === REQUEST_STATUS.WAITING_AREA) return `等候区排队，前方 ${frontVehicleCountText.value} 辆`
+  if (request.request_status === REQUEST_STATUS.QUEUED) return `${request.station_code || '充电桩'} 队列第 ${request.station_queue_position ?? '?'} 位`
+  if (request.request_status === REQUEST_STATUS.CHARGING) return `${request.station_code || '充电桩'} 正在充电，已充 ${chargePercentText.value}`
+  return statusText.value
+})
+
+const statusSubline = computed(() => {
+  if (!hasActive.value) return '选择充电模式和目标电量后提交，页面会自动同步排队状态。'
+  const request = activeRequest.value
+  if (request.request_status === REQUEST_STATUS.CHARGING) return `已充电量 ${chargedEnergy.value === null ? '--' : `${chargedEnergy.value.toFixed(2)} kWh`}，预计完成 ${fmtDateTime(request.estimated_finish_time)}`
+  return `预计开始 ${fmtDateTime(request.estimated_start_time)}，预计等待 ${estWaitDisplay.value}`
+})
+
+function fmtDateTime(time) {
+  if (!time) return '--'
+  try {
+    return new Date(time).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return '--'
+  }
+}
+
 async function loadProfile() {
   try {
     const res = await getProfile()
@@ -136,13 +202,11 @@ function formatLocalDateTime(date = new Date()) {
 }
 
 function clearActiveConflict() {
-  localStorage.removeItem('active_request_conflict')
+  clearLegacyLocalState()
 }
 
 function rememberActiveRequest(data) {
   if (!data?.request_id) return
-  localStorage.removeItem('request_id')
-  localStorage.removeItem('request_ids')
   clearActiveConflict()
   currentReq.value = data
 }
@@ -157,7 +221,7 @@ async function loadActiveRequest() {
       rememberActiveRequest(data)
       return true
     }
-    localStorage.removeItem('request_id')
+    clearLegacyLocalState()
     currentReq.value = null
     clearActiveConflict()
     return false
@@ -199,8 +263,6 @@ async function submitRequest() {
       request_energy: form.value.request_energy
     }
     submitResult.value = createdRequest
-    localStorage.removeItem('request_id')
-    localStorage.removeItem('request_ids')
     clearActiveConflict()
     currentReq.value = createdRequest
     startPoll()
@@ -265,6 +327,15 @@ onUnmounted(() => { stopPoll() })
 .stat-label.gray::before { background: #9ca3af; }
 .stat-val { font-size: 26px; font-weight: 700; color: #111827; letter-spacing: -1px; }
 
+.status-strip { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border: 1px solid #e5e7eb; border-radius: 12px; background: white; margin-bottom: 16px; }
+.status-strip.active { border-color: #bfdbfe; background: #eff6ff; }
+.status-strip.idle { border-color: #d1fae5; background: #ecfdf5; }
+.strip-kicker { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; }
+.strip-title { margin-top: 5px; font-size: 18px; font-weight: 700; color: #111827; }
+.strip-sub { margin-top: 4px; font-size: 13px; color: #6b7280; line-height: 1.5; }
+.strip-action { flex: 0 0 auto; padding: 9px 14px; border-radius: 8px; background: white; border: 1px solid #bfdbfe; color: #1d4ed8; font-size: 13px; font-weight: 700; text-decoration: none; }
+.strip-action:hover { background: #dbeafe; }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; transition: 0.2s; }
 .card:hover { border-color: #d1d5db; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
@@ -313,4 +384,22 @@ onUnmounted(() => { stopPoll() })
 .price-name { font-size: 13px; font-weight: 600; color: #1f2937; }
 .price-time { font-size: 11px; color: #9ca3af; margin-top: 2px; }
 .price-val { font-size: 16px; font-weight: 700; color: #059669; letter-spacing: -0.3px; }
+
+@media (max-width: 980px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .page { padding: 20px 16px; }
+  .stats { grid-template-columns: 1fr; gap: 10px; }
+  .stat { padding: 14px 16px; }
+  .stat-val { font-size: 22px; }
+  .status-strip { align-items: stretch; flex-direction: column; }
+  .strip-action { text-align: center; }
+  .form-grid { grid-template-columns: 1fr; }
+  .result-grid { grid-template-columns: 1fr; }
+  .price-row { align-items: flex-start; gap: 8px; }
+  .price-val { white-space: nowrap; }
+}
 </style>
