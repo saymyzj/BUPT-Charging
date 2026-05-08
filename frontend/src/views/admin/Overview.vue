@@ -53,7 +53,8 @@
           <div class="st-row"><span>当前服务</span><span>{{ currentServiceText(s) }}</span></div>
           <div class="st-row"><span>队列长度</span><span>{{ s.queue_length ?? 0 }}</span></div>
           <div class="st-row"><span>累计次数</span><span>{{ s.total_charge_count ?? 0 }}</span></div>
-          <div class="st-row"><span>累计电量</span><span>{{ (s.total_charge_energy ?? 0).toFixed(1) }} kWh</span></div>
+          <div class="st-row"><span>累计时长</span><span>{{ fmtDuration(s.total_charge_seconds) }}</span></div>
+          <div class="st-row"><span>累计电量</span><span>{{ fmtEnergy(s.total_charge_energy) }}</span></div>
         </div>
         <button class="btn-queue" @click="viewQueue(s.station_code)">查看队列</button>
       </div>
@@ -66,14 +67,15 @@
         <div class="modal-body">
           <div v-if="queueLoading">加载中...</div>
           <table class="t" v-if="!queueLoading && queueData.length">
-            <thead><tr><th>用户名</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr></thead>
+            <thead><tr><th>用户名</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th class="queue-status-col">状态与预计</th></tr></thead>
             <tbody>
               <tr v-for="(q, index) in queueData" :key="q.queue_number">
-                <td>{{ q.username || q.user_id }}</td>
+                <td>{{ q.username || '--' }}</td>
+                <td>{{ q.user_id || '--' }}</td>
                 <td>{{ q.battery_capacity }} kWh</td>
                 <td>{{ q.request_energy }} kWh</td>
                 <td><strong>{{ q.queue_number }}</strong></td>
-                <td>{{ queueTimeText(q, index) }}</td>
+                <td class="queue-status-col">{{ queueTimeText(q, index) }}</td>
               </tr>
             </tbody>
           </table>
@@ -193,7 +195,7 @@ function queueTimeText(row, index) {
   const hasChargingHead = Boolean(currentStation.value?.current_request_id)
   if (hasChargingHead && index === 0) {
     const remain = remainingMinutes(currentFinishTime.value, now)
-    return remain === null ? '充电中' : `充电中，还需 ${remain} min`
+    return remain === null ? '正在服务' : `正在服务，还需 ${remain} min`
   }
 
   const frontCount = hasChargingHead ? index : Math.max(0, index)
@@ -203,7 +205,23 @@ function queueTimeText(row, index) {
 
 function currentServiceText(station) {
   if (!station?.current_request_id) return '空闲'
-  return station.current_user?.username || station.current_user?.user_id || station.current_request_id
+  if (station.current_user?.username) return `用户 ${station.current_user.username}`
+  if (station.current_user?.user_id) return `用户 ${station.current_user.user_id}`
+  return '服务中'
+}
+
+function fmtDuration(value) {
+  const seconds = Math.max(0, Math.floor(Number(value || 0)))
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const rest = seconds % 60
+  if (h > 0) return rest > 0 ? `${h}h ${m}m ${rest}s` : `${h}h ${m}m`
+  if (m > 0) return rest > 0 ? `${m}m ${rest}s` : `${m}m`
+  return `${rest}s`
+}
+
+function fmtEnergy(value) {
+  return `${Number(value || 0).toFixed(2)} kWh`
 }
 
 function remainingMinutes(time, now = new Date()) {
@@ -284,7 +302,7 @@ onMounted(loadStations)
 
 /* MODAL */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.modal-card { background: white; border-radius: 16px; width: 600px; max-height: 80vh; overflow-y: auto; }
+.modal-card { background: white; border-radius: 16px; width: min(760px, calc(100vw - 48px)); max-height: 80vh; overflow-y: auto; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
 .modal-head h3 { font-size: 16px; font-weight: 700; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #9ca3af; }
@@ -293,6 +311,7 @@ table.t { width: 100%; border-collapse: collapse; }
 table.t th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
 table.t td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; color: #374151; }
 table.t td strong { color: #111827; }
+.queue-status-col { min-width: 160px; }
 .queue-note { margin-top: 12px; color: #9ca3af; font-size: 12px; }
 @media (max-width: 980px) {
   .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
