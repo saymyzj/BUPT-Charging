@@ -1,4 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { getProfile } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
+import { clearAuthSession, getAuthToken } from '@/utils/authSession'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -47,19 +50,25 @@ const router = createRouter({
 })
 
 function clearAuthState() {
-  localStorage.removeItem('auth_token')
-  localStorage.removeItem('user_role')
-  localStorage.removeItem('user_id')
-  localStorage.removeItem('username')
+  clearAuthSession()
 }
 
-router.beforeEach((to, from, next) => {
+async function loadProfileRole() {
+  try {
+    const res = await getProfile()
+    const data = unwrapResponseData(res)
+    if (data.code !== undefined && data.code !== 0) return ''
+    return data.role || ''
+  } catch (_) {
+    return ''
+  }
+}
+
+router.beforeEach(async (to, from, next) => {
   // 页面标题
   if (to.meta.title) document.title = to.meta.title
 
-  const token = localStorage.getItem('auth_token')
-  const role = localStorage.getItem('user_role')
-  const hasValidRole = role === 'USER' || role === 'ADMIN'
+  const token = getAuthToken()
   const requiresAuth = to.matched.some(r => r.meta.requiresAuth)
 
   // 需要登录但未登录 → 跳登录
@@ -68,6 +77,9 @@ router.beforeEach((to, from, next) => {
   }
 
   // 有 token 但角色缺失/异常，多半是旧缓存；清理后回登录页，避免无限重定向
+  const role = token ? await loadProfileRole() : ''
+  const hasValidRole = role === 'USER' || role === 'ADMIN'
+
   if (requiresAuth && token && !hasValidRole) {
     clearAuthState()
     return next('/login')

@@ -19,6 +19,9 @@
           <th>状态</th>
           <th>当前服务</th>
           <th>队列长度</th>
+          <th>累计次数</th>
+          <th>累计时长</th>
+          <th>累计电量</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -29,6 +32,9 @@
           <td><span class="st-badge" :class="'badge-' + (s.station_status||'').toLowerCase()">{{ STATION_STATUS_TEXT[s.station_status] || s.station_status }}</span></td>
           <td>{{ currentServiceText(s) }}</td>
           <td>{{ s.queue_length ?? 0 }}</td>
+          <td>{{ s.total_charge_count ?? 0 }}</td>
+          <td>{{ fmtDuration(s.total_charge_seconds) }}</td>
+          <td>{{ fmtEnergy(s.total_charge_energy) }}</td>
           <td class="action-cell">
             <button class="btn-sm btn-green" v-if="s.station_status === 'SHUTDOWN'" @click="doAction(s.station_code, 'start')">启动</button>
             <button class="btn-sm btn-gray" v-if="s.station_status === 'RUNNING' && !s.current_request_id && (s.queue_length||0) === 0" @click="doAction(s.station_code, 'shutdown')">关闭</button>
@@ -93,8 +99,31 @@ async function doAction(code, action) {
 }
 
 function currentServiceText(station) {
-  if (!station?.current_request_id) return '--'
-  return station.current_user?.username || station.current_user?.user_id || station.current_request_id
+  if (!station?.current_request_id) return '空闲'
+  if (station.current_user?.username) return `用户 ${maskIdentifier(station.current_user.username)}`
+  if (station.current_user?.user_id) return `用户 ${maskIdentifier(station.current_user.user_id)}`
+  return '服务中'
+}
+
+function maskIdentifier(value) {
+  const text = String(value || '')
+  if (text.length <= 4) return text
+  if (text.length <= 7) return `${text.slice(0, 2)}****${text.slice(-1)}`
+  return `${text.slice(0, 3)}****${text.slice(-3)}`
+}
+
+function fmtDuration(value) {
+  const seconds = Math.max(0, Math.floor(Number(value || 0)))
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const rest = seconds % 60
+  if (h > 0) return rest > 0 ? `${h}h ${m}m ${rest}s` : `${h}h ${m}m`
+  if (m > 0) return rest > 0 ? `${m}m ${rest}s` : `${m}m`
+  return `${rest}s`
+}
+
+function fmtEnergy(value) {
+  return `${Number(value || 0).toFixed(2)} kWh`
 }
 
 onMounted(loadStations)

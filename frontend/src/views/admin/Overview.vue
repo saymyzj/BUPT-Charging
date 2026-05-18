@@ -11,6 +11,36 @@
 
     <div v-if="loading" class="loading-text">加载中...</div>
 
+    <!-- Waiting Area -->
+    <div class="card waiting-card" v-if="!loading">
+      <div class="card-head">
+        <div>
+          <h3>等候区</h3>
+          <p>尚未进入任何充电桩队列的活跃请求</p>
+        </div>
+        <span class="waiting-capacity">{{ waitingSummary.total_waiting }} / {{ waitingSummary.capacity }}</span>
+      </div>
+      <div class="waiting-stats">
+        <div class="waiting-stat"><span>快充等待</span><strong>{{ waitingSummary.fast_queue_count }}</strong></div>
+        <div class="waiting-stat"><span>慢充等待</span><strong>{{ waitingSummary.slow_queue_count }}</strong></div>
+        <div class="waiting-stat"><span>疑似等候用户</span><strong>{{ waitingAreaRows.length }}</strong></div>
+      </div>
+      <table class="t waiting-table" v-if="waitingAreaRows.length">
+        <thead><tr><th>用户</th><th>请求编号</th><th>充电模式</th><th>请求电量</th><th>等待时长</th></tr></thead>
+        <tbody>
+          <tr v-for="row in waitingAreaRows" :key="row.user_id">
+            <td>{{ row.username || row.user_id }}</td>
+            <td>{{ row.request_id || '接口未提供' }}</td>
+            <td>{{ row.charge_mode || '接口未提供' }}</td>
+            <td>{{ row.request_energy ? `${row.request_energy} kWh` : '接口未提供' }}</td>
+            <td>{{ row.waiting_text }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else class="empty-inline">等候区暂无用户</div>
+      <div class="queue-note">说明：当前后端未提供等候区明细接口，请求编号、模式、电量需后端补充后才能精确展示；此处用活跃用户减去桩队列用户得到等候区候选列表。</div>
+    </div>
+
     <!-- Station Grid -->
     <div class="station-grid" v-if="!loading">
       <div class="station-card" v-for="s in stations" :key="s.station_code" :class="'st-' + (s.station_status || '').toLowerCase()">
@@ -23,7 +53,8 @@
           <div class="st-row"><span>当前服务</span><span>{{ currentServiceText(s) }}</span></div>
           <div class="st-row"><span>队列长度</span><span>{{ s.queue_length ?? 0 }}</span></div>
           <div class="st-row"><span>累计次数</span><span>{{ s.total_charge_count ?? 0 }}</span></div>
-          <div class="st-row"><span>累计电量</span><span>{{ (s.total_charge_energy ?? 0).toFixed(1) }} kWh</span></div>
+          <div class="st-row"><span>累计时长</span><span>{{ fmtDuration(s.total_charge_seconds) }}</span></div>
+          <div class="st-row"><span>累计电量</span><span>{{ fmtEnergy(s.total_charge_energy) }}</span></div>
         </div>
         <button class="btn-queue" @click="viewQueue(s.station_code)">查看队列</button>
       </div>
@@ -36,14 +67,15 @@
         <div class="modal-body">
           <div v-if="queueLoading">加载中...</div>
           <table class="t" v-if="!queueLoading && queueData.length">
-            <thead><tr><th>用户名</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr></thead>
+            <thead><tr><th>用户名</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th class="queue-status-col">状态与预计</th></tr></thead>
             <tbody>
               <tr v-for="(q, index) in queueData" :key="q.queue_number">
-                <td>{{ q.username || q.user_id }}</td>
+                <td>{{ q.username || '--' }}</td>
+                <td>{{ q.user_id || '--' }}</td>
                 <td>{{ q.battery_capacity }} kWh</td>
                 <td>{{ q.request_energy }} kWh</td>
                 <td><strong>{{ q.queue_number }}</strong></td>
-                <td>{{ queueTimeText(q, index) }}</td>
+                <td class="queue-status-col">{{ queueTimeText(q, index) }}</td>
               </tr>
             </tbody>
           </table>
@@ -57,7 +89,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getRequestStatus, getStations, getStationQueue } from '@/api/charging'
+import { getRequestStatus, getStations, getStationsOverview, getStationQueue, getUsers } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
@@ -69,6 +101,13 @@ const queueData = ref([])
 const queueLoading = ref(false)
 const currentStation = ref(null)
 const currentFinishTime = ref(null)
+const waitingSummary = ref({
+  fast_queue_count: 0,
+  slow_queue_count: 0,
+  total_waiting: 0,
+  capacity: 0,
+})
+const waitingAreaRows = ref([])
 
 async function loadStations() {
   loading.value = true
@@ -76,8 +115,57 @@ async function loadStations() {
     const res = await getStations()
     const data = unwrapResponseData(res)
     stations.value = Array.isArray(data) ? data : (data.stations || [])
+    await loadWaitingArea()
   } catch (_) { /* silent */ }
   loading.value = false
+}
+
+async function loadWaitingArea() {
+  const [overviewRes, usersRes, queueLists] = await Promise.all([
+    getStationsOverview().catch(() => null),
+    getUsers({ page_size: 100 }).catch(() => null),
+    loadAllStationQueues(),
+  ])
+
+  const overview = overviewRes ? unwrapResponseData(overviewRes) : {}
+  waitingSummary.value = overview.waiting_queue || {
+    fast_queue_count: 0,
+    slow_queue_count: 0,
+    total_waiting: 0,
+    capacity: 0,
+  }
+
+  const usersPayload = usersRes ? unwrapResponseData(usersRes) : {}
+  const users = Array.isArray(usersPayload.users) ? usersPayload.users : []
+  const stationUserIds = new Set()
+  queueLists.flat().forEach((item) => {
+    if (item.user_id) stationUserIds.add(item.user_id)
+  })
+
+  waitingAreaRows.value = users
+    .filter((user) => user.role !== 'ADMIN' && user.has_active_request && !stationUserIds.has(user.user_id))
+    .map((user) => ({
+      user_id: user.user_id,
+      username: user.username,
+      request_id: null,
+      charge_mode: null,
+      request_energy: null,
+      waiting_text: user.created_at ? '等待中' : '等待中',
+    }))
+}
+
+async function loadAllStationQueues() {
+  const results = await Promise.all(
+    stations.value.map((station) =>
+      getStationQueue(station.station_code)
+        .then((res) => {
+          const data = unwrapResponseData(res)
+          return Array.isArray(data) ? data : (data.queue || [])
+        })
+        .catch(() => []),
+    ),
+  )
+  return results
 }
 
 async function viewQueue(code) {
@@ -107,7 +195,7 @@ function queueTimeText(row, index) {
   const hasChargingHead = Boolean(currentStation.value?.current_request_id)
   if (hasChargingHead && index === 0) {
     const remain = remainingMinutes(currentFinishTime.value, now)
-    return remain === null ? '充电中' : `充电中，还需 ${remain} min`
+    return remain === null ? '正在服务' : `正在服务，还需 ${remain} min`
   }
 
   const frontCount = hasChargingHead ? index : Math.max(0, index)
@@ -117,7 +205,23 @@ function queueTimeText(row, index) {
 
 function currentServiceText(station) {
   if (!station?.current_request_id) return '空闲'
-  return station.current_user?.username || station.current_user?.user_id || station.current_request_id
+  if (station.current_user?.username) return `用户 ${station.current_user.username}`
+  if (station.current_user?.user_id) return `用户 ${station.current_user.user_id}`
+  return '服务中'
+}
+
+function fmtDuration(value) {
+  const seconds = Math.max(0, Math.floor(Number(value || 0)))
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const rest = seconds % 60
+  if (h > 0) return rest > 0 ? `${h}h ${m}m ${rest}s` : `${h}h ${m}m`
+  if (m > 0) return rest > 0 ? `${m}m ${rest}s` : `${m}m`
+  return `${rest}s`
+}
+
+function fmtEnergy(value) {
+  return `${Number(value || 0).toFixed(2)} kWh`
 }
 
 function remainingMinutes(time, now = new Date()) {
@@ -165,6 +269,19 @@ onMounted(loadStations)
 
 .loading-text { color: #9ca3af; font-size: 14px; padding: 40px 0; text-align: center; }
 
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+.card-head { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; }
+.card-head h3 { font-size: 15px; font-weight: 700; color: #111827; margin: 0; }
+.card-head p { font-size: 12px; color: #6b7280; margin: 4px 0 0; }
+.waiting-card { margin-bottom: 18px; }
+.waiting-capacity { padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; font-size: 12px; font-weight: 700; }
+.waiting-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; border-bottom: 1px solid #f3f4f6; }
+.waiting-stat { padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8faf9; display: flex; align-items: center; justify-content: space-between; }
+.waiting-stat span { font-size: 12px; color: #6b7280; }
+.waiting-stat strong { font-size: 18px; color: #111827; }
+.waiting-table { border-left: none !important; border-right: none !important; border-radius: 0 !important; }
+.empty-inline { color: #9ca3af; font-size: 13px; text-align: center; padding: 18px 20px; }
+
 .station-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .station-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; transition: 0.2s; }
 .station-card:hover { border-color: #d1d5db; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
@@ -185,7 +302,7 @@ onMounted(loadStations)
 
 /* MODAL */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.modal-card { background: white; border-radius: 16px; width: 600px; max-height: 80vh; overflow-y: auto; }
+.modal-card { background: white; border-radius: 16px; width: min(760px, calc(100vw - 48px)); max-height: 80vh; overflow-y: auto; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
 .modal-head h3 { font-size: 16px; font-weight: 700; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #9ca3af; }
@@ -194,9 +311,11 @@ table.t { width: 100%; border-collapse: collapse; }
 table.t th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
 table.t td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; color: #374151; }
 table.t td strong { color: #111827; }
+.queue-status-col { min-width: 160px; }
 .queue-note { margin-top: 12px; color: #9ca3af; font-size: 12px; }
 @media (max-width: 980px) {
   .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .waiting-stats { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .station-grid { grid-template-columns: 1fr; }

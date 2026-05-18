@@ -16,16 +16,16 @@
           </div>
           <div class="profile-item">
             <span class="label">用户名</span>
-            <span class="value">{{ profile.username || username }}</span>
+            <span class="value">{{ profile.username || '--' }}</span>
           </div>
           <div class="profile-item">
             <span class="label">角色</span>
-            <span class="value">{{ profile.role || role }}</span>
+            <span class="value">{{ profile.role || '--' }}</span>
           </div>
           <div class="profile-item">
             <span class="label">电池容量</span>
             <span class="value">{{ capacityText }}</span>
-            <div v-if="(profile.role || role) !== 'ADMIN'" class="capacity-edit">
+            <div v-if="profile.role !== 'ADMIN'" class="capacity-edit">
               <input type="number" v-model.number="capacityForm" min="1" placeholder="输入新容量">
               <button :disabled="capacitySaving" @click="saveCapacity">{{ capacitySaving ? '保存中' : '修改' }}</button>
             </div>
@@ -97,11 +97,8 @@ const billsLoading = ref(false)
 const capacityForm = ref(null)
 const capacitySaving = ref(false)
 const capacityMsg = ref('')
-const username = localStorage.getItem('username') || 'user'
-const role = localStorage.getItem('user_role') || 'USER'
-
 const capacityText = computed(() => {
-  if ((profile.value.role || role) === 'ADMIN') return '不适用'
+  if (profile.value.role === 'ADMIN') return '不适用'
   return profile.value.battery_capacity == null ? '--' : `${profile.value.battery_capacity} kWh`
 })
 
@@ -133,15 +130,9 @@ function requestResultText(bill) {
   return REQUEST_STATUS_TEXT[status] || status || '--'
 }
 
-function paidStorageKey(bill) {
-  const id = bill.detail_id || bill.request_id
-  return id ? `bill_paid_${id}` : ''
-}
-
 function isPaid(bill) {
   if (bill.payment_status === 'PAID') return true
-  const key = paidStorageKey(bill)
-  return Boolean(key && localStorage.getItem(key))
+  return false
 }
 
 async function loadProfile() {
@@ -152,7 +143,6 @@ async function loadProfile() {
     if (data.code === undefined || data.code === 0) {
       profile.value = data
       capacityForm.value = data.battery_capacity
-      if (data.username) localStorage.setItem('username', data.username)
     }
   } catch (_) { /* silent */ }
   loading.value = false

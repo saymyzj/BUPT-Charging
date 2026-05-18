@@ -49,7 +49,7 @@
                 <td><strong>{{ r.station_code }}</strong></td>
                 <td>{{ r.total_charge_count }}</td>
                 <td>{{ fmtDuration(r.total_charge_seconds) }}</td>
-                <td>{{ (r.total_charge_energy || 0).toFixed(1) }}</td>
+                <td>{{ fmtEnergy(r.total_charge_energy) }}</td>
                 <td>¥{{ (r.total_charge_fee || 0).toFixed(2) }}</td>
                 <td>¥{{ (r.total_service_fee || 0).toFixed(2) }}</td>
                 <td><strong>¥{{ (r.total_fee || 0).toFixed(2) }}</strong></td>
@@ -65,7 +65,7 @@
           <div class="chart-title">各桩充电电量 (kWh)</div>
           <div class="bar-chart">
             <div class="bar-item" v-for="c in chartData" :key="c.code">
-              <div class="bar-val">{{ c.energy.toFixed(0) }}</div>
+              <div class="bar-val">{{ fmtEnergy(c.energy) }}</div>
               <div class="bar" :style="{ height: barH(c.energy, maxEnergy) + '%', background: '#34d399' }"></div>
               <div class="bar-label">{{ c.code }}</div>
             </div>
@@ -75,7 +75,7 @@
           <div class="chart-title">各桩总费用 (¥)</div>
           <div class="bar-chart">
             <div class="bar-item" v-for="c in chartData" :key="c.code + 'fee'">
-              <div class="bar-val">{{ c.fee.toFixed(0) }}</div>
+              <div class="bar-val">¥{{ c.fee.toFixed(2) }}</div>
               <div class="bar" :style="{ height: barH(c.fee, maxFee) + '%', background: '#fbbf24' }"></div>
               <div class="bar-label">{{ c.code }}</div>
             </div>
@@ -90,17 +90,27 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getReports } from '@/api/charging'
+import { getReports, getStations } from '@/api/charging'
 
 const granularity = ref('day')
 const reports = ref([])
+const stations = ref([])
 const loading = ref(false)
 
 function fmtDuration(s) {
   if (!s && s !== 0) return '--'
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
+  const seconds = Math.max(0, Math.floor(Number(s)))
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const rest = seconds % 60
+  if (h > 0) return rest > 0 ? `${h}h ${m}m ${rest}s` : `${h}h ${m}m`
+  if (m > 0) return rest > 0 ? `${m}m ${rest}s` : `${m}m`
+  return `${rest}s`
+}
+
+function fmtEnergy(value) {
+  const energy = Number(value || 0)
+  return `${energy.toFixed(2)} kWh`
 }
 
 function sumField(field) {
@@ -110,12 +120,15 @@ function sumField(field) {
 // Aggregate per station for charts
 const chartData = computed(() => {
   const map = {}
+  stations.value.forEach(s => {
+    if (!map[s.station_code]) map[s.station_code] = { code: s.station_code, energy: 0, fee: 0 }
+  })
   reports.value.forEach(r => {
     if (!map[r.station_code]) map[r.station_code] = { code: r.station_code, energy: 0, fee: 0 }
     map[r.station_code].energy += r.total_charge_energy || 0
     map[r.station_code].fee += r.total_fee || 0
   })
-  return Object.values(map)
+  return Object.values(map).sort((a, b) => a.code.localeCompare(b.code))
 })
 
 const maxEnergy = computed(() => Math.max(...chartData.value.map(c => c.energy), 1))
@@ -126,9 +139,14 @@ function barH(val, max) { return Math.max((val / max) * 100, 2) }
 async function loadData() {
   loading.value = true
   try {
-    const res = await getReports(granularity.value)
-    const payload = res?.data ?? res
+    const [reportRes, stationRes] = await Promise.all([
+      getReports(granularity.value),
+      getStations(),
+    ])
+    const payload = reportRes?.data ?? reportRes
+    const stationPayload = stationRes?.data ?? stationRes
     reports.value = payload?.rows || payload?.reports || []
+    stations.value = Array.isArray(stationPayload) ? stationPayload : []
   } catch (_) { /* silent */ }
   loading.value = false
 }

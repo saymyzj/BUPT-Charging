@@ -15,7 +15,7 @@
       <div class="nav-actions">
         <div class="nav-admin">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
-          admin
+          {{ username }}
         </div>
         <button class="nav-logout" @click="handleLogout">退出</button>
       </div>
@@ -25,20 +25,31 @@
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getProfile } from '@/api/charging'
+import { unwrapResponseData } from '@/api/request'
+import { clearAuthSession } from '@/utils/authSession'
 
 const router = useRouter()
+const username = ref('admin')
 
 function handleLogout() {
-  localStorage.removeItem('auth_token')
-  localStorage.removeItem('user_role')
-  localStorage.removeItem('user_id')
-  localStorage.removeItem('username')
-  localStorage.removeItem('request_id')
-  localStorage.removeItem('request_ids')
-  localStorage.removeItem('active_request_conflict')
+  clearAuthSession()
   router.push('/login')
 }
+
+async function loadProfile() {
+  try {
+    const res = await getProfile()
+    const data = unwrapResponseData(res)
+    if (data.code === undefined || data.code === 0) {
+      username.value = data.username || 'admin'
+    }
+  } catch (_) { /* silent */ }
+}
+
+onMounted(loadProfile)
 </script>
 
 <style scoped>

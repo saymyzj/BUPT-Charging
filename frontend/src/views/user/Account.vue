@@ -48,10 +48,10 @@
               </div>
               <div class="pay-row">
                 <span>支付时间</span>
-                <strong>{{ fmtDateTime(paidAt) }}</strong>
+                <strong>{{ fmtDateTime(detail.paid_at) }}</strong>
               </div>
-              <button class="btn-pay" :disabled="paymentStatus === 'PAID'" @click="payBill">
-                {{ paymentStatus === 'PAID' ? '已支付' : `立即支付 ${fmtMoney(detail.total_fee)}` }}
+              <button class="btn-pay" disabled @click="payBill">
+                {{ paymentStatus === 'PAID' ? '已支付' : '等待后端支付接口' }}
               </button>
               <div class="pay-tip" :class="{ success: paymentStatus === 'PAID' }">
                 {{ payTip }}
@@ -85,30 +85,19 @@ import { REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
 const detail = ref(null)
 const loading = ref(false)
-const paidAt = ref(null)
-const paymentStatus = computed(() => paidAt.value ? 'PAID' : 'UNPAID')
-const paymentText = computed(() => paymentStatus.value === 'PAID' ? '已支付' : '待支付')
+const paymentStatus = computed(() => detail.value?.payment_status || 'UNAVAILABLE')
+const paymentText = computed(() => {
+  if (paymentStatus.value === 'PAID') return '已支付'
+  if (paymentStatus.value === 'UNPAID') return '待支付'
+  return '未接入支付'
+})
 const payTip = computed(() => {
-  if (paymentStatus.value === 'PAID') return '当前为前端本地模拟支付状态，后端支付接口接入后会以服务端状态为准。'
-  return '后端暂未提供支付接口，当前按钮先使用前端本地模拟支付。'
+  if (paymentStatus.value === 'PAID' || paymentStatus.value === 'UNPAID') return '支付状态来自后端账单数据。'
+  return '后端暂未提供支付状态或支付接口，前端不再使用本地缓存模拟支付。'
 })
 
-function billKey() {
-  const id = detail.value?.detail_id || detail.value?.request_id
-  return id ? `bill_paid_${id}` : ''
-}
-
-function loadLocalPayment() {
-  const key = billKey()
-  paidAt.value = key ? localStorage.getItem(key) : null
-}
-
 function payBill() {
-  const key = billKey()
-  if (!key || paymentStatus.value === 'PAID') return
-  const now = formatLocalDateTime()
-  localStorage.setItem(key, now)
-  paidAt.value = now
+  return false
 }
 
 function requestResultText(row) {
@@ -121,15 +110,6 @@ function chargeModeText(row) {
   if (row?.station_code?.startsWith('FAST')) return '快充'
   if (row?.station_code?.startsWith('SLOW')) return '慢充'
   return '--'
-}
-
-function formatLocalDateTime(date = new Date()) {
-  const pad = (value) => String(value).padStart(2, '0')
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate())
-  ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 function fmtDuration(s) {
@@ -163,7 +143,6 @@ async function loadDetail() {
     const data = unwrapResponseData(res)
     const details = Array.isArray(data) ? data : []
     detail.value = details[0] || null
-    loadLocalPayment()
   } catch (_) { /* silent */ }
   loading.value = false
 }
