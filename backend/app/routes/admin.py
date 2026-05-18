@@ -250,11 +250,14 @@ def get_station_queue(station_code):
             u.battery_capacity,
             cr.request_energy,
             cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.fault_source_request_id,
             cr.request_status,
             cr.estimated_wait_seconds,
             cr.station_queue_position
         FROM charge_request cr
         JOIN user u ON u.id = cr.user_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
         WHERE cr.station_id = ?
           AND cr.request_status IN ('QUEUED', 'CHARGING')
         ORDER BY cr.station_queue_position
@@ -268,6 +271,9 @@ def get_station_queue(station_code):
             "battery_capacity": float(row["battery_capacity"]),
             "request_energy": float(row["request_energy"]),
             "queue_number": row["queue_number"],
+            "source_queue_number": row["source_queue_number"],
+            "effective_queue_number": row["source_queue_number"] or row["queue_number"],
+            "is_fault_followup": bool(row["fault_source_request_id"]),
             "queue_wait_seconds": 0
             if row["request_status"] == "CHARGING"
             else int(row["estimated_wait_seconds"] or 0),
@@ -284,6 +290,85 @@ def get_station_queue(station_code):
         queue.append(item)
 
     return success_response({"station_code": station["station_code"], "queue": queue})
+
+
+@admin_bp.route("/waiting-area", methods=["GET"])
+@require_admin
+def get_waiting_area():
+    if _should_advance_runtime():
+        run_dispatch_scheduler()
+
+    capacity = _system_config_int(
+        "waiting_area_capacity",
+        current_app.config.get("WAITING_AREA_SIZE", 6),
+    )
+    rows = query_db(
+        """
+        SELECT
+            cr.request_id,
+            cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.fault_source_request_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.waiting_area_order,
+            cr.request_time,
+            cr.estimated_wait_seconds,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            u.user_id,
+            u.username,
+            u.battery_capacity
+        FROM charge_request cr
+        JOIN user u ON u.id = cr.user_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        WHERE cr.request_status = 'WAITING_AREA'
+        ORDER BY
+            cr.charge_mode,
+            CASE WHEN cr.waiting_area_order = 0 THEN 0 ELSE 1 END,
+            COALESCE(cr.waiting_area_order, 999999),
+            CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER),
+            cr.id
+        """
+    )
+
+    payload_rows = []
+    fast_count = 0
+    slow_count = 0
+    for row in rows:
+        if row["charge_mode"] == "FAST":
+            fast_count += 1
+        elif row["charge_mode"] == "SLOW":
+            slow_count += 1
+        payload_rows.append(
+            {
+                "request_id": row["request_id"],
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "battery_capacity": float(row["battery_capacity"]),
+                "charge_mode": row["charge_mode"],
+                "request_energy": float(row["request_energy"]),
+                "queue_number": row["queue_number"],
+                "source_queue_number": row["source_queue_number"],
+                "effective_queue_number": row["source_queue_number"] or row["queue_number"],
+                "is_fault_followup": bool(row["fault_source_request_id"]),
+                "waiting_area_order": row["waiting_area_order"],
+                "request_time": _iso_string(row["request_time"]),
+                "estimated_wait_seconds": row["estimated_wait_seconds"],
+                "estimated_start_time": _iso_string(row["estimated_start_time"]),
+                "estimated_finish_time": _iso_string(row["estimated_finish_time"]),
+            }
+        )
+
+    return success_response(
+        {
+            "capacity": capacity,
+            "total_waiting": len(payload_rows),
+            "fast_queue_count": fast_count,
+            "slow_queue_count": slow_count,
+            "rows": payload_rows,
+        }
+    )
 
 
 @admin_bp.route("/stations/<station_code>/start", methods=["POST"])

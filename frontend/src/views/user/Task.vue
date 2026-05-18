@@ -46,7 +46,7 @@
         <div class="card-head"><h3>关键指标</h3><button class="btn-refresh" @click="refresh">刷新</button></div>
         <div class="card-body">
           <div class="metrics">
-            <div class="metric"><div class="m-label">排队号</div><div class="m-val">{{ req.queue_number || '--' }}</div></div>
+            <div class="metric"><div class="m-label">排队号</div><div class="m-val">{{ queueNumberText(req) }}</div></div>
             <div class="metric"><div class="m-label">前车数量</div><div class="m-val">{{ frontVehicleCountText }}</div></div>
             <div class="metric"><div class="m-label">预计等待</div><div class="m-val">{{ estWait }}</div></div>
             <div class="metric progress-metric">
@@ -150,7 +150,7 @@ const bannerSub = computed(() => {
   if (hasFaultHandoff.value && (s === REQUEST_STATUS.QUEUED || s === REQUEST_STATUS.CHARGING)) {
     return `从 ${faultHandoff.value.fromStation || '原充电桩'} 中断后，已重新分配至 ${req.value.station_code || '新充电桩'}`
   }
-  if (s === REQUEST_STATUS.WAITING_AREA) return `排队号 ${req.value.queue_number} · 前方 ${frontVehicleCountText.value} 辆车`
+  if (s === REQUEST_STATUS.WAITING_AREA) return `排队号 ${queueNumberText(req.value)} · 前方 ${frontVehicleCountText.value} 辆车`
   if (s === REQUEST_STATUS.QUEUED) return `分配至 ${req.value.station_code} · 队列第 ${req.value.station_queue_position ?? '?'} 位 · 前方 ${frontVehicleCountText.value} 辆车`
   if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code} 充电中 · 已充 ${chargePercentText.value}`
   if (s === REQUEST_STATUS.COMPLETED) return '充电已正常完成'
@@ -367,6 +367,14 @@ function activeSnapshot(data) {
     queueNumber: data.queue_number || null,
     savedAt: new Date().toISOString(),
   }
+}
+
+function queueNumberText(row) {
+  if (!row) return '--'
+  if (row.is_fault_followup && row.source_queue_number && row.source_queue_number !== row.queue_number) {
+    return `${row.queue_number}（源${row.source_queue_number}）`
+  }
+  return row.queue_number || '--'
 }
 
 function loadJson(key) {

@@ -24,59 +24,61 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="u in users" :key="u.user_id">
-          <td><strong>{{ u.user_id }}</strong></td>
-          <td>{{ u.username }}</td>
-          <td>{{ capacityText(u) }}</td>
-          <td><span class="role-badge" :class="u.role === 'ADMIN' ? 'admin' : 'user'">{{ u.role }}</span></td>
-          <td>{{ fmtDate(u.created_at) }}</td>
-          <td>
-            <span class="active-badge" :class="u.has_active_request ? 'yes' : 'no'">{{ u.has_active_request ? '有' : '无' }}</span>
-          </td>
-          <td class="action-cell">
-            <button class="btn-sm btn-blue" @click="viewDetail(u.user_id)">详情</button>
-            <button
-              class="btn-sm btn-green"
-              v-if="u.role !== 'ADMIN'"
-              @click="editCapacity(u)"
-              :disabled="u.has_active_request"
-              :title="u.has_active_request ? '该用户有活跃请求，暂不可修改容量' : ''"
-            >修改容量</button>
-            <span v-else class="muted">不适用</span>
-          </td>
-        </tr>
+        <template v-for="u in users" :key="u.user_id">
+          <tr>
+            <td><strong>{{ u.user_id }}</strong></td>
+            <td>{{ u.username }}</td>
+            <td>{{ capacityText(u) }}</td>
+            <td><span class="role-badge" :class="u.role === 'ADMIN' ? 'admin' : 'user'">{{ u.role }}</span></td>
+            <td>{{ fmtDate(u.created_at) }}</td>
+            <td>
+              <span class="active-badge" :class="u.has_active_request ? 'yes' : 'no'">{{ u.has_active_request ? '有' : '无' }}</span>
+            </td>
+            <td class="action-cell">
+              <button class="btn-sm btn-blue" @click="toggleDetail(u.user_id)" :disabled="detailLoading[u.user_id]">
+                {{ expandedDetails[u.user_id] ? '收起' : (detailLoading[u.user_id] ? '加载中' : '详情') }}
+              </button>
+              <button
+                class="btn-sm btn-green"
+                v-if="u.role !== 'ADMIN'"
+                @click="editCapacity(u)"
+                :disabled="u.has_active_request"
+                :title="u.has_active_request ? '该用户有活跃请求，暂不可修改容量' : ''"
+              >修改容量</button>
+              <span v-else class="muted">不适用</span>
+            </td>
+          </tr>
+          <tr v-if="expandedDetails[u.user_id]" class="detail-row">
+            <td colspan="7">
+              <div class="inline-detail">
+                <div class="detail-grid">
+                  <div class="dg-item"><span class="dg-key">用户ID</span><span class="dg-val">{{ expandedDetails[u.user_id].user_id }}</span></div>
+                  <div class="dg-item"><span class="dg-key">用户名</span><span class="dg-val">{{ expandedDetails[u.user_id].username }}</span></div>
+                  <div class="dg-item"><span class="dg-key">电池容量</span><span class="dg-val">{{ capacityText(expandedDetails[u.user_id]) }}</span></div>
+                  <div class="dg-item"><span class="dg-key">角色</span><span class="dg-val">{{ expandedDetails[u.user_id].role }}</span></div>
+                </div>
+                <div class="detail-history" v-if="detailRows(expandedDetails[u.user_id]).length">
+                  <h4>历史详单</h4>
+                  <table class="t-sm">
+                    <thead><tr><th>详单ID</th><th>桩位</th><th>电量</th><th>总费用</th><th>终态</th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in detailRows(expandedDetails[u.user_id])" :key="d.detail_id">
+                        <td>{{ d.detail_id }}</td>
+                        <td>{{ d.station_code }}</td>
+                        <td>{{ d.actual_energy }} kWh</td>
+                        <td>¥{{ (d.total_fee || 0).toFixed(2) }}</td>
+                        <td>{{ d.request_status }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="empty-detail">暂无历史详单</div>
+              </div>
+            </td>
+          </tr>
+        </template>
       </tbody>
     </table>
-
-    <!-- Detail Modal -->
-    <div class="modal-overlay" v-if="showModal" @click.self="showModal=false">
-      <div class="modal-card">
-        <div class="modal-head"><h3>用户详情</h3><button class="modal-close" @click="showModal=false">&times;</button></div>
-        <div class="modal-body" v-if="userDetail">
-          <div class="detail-grid">
-            <div class="dg-item"><span class="dg-key">用户ID</span><span class="dg-val">{{ userDetail.user_id }}</span></div>
-            <div class="dg-item"><span class="dg-key">用户名</span><span class="dg-val">{{ userDetail.username }}</span></div>
-            <div class="dg-item"><span class="dg-key">电池容量</span><span class="dg-val">{{ capacityText(userDetail) }}</span></div>
-            <div class="dg-item"><span class="dg-key">角色</span><span class="dg-val">{{ userDetail.role }}</span></div>
-          </div>
-          <div v-if="userDetail.historical_details && userDetail.historical_details.length" style="margin-top:16px;">
-            <h4 style="font-size:13px;font-weight:600;margin-bottom:10px;">历史详单</h4>
-            <table class="t-sm">
-              <thead><tr><th>详单ID</th><th>桩位</th><th>电量</th><th>总费用</th><th>终态</th></tr></thead>
-              <tbody>
-                <tr v-for="d in userDetail.historical_details" :key="d.detail_id">
-                  <td>{{ d.detail_id }}</td>
-                  <td>{{ d.station_code }}</td>
-                  <td>{{ d.actual_energy }} kWh</td>
-                  <td>¥{{ (d.total_fee || 0).toFixed(2) }}</td>
-                  <td>{{ d.request_status }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -87,8 +89,8 @@ import { unwrapResponseData } from '@/api/request'
 
 const users = ref([])
 const loading = ref(false)
-const showModal = ref(false)
-const userDetail = ref(null)
+const expandedDetails = ref({})
+const detailLoading = ref({})
 
 function fmtDate(t) {
   if (!t) return '--'
@@ -106,18 +108,30 @@ async function loadUsers() {
     const res = await getUsers()
     const data = unwrapResponseData(res)
     users.value = Array.isArray(data) ? data : (data.users || [])
+    expandedDetails.value = {}
   } catch (_) { /* silent */ }
   loading.value = false
 }
 
-async function viewDetail(userId) {
-  showModal.value = true
-  userDetail.value = null
+async function toggleDetail(userId) {
+  if (expandedDetails.value[userId]) {
+    const next = { ...expandedDetails.value }
+    delete next[userId]
+    expandedDetails.value = next
+    return
+  }
+
+  detailLoading.value = { ...detailLoading.value, [userId]: true }
   try {
     const res = await getUserDetail(userId)
     const data = unwrapResponseData(res)
-    userDetail.value = data
+    expandedDetails.value = { ...expandedDetails.value, [userId]: data }
   } catch (_) { /* silent */ }
+  detailLoading.value = { ...detailLoading.value, [userId]: false }
+}
+
+function detailRows(detail) {
+  return detail?.historical_details || detail?.details || []
 }
 
 async function editCapacity(u) {
@@ -175,18 +189,15 @@ table.t tr:last-child td { border-bottom: none; }
 .btn-blue { border-color: #bfdbfe; color: #3b82f6; }
 .btn-blue:hover { background: #eff6ff; }
 
-/* MODAL */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.modal-card { background: white; border-radius: 16px; width: 640px; max-height: 80vh; overflow-y: auto; }
-.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
-.modal-head h3 { font-size: 16px; font-weight: 700; }
-.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #9ca3af; }
-.modal-body { padding: 20px 24px; }
-
+.detail-row td { background: #f8faf9; padding: 0 !important; }
+.inline-detail { padding: 16px 18px 18px; border-top: 1px solid #e5e7eb; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #e5e7eb; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
 .dg-item { display: flex; justify-content: space-between; padding: 12px 14px; background: white; }
 .dg-key { font-size: 13px; color: #6b7280; }
 .dg-val { font-size: 13px; font-weight: 600; color: #111827; }
+.detail-history { margin-top: 16px; }
+.detail-history h4 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: #374151; }
+.empty-detail { margin-top: 14px; color: #9ca3af; font-size: 12px; }
 
 .t-sm { width: 100%; border-collapse: collapse; font-size: 12px; }
 .t-sm th { text-align: left; padding: 8px; color: #9ca3af; border-bottom: 1px solid #e5e7eb; font-weight: 500; }

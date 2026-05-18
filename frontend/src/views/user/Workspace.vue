@@ -8,7 +8,7 @@
     <!-- Stats -->
     <div class="stats">
       <div class="stat"><div class="stat-label green">当前状态</div><div class="stat-val">{{ hasActive ? statusText : '空闲' }}</div></div>
-      <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ activeRequest?.queue_number || '--' }}</div></div>
+      <div class="stat"><div class="stat-label blue">排队号</div><div class="stat-val">{{ queueNumberText(activeRequest) }}</div></div>
       <div class="stat"><div class="stat-label amber">前车数量</div><div class="stat-val">{{ frontVehicleCountText }}</div></div>
       <div class="stat"><div class="stat-label gray">预计等待</div><div class="stat-val">{{ estWaitDisplay }}</div></div>
     </div>
@@ -52,7 +52,7 @@
             <div class="result-title">请求已提交</div>
             <div class="result-grid">
               <div class="r-item"><div class="rl">请求编号</div><div class="rv">{{ submitResult.request_id }}</div></div>
-              <div class="r-item"><div class="rl">排队号</div><div class="rv">{{ submitResult.queue_number }}</div></div>
+              <div class="r-item"><div class="rl">排队号</div><div class="rv">{{ queueNumberText(submitResult) }}</div></div>
               <div class="r-item"><div class="rl">状态</div><div class="rv">{{ REQUEST_STATUS_TEXT[submitResult.request_status] || submitResult.request_status }}</div></div>
               <div class="r-item"><div class="rl">模式</div><div class="rv">{{ CHARGE_MODE_TEXT[submitResult.charge_mode] }}</div></div>
               <div class="r-item"><div class="rl">请求电量</div><div class="rv">{{ submitResult.request_energy }} kWh</div></div>
@@ -182,6 +182,14 @@ function fmtDateTime(time) {
   } catch {
     return '--'
   }
+}
+
+function queueNumberText(row) {
+  if (!row) return '--'
+  if (row.is_fault_followup && row.source_queue_number && row.source_queue_number !== row.queue_number) {
+    return `${row.queue_number}（源${row.source_queue_number}）`
+  }
+  return row.queue_number || '--'
 }
 
 async function loadProfile() {

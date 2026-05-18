@@ -103,6 +103,8 @@ def _get_request_for_operation(request_id, current_user):
             cr.actual_energy,
             cr.request_status,
             cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.fault_source_request_id,
             cr.waiting_area_order,
             cr.request_time,
             cr.station_id,
@@ -114,6 +116,7 @@ def _get_request_for_operation(request_id, current_user):
             cs.power_kw
         FROM charge_request cr
         LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
         WHERE cr.request_id = ?
         """,
         [request_id],
@@ -138,6 +141,8 @@ def _get_status_row(request_id):
             cr.actual_energy,
             cr.request_status,
             cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.fault_source_request_id,
             cr.waiting_area_order,
             cr.station_id,
             cr.station_queue_position,
@@ -151,6 +156,7 @@ def _get_status_row(request_id):
             cs.power_kw
         FROM charge_request cr
         LEFT JOIN charging_station cs ON cs.id = cr.station_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
         WHERE cr.request_id = ?
         """,
         [request_id],
@@ -208,6 +214,9 @@ def _serialize_status(req_row):
     payload = {
         "request_id": req_row["request_id"],
         "queue_number": req_row["queue_number"],
+        "source_queue_number": req_row["source_queue_number"],
+        "effective_queue_number": req_row["source_queue_number"] or req_row["queue_number"],
+        "is_fault_followup": bool(req_row["fault_source_request_id"]),
         "charge_mode": req_row["charge_mode"],
         "request_energy": float(req_row["request_energy"]),
         "request_status": req_row["request_status"],

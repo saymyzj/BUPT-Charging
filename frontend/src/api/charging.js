@@ -53,6 +53,7 @@ export const setFaultDispatchMode = (data) => request({ url: '/api/admin/system/
 export const getStations = () => request({ url: '/api/admin/stations', method: 'get' })
 export const getStationsOverview = () => request({ url: '/api/stations/overview', method: 'get' })
 export const getStationQueue = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/queue`, method: 'get' })
+export const getWaitingArea = () => request({ url: '/api/admin/waiting-area', method: 'get' })
 export const startStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/start`, method: 'post' })
 export const shutdownStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/shutdown`, method: 'post' })
 export const faultStation = (stationCode) => request({ url: `/api/admin/stations/${stationCode}/fault`, method: 'post' })

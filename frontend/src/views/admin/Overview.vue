@@ -23,22 +23,23 @@
       <div class="waiting-stats">
         <div class="waiting-stat"><span>快充等待</span><strong>{{ waitingSummary.fast_queue_count }}</strong></div>
         <div class="waiting-stat"><span>慢充等待</span><strong>{{ waitingSummary.slow_queue_count }}</strong></div>
-        <div class="waiting-stat"><span>疑似等候用户</span><strong>{{ waitingAreaRows.length }}</strong></div>
+        <div class="waiting-stat"><span>等候请求</span><strong>{{ waitingAreaRows.length }}</strong></div>
       </div>
       <table class="t waiting-table" v-if="waitingAreaRows.length">
-        <thead><tr><th>用户</th><th>请求编号</th><th>充电模式</th><th>请求电量</th><th>等待时长</th></tr></thead>
+        <thead><tr><th>用户</th><th>请求编号</th><th>排队号</th><th>充电模式</th><th>请求电量</th><th>状态与预计</th></tr></thead>
         <tbody>
-          <tr v-for="row in waitingAreaRows" :key="row.user_id">
+          <tr v-for="row in waitingAreaRows" :key="row.request_id || row.user_id">
             <td>{{ row.username || row.user_id }}</td>
-            <td>{{ row.request_id || '接口未提供' }}</td>
-            <td>{{ row.charge_mode || '接口未提供' }}</td>
-            <td>{{ row.request_energy ? `${row.request_energy} kWh` : '接口未提供' }}</td>
-            <td>{{ row.waiting_text }}</td>
+            <td>{{ row.request_id || '--' }}</td>
+            <td><strong>{{ queueNumberText(row) }}</strong></td>
+            <td>{{ modeText(row.charge_mode) }}</td>
+            <td>{{ fmtEnergy(row.request_energy) }}</td>
+            <td>{{ waitingText(row) }}</td>
           </tr>
         </tbody>
       </table>
       <div v-else class="empty-inline">等候区暂无用户</div>
-      <div class="queue-note">说明：当前后端未提供等候区明细接口，请求编号、模式、电量需后端补充后才能精确展示；此处用活跃用户减去桩队列用户得到等候区候选列表。</div>
+      <div class="queue-note">说明：等候区明细来自后端接口，展示尚未进入任何充电桩队列的活跃请求。</div>
     </div>
 
     <!-- Station Grid -->
@@ -56,7 +57,23 @@
           <div class="st-row"><span>累计时长</span><span>{{ fmtDuration(s.total_charge_seconds) }}</span></div>
           <div class="st-row"><span>累计电量</span><span>{{ fmtEnergy(s.total_charge_energy) }}</span></div>
         </div>
-        <button class="btn-queue" @click="viewQueue(s.station_code)">查看队列</button>
+        <div class="station-queue-mini">
+          <div class="mini-head">
+            <span>队列</span>
+            <button class="mini-link" @click="viewQueue(s.station_code)">完整</button>
+          </div>
+          <div class="mini-list" v-if="stationQueueRows(s.station_code).length">
+            <div class="mini-row" v-for="q in stationQueueRows(s.station_code).slice(0, 3)" :key="q.request_id || q.queue_number">
+              <span>{{ q.username || q.user_id || '--' }}</span>
+              <strong>{{ queueNumberText(q) }}</strong>
+            </div>
+            <div class="mini-more" v-if="stationQueueRows(s.station_code).length > 3">
+              还有 {{ stationQueueRows(s.station_code).length - 3 }} 个请求
+            </div>
+          </div>
+          <div v-else class="mini-empty">队列为空</div>
+        </div>
+        <button class="btn-queue" @click="viewQueue(s.station_code)">查看完整队列</button>
       </div>
     </div>
 
@@ -69,12 +86,12 @@
           <table class="t" v-if="!queueLoading && queueData.length">
             <thead><tr><th>用户名</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th class="queue-status-col">状态与预计</th></tr></thead>
             <tbody>
-              <tr v-for="(q, index) in queueData" :key="q.queue_number">
+              <tr v-for="(q, index) in queueData" :key="q.request_id || q.queue_number">
                 <td>{{ q.username || '--' }}</td>
                 <td>{{ q.user_id || '--' }}</td>
                 <td>{{ q.battery_capacity }} kWh</td>
                 <td>{{ q.request_energy }} kWh</td>
-                <td><strong>{{ q.queue_number }}</strong></td>
+                <td><strong>{{ queueNumberText(q) }}</strong></td>
                 <td class="queue-status-col">{{ queueTimeText(q, index) }}</td>
               </tr>
             </tbody>
@@ -89,7 +106,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getRequestStatus, getStations, getStationsOverview, getStationQueue, getUsers } from '@/api/charging'
+import { getRequestStatus, getStations, getStationsOverview, getStationQueue, getWaitingArea } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
@@ -101,6 +118,7 @@ const queueData = ref([])
 const queueLoading = ref(false)
 const currentStation = ref(null)
 const currentFinishTime = ref(null)
+const stationQueues = ref({})
 const waitingSummary = ref({
   fast_queue_count: 0,
   slow_queue_count: 0,
@@ -115,57 +133,74 @@ async function loadStations() {
     const res = await getStations()
     const data = unwrapResponseData(res)
     stations.value = Array.isArray(data) ? data : (data.stations || [])
+    stationQueues.value = await loadAllStationQueues()
     await loadWaitingArea()
   } catch (_) { /* silent */ }
   loading.value = false
 }
 
 async function loadWaitingArea() {
-  const [overviewRes, usersRes, queueLists] = await Promise.all([
+  const [overviewRes, waitingRes] = await Promise.all([
     getStationsOverview().catch(() => null),
-    getUsers({ page_size: 100 }).catch(() => null),
-    loadAllStationQueues(),
+    getWaitingArea().catch(() => null),
   ])
 
   const overview = overviewRes ? unwrapResponseData(overviewRes) : {}
-  waitingSummary.value = overview.waiting_queue || {
-    fast_queue_count: 0,
-    slow_queue_count: 0,
-    total_waiting: 0,
-    capacity: 0,
+  const waitingPayload = waitingRes ? unwrapResponseData(waitingRes) : {}
+  waitingSummary.value = {
+    ...(overview.waiting_queue || {
+      fast_queue_count: 0,
+      slow_queue_count: 0,
+      total_waiting: 0,
+      capacity: 0,
+    }),
+    ...pickWaitingSummary(waitingPayload),
   }
 
-  const usersPayload = usersRes ? unwrapResponseData(usersRes) : {}
-  const users = Array.isArray(usersPayload.users) ? usersPayload.users : []
-  const stationUserIds = new Set()
-  queueLists.flat().forEach((item) => {
-    if (item.user_id) stationUserIds.add(item.user_id)
-  })
-
-  waitingAreaRows.value = users
-    .filter((user) => user.role !== 'ADMIN' && user.has_active_request && !stationUserIds.has(user.user_id))
-    .map((user) => ({
-      user_id: user.user_id,
-      username: user.username,
-      request_id: null,
-      charge_mode: null,
-      request_energy: null,
-      waiting_text: user.created_at ? '等待中' : '等待中',
-    }))
+  waitingAreaRows.value = Array.isArray(waitingPayload.rows) ? waitingPayload.rows : []
 }
 
 async function loadAllStationQueues() {
-  const results = await Promise.all(
+  const entries = await Promise.all(
     stations.value.map((station) =>
       getStationQueue(station.station_code)
         .then((res) => {
           const data = unwrapResponseData(res)
-          return Array.isArray(data) ? data : (data.queue || [])
+          return [station.station_code, Array.isArray(data) ? data : (data.queue || [])]
         })
-        .catch(() => []),
+        .catch(() => [station.station_code, []]),
     ),
   )
-  return results
+  return Object.fromEntries(entries)
+}
+
+function pickWaitingSummary(payload) {
+  if (!payload || !Array.isArray(payload.rows)) {
+    return {}
+  }
+  return {
+    fast_queue_count: payload.fast_queue_count ?? 0,
+    slow_queue_count: payload.slow_queue_count ?? 0,
+    total_waiting: payload.total_waiting ?? payload.rows.length,
+    capacity: payload.capacity ?? 0,
+  }
+}
+
+function stationQueueRows(code) {
+  return stationQueues.value[code] || []
+}
+
+function modeText(mode) {
+  return CHARGE_MODE_TEXT[mode] || mode || '--'
+}
+
+function waitingText(row) {
+  if (row?.waiting_area_order === 0) return '故障重排中'
+  if (row?.estimated_start_time) return `预计 ${fmtTime(row.estimated_start_time)} 开始`
+  if (row?.estimated_wait_seconds !== null && row?.estimated_wait_seconds !== undefined) {
+    return `预计等待 ${Math.ceil(Number(row.estimated_wait_seconds || 0) / 60)} min`
+  }
+  return '等待中'
 }
 
 async function viewQueue(code) {
@@ -201,6 +236,14 @@ function queueTimeText(row, index) {
   const frontCount = hasChargingHead ? index : Math.max(0, index)
   const finish = estimateFinishTime(index, now)
   return `前方 ${frontCount} 人，预计 ${finish ? fmtTime(finish) : '--'} 充完`
+}
+
+function queueNumberText(row) {
+  if (!row) return '--'
+  if (row.is_fault_followup && row.source_queue_number && row.source_queue_number !== row.queue_number) {
+    return `${row.queue_number}（源${row.source_queue_number}）`
+  }
+  return row.queue_number || '--'
 }
 
 function currentServiceText(station) {
@@ -297,6 +340,13 @@ onMounted(loadStations)
 .st-info { margin-bottom: 14px; }
 .st-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #6b7280; border-bottom: 1px solid #f3f4f6; }
 .st-row span:last-child { font-weight: 600; color: #1f2937; }
+.station-queue-mini { margin: 12px 0; padding: 10px 12px; border: 1px solid #edf2f7; border-radius: 8px; background: #f8faf9; }
+.mini-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #374151; }
+.mini-link { border: none; background: transparent; color: #059669; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
+.mini-list { display: grid; gap: 6px; }
+.mini-row { display: flex; align-items: center; justify-content: space-between; min-height: 24px; font-size: 12px; color: #4b5563; }
+.mini-row strong { color: #111827; font-size: 12px; }
+.mini-more, .mini-empty { font-size: 12px; color: #9ca3af; }
 .btn-queue { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #e5e7eb; background: white; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; transition: 0.12s; }
 .btn-queue:hover { border-color: #10b981; color: #059669; }
 

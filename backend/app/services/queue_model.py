@@ -218,12 +218,18 @@ def _active_count(station_id: int) -> int:
 def _fault_waiting_candidates(charge_mode: str):
     return query_db(
         """
-        SELECT request_id, charge_mode, request_energy, queue_number
-        FROM charge_request
-        WHERE charge_mode = ?
-          AND request_status = ?
-          AND waiting_area_order = 0
-        ORDER BY CAST(SUBSTR(queue_number, 2) AS INTEGER), id
+        SELECT
+            cr.request_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.queue_number,
+            COALESCE(source.queue_number, cr.queue_number) AS fault_order_queue_number
+        FROM charge_request cr
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        WHERE cr.charge_mode = ?
+          AND cr.request_status = ?
+          AND cr.waiting_area_order = 0
+        ORDER BY CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER), cr.id
         """,
         [charge_mode, RequestStatus.WAITING_AREA.value],
     )
@@ -391,7 +397,12 @@ def _fault_requeue_rows_for_time_order(charge_mode: str):
     )
 
 
-def _create_remaining_fault_request(interrupted_row, remaining_energy: float, event_dt: datetime) -> str | None:
+def _create_remaining_fault_request(
+    interrupted_row,
+    remaining_energy: float,
+    event_dt: datetime,
+    include_in_fault_requeue: bool = False,
+) -> str | None:
     if remaining_energy <= 0:
         return None
 
@@ -419,7 +430,7 @@ def _create_remaining_fault_request(interrupted_row, remaining_energy: float, ev
             round(remaining_energy, 2),
             RequestStatus.WAITING_AREA.value,
             queue_number,
-            _next_waiting_area_order(str(interrupted_row["charge_mode"])),
+            0 if include_in_fault_requeue else _next_waiting_area_order(str(interrupted_row["charge_mode"])),
             _db_string(event_dt),
             interrupted_row["id"],
         ],
@@ -427,7 +438,12 @@ def _create_remaining_fault_request(interrupted_row, remaining_energy: float, ev
     return request_id
 
 
-def _interrupt_charging_request(req_row, station, event_dt: datetime) -> tuple[str | None, str | None]:
+def _interrupt_charging_request(
+    req_row,
+    station,
+    event_dt: datetime,
+    include_remaining_in_fault_requeue: bool = False,
+) -> tuple[str | None, str | None]:
     start_dt = parse_iso_datetime(req_row["charge_start_time"] or event_dt)
     if event_dt < start_dt:
         event_dt = start_dt
@@ -488,7 +504,12 @@ def _interrupt_charging_request(req_row, station, event_dt: datetime) -> tuple[s
         [duration_seconds, actual_energy, station["id"]],
     )
     ensure_request_detail(str(req_row["request_id"]))
-    remaining_request_id = _create_remaining_fault_request(req_row, remaining_energy, event_dt)
+    remaining_request_id = _create_remaining_fault_request(
+        req_row,
+        remaining_energy,
+        event_dt,
+        include_in_fault_requeue=include_remaining_in_fault_requeue,
+    )
     return str(req_row["request_id"]), remaining_request_id
 
 
@@ -544,6 +565,7 @@ def handle_station_fault(station_code: str, fault_time=None):
     _settle_station_until(int(station["id"]), event_dt)
     station = _load_station(station_code)
 
+    mode = fault_dispatch_mode()
     current_req = query_db(
         """
         SELECT
@@ -567,9 +589,13 @@ def handle_station_fault(station_code: str, fault_time=None):
     interrupted_request_id = None
     remaining_request_id = None
     if current_req:
-        interrupted_request_id, remaining_request_id = _interrupt_charging_request(current_req, station, event_dt)
+        interrupted_request_id, remaining_request_id = _interrupt_charging_request(
+            current_req,
+            station,
+            event_dt,
+            include_remaining_in_fault_requeue=True,
+        )
 
-    mode = fault_dispatch_mode()
     if mode == "PRIORITY":
         requeue_rows = _fault_requeue_rows_for_priority(int(station["id"]))
     else:
