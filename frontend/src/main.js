@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
+import './style.css'
 import { DEV_RESET_STAMP } from './dev-reset-signal'
 import { clearAuthSession } from './utils/authSession'
 

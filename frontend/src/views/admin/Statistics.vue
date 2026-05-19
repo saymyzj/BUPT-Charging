@@ -2,89 +2,153 @@
   <div class="page">
     <div class="page-head">
       <h1>报表统计</h1>
-      <p>按日/周/月维度查看各桩充电数据</p>
+      <p>多维度分析充电桩电量、收益及设备使用率</p>
     </div>
 
+    <!-- Toolbar -->
     <div class="toolbar">
       <div class="tab-group">
         <button class="tab-btn" :class="{ active: granularity === 'day' }" @click="switchTab('day')">日报</button>
         <button class="tab-btn" :class="{ active: granularity === 'week' }" @click="switchTab('week')">周报</button>
         <button class="tab-btn" :class="{ active: granularity === 'month' }" @click="switchTab('month')">月报</button>
       </div>
-      <button class="btn btn-primary" @click="loadData">刷新</button>
+      <button class="btn-refresh" :disabled="loading" @click="loadData">
+        <span class="material-icons">refresh</span>刷新
+      </button>
     </div>
 
-    <div v-if="loading" class="loading-text">加载中...</div>
+    <!-- Loading -->
+    <div v-if="loading" class="loading-state">加载中…</div>
 
-    <template v-if="!loading && reports.length">
-      <!-- Summary -->
-      <div class="stats-row">
-        <div class="stat"><span class="s-label">总充电次数</span><span class="s-val">{{ sumField('total_charge_count') }}</span></div>
-        <div class="stat"><span class="s-label">总充电电量</span><span class="s-val">{{ sumField('total_charge_energy').toFixed(1) }} kWh</span></div>
-        <div class="stat"><span class="s-label">总充电费</span><span class="s-val">¥{{ sumField('total_charge_fee').toFixed(2) }}</span></div>
-        <div class="stat"><span class="s-label">总服务费</span><span class="s-val">¥{{ sumField('total_service_fee').toFixed(2) }}</span></div>
-        <div class="stat"><span class="s-label">总费用</span><span class="s-val">¥{{ sumField('total_fee').toFixed(2) }}</span></div>
+    <template v-else-if="reports.length">
+      <!-- KPI Cards -->
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-left">
+            <div class="kpi-label">总收益 (¥)</div>
+            <div class="kpi-val mono">¥{{ sumField('total_fee').toFixed(2) }}</div>
+          </div>
+          <div class="kpi-icon purple"><span class="material-icons">account_balance_wallet</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-left">
+            <div class="kpi-label">总充电量 (kWh)</div>
+            <div class="kpi-val mono">{{ sumField('total_charge_energy').toFixed(2) }}</div>
+          </div>
+          <div class="kpi-icon blue"><span class="material-icons">bolt</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-left">
+            <div class="kpi-label">总服务次数</div>
+            <div class="kpi-val mono">{{ sumField('total_charge_count') }}<span class="kpi-unit">次</span></div>
+          </div>
+          <div class="kpi-icon green"><span class="material-icons">ev_station</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-left">
+            <div class="kpi-label">总充电时长</div>
+            <div class="kpi-val">{{ fmtDuration(sumField('total_charge_seconds')) }}</div>
+          </div>
+          <div class="kpi-icon gold"><span class="material-icons">schedule</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-left">
+            <div class="kpi-label">服务费合计 (¥)</div>
+            <div class="kpi-val mono">¥{{ sumField('total_service_fee').toFixed(2) }}</div>
+          </div>
+          <div class="kpi-icon red"><span class="material-icons">payments</span></div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-row">
+        <!-- Horizontal bar chart -->
+        <div class="chart-card">
+          <div class="chart-title">各桩充电电量排行 (kWh)</div>
+          <div class="hbar-list">
+            <div class="hbar-item" v-for="(c, idx) in chartDataSorted" :key="c.code">
+              <div class="hbar-header">
+                <span class="station-tag" :class="c.code.startsWith('FAST') ? 'fast' : 'slow'">{{ c.code }}</span>
+                <span class="hbar-num mono">{{ fmtEnergy(c.energy) }}</span>
+              </div>
+              <div class="hbar-track">
+                <div class="hbar-fill"
+                  :style="{ width: barH(c.energy, maxEnergy) + '%', background: c.code.startsWith('FAST') ? '#4f86f7' : '#34b27b', opacity: 1 - idx * 0.12 }"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Donut chart -->
+        <div class="chart-card donut-card">
+          <div class="chart-title">各桩收益贡献构成</div>
+          <div class="donut-body">
+            <div class="donut-wrap">
+              <svg viewBox="0 0 36 36" class="donut-svg">
+                <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f0f2f5" stroke-width="4"/>
+                <circle v-for="seg in donutSegments" :key="seg.code"
+                  cx="18" cy="18" r="15.915" fill="transparent"
+                  :stroke="seg.color" stroke-width="4"
+                  :stroke-dasharray="`${seg.pct} ${100 - Number(seg.pct)}`"
+                  :stroke-dashoffset="seg.dashOffset"
+                />
+              </svg>
+            </div>
+            <div class="donut-legend">
+              <div class="legend-item" v-for="seg in donutSegments" :key="seg.code">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="legend-dot" :style="{ background: seg.color }"></span>
+                  <span class="legend-name">{{ seg.code }}</span>
+                </div>
+                <span class="legend-pct mono">{{ seg.pct }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Table -->
-      <div class="card">
-        <div class="card-head"><h3>详细报表</h3></div>
-        <div class="card-body" style="padding:0;overflow-x:auto;">
-          <table class="t">
+      <div class="table-card">
+        <div class="table-head">
+          <span class="table-title">详细数据记录</span>
+          <span class="table-count">{{ reports.length }} 条</span>
+        </div>
+        <div class="table-scroll">
+          <table>
             <thead>
               <tr>
                 <th>时段</th>
                 <th>充电桩</th>
                 <th>充电次数</th>
                 <th>充电时长</th>
-                <th>充电电量</th>
-                <th>充电费</th>
-                <th>服务费</th>
-                <th>总费用</th>
+                <th class="num">充电电量</th>
+                <th class="num">充电费</th>
+                <th class="num">服务费</th>
+                <th class="num total-col">总费用</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(r, i) in reports" :key="i">
-                <td>{{ r.time_key }}</td>
-                <td><strong>{{ r.station_code }}</strong></td>
+                <td class="mono time-td">{{ r.time_key }}</td>
+                <td><span class="station-tag" :class="r.station_code?.startsWith('FAST') ? 'fast' : 'slow'">{{ r.station_code }}</span></td>
                 <td>{{ r.total_charge_count }}</td>
                 <td>{{ fmtDuration(r.total_charge_seconds) }}</td>
-                <td>{{ fmtEnergy(r.total_charge_energy) }}</td>
-                <td>¥{{ (r.total_charge_fee || 0).toFixed(2) }}</td>
-                <td>¥{{ (r.total_service_fee || 0).toFixed(2) }}</td>
-                <td><strong>¥{{ (r.total_fee || 0).toFixed(2) }}</strong></td>
+                <td class="num mono">{{ fmtEnergy(r.total_charge_energy) }}</td>
+                <td class="num mono">¥{{ (r.total_charge_fee || 0).toFixed(2) }}</td>
+                <td class="num mono">¥{{ (r.total_service_fee || 0).toFixed(2) }}</td>
+                <td class="num mono total-val">¥{{ (r.total_fee || 0).toFixed(2) }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-
-      <!-- Charts -->
-      <div class="charts-row">
-        <div class="chart-card">
-          <div class="chart-title">各桩充电电量 (kWh)</div>
-          <div class="bar-chart">
-            <div class="bar-item" v-for="c in chartData" :key="c.code">
-              <div class="bar-val">{{ fmtEnergy(c.energy) }}</div>
-              <div class="bar" :style="{ height: barH(c.energy, maxEnergy) + '%', background: '#34d399' }"></div>
-              <div class="bar-label">{{ c.code }}</div>
-            </div>
-          </div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">各桩总费用 (¥)</div>
-          <div class="bar-chart">
-            <div class="bar-item" v-for="c in chartData" :key="c.code + 'fee'">
-              <div class="bar-val">¥{{ c.fee.toFixed(2) }}</div>
-              <div class="bar" :style="{ height: barH(c.fee, maxFee) + '%', background: '#fbbf24' }"></div>
-              <div class="bar-label">{{ c.code }}</div>
-            </div>
-          </div>
-        </div>
+      <div class="footer-note">
+        <span>说明：报表按所选时间维度统计，不同维度下数据会自动聚合。</span>
       </div>
     </template>
 
-    <div v-if="!loading && !reports.length" class="empty-text">暂无数据</div>
+    <div v-else class="empty-state">暂无统计数据，请尝试切换时间维度</div>
   </div>
 </template>
 
@@ -133,6 +197,20 @@ const chartData = computed(() => {
 
 const maxEnergy = computed(() => Math.max(...chartData.value.map(c => c.energy), 1))
 const maxFee = computed(() => Math.max(...chartData.value.map(c => c.fee), 1))
+const chartDataSorted = computed(() => [...chartData.value].sort((a, b) => b.energy - a.energy))
+
+const COLORS = ['#34b27b', '#4f86f7', '#d8a23a', '#ef4444', '#7a5af8', '#98a2b3', '#f97316']
+const totalFeeAll = computed(() => chartData.value.reduce((s, c) => s + c.fee, 0))
+const donutSegments = computed(() => {
+  let offset = 0
+  const total = totalFeeAll.value || 1
+  return chartData.value.map((c, i) => {
+    const pct = (c.fee / total) * 100
+    const seg = { code: c.code, pct: pct.toFixed(1), color: COLORS[i % COLORS.length], dashOffset: -offset }
+    offset += pct
+    return seg
+  })
+})
 
 function barH(val, max) { return Math.max((val / max) * 100, 2) }
 
@@ -157,40 +235,152 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
-.page-head { margin-bottom: 20px; }
-.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #111827; }
-.page-head p { font-size: 14px; color: #6b7280; margin-top: 4px; }
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.tab-group { display: flex; gap: 2px; background: #f3f4f6; border-radius: 8px; padding: 3px; }
-.tab-btn { padding: 6px 16px; border: none; border-radius: 6px; background: transparent; font-size: 13px; font-weight: 500; cursor: pointer; color: #6b7280; transition: 0.15s; }
-.tab-btn.active { background: white; color: #059669; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.12s; }
-.btn-primary { background: #10b981; color: white; }
-.btn-primary:hover { background: #059669; }
-.loading-text, .empty-text { color: #9ca3af; font-size: 14px; padding: 40px 0; text-align: center; }
+* { box-sizing: border-box; }
+.mono { font-family: "SF Mono", Consolas, monospace; }
 
-.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
-.stat { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
-.s-label { display: block; font-size: 11px; color: #9ca3af; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
-.s-val { display: block; font-size: 20px; font-weight: 700; color: #111827; margin-top: 6px; }
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 28px 30px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+  color: #101828;
+}
+.page-head { margin-bottom: 18px; }
+.page-head h1 { margin: 0; font-size: 28px; font-weight: 850; letter-spacing: -.02em; }
+.page-head p { margin: 8px 0 0; font-size: 15px; color: #667085; }
 
-.card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
-.card-head { padding: 14px 20px; border-bottom: 1px solid #e5e7eb; }
-.card-head h3 { font-size: 14px; font-weight: 600; color: #111827; }
-.card-body { padding: 20px; }
-table.t { width: 100%; border-collapse: collapse; }
-table.t th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-table.t td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #f3f4f6; color: #374151; }
-table.t td strong { color: #111827; }
-table.t tr:last-child td { border-bottom: none; }
+/* Toolbar */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin: 14px 0 16px;
+}
+.tab-group {
+  display: inline-flex; padding: 4px;
+  border: 1px solid #e6eaee; border-radius: 14px;
+  background: #fff; box-shadow: 0 10px 28px rgba(16,24,40,.06);
+}
+.tab-btn {
+  height: 36px; min-width: 66px; padding: 0 14px; border-radius: 10px;
+  display: grid; place-items: center;
+  color: #667085; font-weight: 700; font-size: 14px;
+  border: none; background: transparent; cursor: pointer;
+  font-family: inherit; transition: .15s;
+}
+.tab-btn.active {
+  background: #fff; color: #1f8f60;
+  box-shadow: inset 0 0 0 1px #dbe8e0;
+}
+.btn-refresh {
+  height: 40px; border-radius: 12px;
+  border: 1px solid #d8eadf;
+  background: linear-gradient(180deg, #4bbb87, #37ab77);
+  color: #fff; padding: 0 16px; font-weight: 800;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: 0 10px 18px rgba(52,178,123,.18);
+  cursor: pointer; font-family: inherit; font-size: 14px;
+}
+.btn-refresh .material-icons { font-size: 16px; }
+.btn-refresh:hover { filter: brightness(1.05); }
+.btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
 
-.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-.chart-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; }
-.chart-title { font-size: 13px; font-weight: 600; color: #111827; margin-bottom: 16px; }
-.bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding-top: 24px; border-bottom: 1px solid #e5e7eb; }
-.bar-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
-.bar { width: 100%; max-width: 36px; border-radius: 4px 4px 0 0; transition: 0.3s; min-height: 2px; }
-.bar-label { font-size: 10px; color: #9ca3af; margin-top: 8px; font-weight: 500; }
-.bar-val { font-size: 10px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+.loading-state, .empty-state { color: #98a2b3; font-size: 14px; padding: 60px 0; text-align: center; }
+
+/* KPI Cards */
+.kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.kpi-card {
+  min-height: 96px; padding: 16px 18px;
+  border: 1px solid #edf0f2; border-radius: 18px; background: #fff;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  box-shadow: 0 10px 28px rgba(16,24,40,.06);
+}
+.kpi-left { min-width: 0; }
+.kpi-label { color: #98a2b3; font-size: 13px; font-weight: 700; }
+.kpi-val { margin-top: 9px; font-size: 28px; font-weight: 900; color: #101828; letter-spacing: -.03em; line-height: 1; }
+.kpi-unit { font-size: 14px; font-weight: 400; color: #98a2b3; margin-left: 2px; }
+.kpi-icon {
+  width: 46px; height: 46px; border-radius: 16px;
+  display: grid; place-items: center; flex: 0 0 auto;
+}
+.kpi-icon .material-icons { font-size: 20px; }
+.kpi-icon.green { background: #eaf8f1; color: #1f8f60; }
+.kpi-icon.blue { background: #eef4ff; color: #4f86f7; }
+.kpi-icon.gold { background: #fff8e8; color: #d8a23a; }
+.kpi-icon.red { background: #fff1f1; color: #ef4444; }
+.kpi-icon.purple { background: #f4f7ff; color: #7a5af8; }
+
+/* Charts */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-card {
+  min-height: 320px; background: #fff; border: 1px solid #edf0f2;
+  border-radius: 18px; padding: 18px;
+  box-shadow: 0 10px 28px rgba(16,24,40,.06);
+}
+.chart-title { font-size: 16px; font-weight: 850; color: #101828; margin-bottom: 18px; }
+
+/* Horizontal bars */
+.hbar-list { display: flex; flex-direction: column; gap: 16px; }
+.hbar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 12px; color: #667085; }
+.hbar-num { color: #1d2939; font-weight: 700; }
+.hbar-track { width: 100%; background: #e9f0eb; border-radius: 999px; height: 8px; overflow: hidden; }
+.hbar-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+
+/* Station tag */
+.station-tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+}
+.station-tag.fast { background: #eef4ff; color: #4f86f7; }
+.station-tag.slow { background: #eaf8f1; color: #1f8f60; }
+
+/* Donut */
+.donut-card { display: flex; flex-direction: column; }
+.donut-body { flex: 1; display: flex; align-items: center; justify-content: center; gap: 32px; }
+.donut-wrap { width: 170px; height: 170px; transform: rotate(-90deg); flex-shrink: 0; }
+.donut-svg { width: 100%; height: 100%; }
+.donut-legend { display: flex; flex-direction: column; gap: 10px; min-width: 120px; }
+.legend-item { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #344054; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.legend-name { color: #344054; font-weight: 500; }
+.legend-pct { color: #1d2939; font-weight: 700; }
+
+/* Table */
+.table-card {
+  background: #fff; border: 1px solid #edf0f2; border-radius: 18px;
+  overflow: hidden; box-shadow: 0 10px 28px rgba(16,24,40,.06);
+  margin-bottom: 16px;
+}
+.table-head {
+  padding: 18px 18px 14px; border-bottom: 1px solid #f0f2f4;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.table-title { font-size: 16px; font-weight: 850; color: #101828; }
+.table-count { font-size: 13px; color: #98a2b3; }
+.table-scroll { overflow-x: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; color: #344054; }
+thead { background: #fbfcfc; }
+th { padding: 14px 18px; text-align: left; font-size: 13px; font-weight: 700; color: #667085; border-bottom: 1px solid #edf0f2; white-space: nowrap; }
+td { padding: 14px 18px; border-bottom: 1px solid #f0f2f4; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fbfcfc; }
+th.num, td.num { text-align: right; }
+.time-td { color: #1d2939; font-weight: 700; }
+.total-col { color: #1d2939; font-weight: 800; }
+.total-val { color: #34b27b; font-weight: 800; }
+
+/* Footer */
+.footer-note {
+  display: flex; justify-content: space-between; align-items: center;
+  color: #98a2b3; font-size: 12px; padding: 12px 2px 0;
+}
+
+@media (max-width: 1180px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .page { padding: 18px 14px 24px; }
+  .kpi-row { grid-template-columns: 1fr; }
+}
 </style>

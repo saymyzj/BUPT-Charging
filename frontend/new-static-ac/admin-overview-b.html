@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>充电调度系统 · 管理总览</title>
+  <style>
+    :root {
+      --green: #059669;
+      --green2: #10b981;
+      --greenSoft: #ecfdf5;
+      --blue: #2563eb;
+      --blueSoft: #eff6ff;
+      --orange: #f97316;
+      --orangeSoft: #fff7ed;
+      --purple: #8b5cf6;
+      --purpleSoft: #f5f3ff;
+      --red: #ef4444;
+      --gray: #98a2b3;
+      --graySoft: #f2f4f7;
+      --text: #101828;
+      --sub: #667085;
+      --line: #e5e7eb;
+      --panel: #ffffff;
+      --bg: #f7faf8;
+      --shadow: 0 14px 38px rgba(16, 24, 40, 0.055);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1680px;
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbf9 100%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 198px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 20px 14px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f4fbf7 100%);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .brand {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 26px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, var(--green), var(--green2));
+      box-shadow: 0 10px 22px rgba(5,150,105,.22);
+      flex: 0 0 auto;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 850;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .brand-sub {
+      margin-top: 4px;
+      color: var(--sub);
+      font-size: 13px;
+    }
+
+    .menu {
+      display: grid;
+      gap: 8px;
+    }
+
+    .menu-item {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      border-radius: 10px;
+      color: #475467;
+      font-size: 14px;
+      font-weight: 650;
+      transition: .2s ease;
+    }
+
+    .menu-item:hover { background: #f7faf8; }
+
+    .menu-item.active {
+      color: var(--green);
+      background: rgba(16,185,129,.1);
+    }
+
+    .menu-item .mi {
+      width: 18px;
+      text-align: center;
+      opacity: .9;
+      flex: 0 0 auto;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 18px;
+    }
+
+    .side-mini-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid #e7efe9;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #ffffff, #f7fbf9);
+    }
+
+    .side-mini-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--greenSoft);
+      color: var(--green);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      flex: 0 0 auto;
+    }
+
+    .side-mini-card strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .side-mini-card p {
+      margin: 4px 0 0;
+      color: var(--sub);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .main { min-width: 0; }
+
+    .topbar {
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px 0 32px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.9);
+      backdrop-filter: blur(14px);
+    }
+
+    .title strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 3px;
+    }
+
+    .title span {
+      color: var(--sub);
+      font-size: 13px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: #344054;
+      font-size: 14px;
+    }
+
+    .refresh {
+      color: var(--green);
+      font-weight: 750;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .refresh::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green2);
+      box-shadow: 0 0 0 5px rgba(16,185,129,.1);
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-grid;
+      place-items: center;
+      color: #fff;
+      background: #101828;
+    }
+
+    .logout {
+      color: var(--red);
+      border: 1px solid #fecaca;
+      border-radius: 999px;
+      padding: 7px 12px;
+      background: #fff;
+      font-weight: 750;
+    }
+
+    .content { padding: 22px 28px 30px; }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .kpi {
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 17px 18px;
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.94);
+      box-shadow: var(--shadow);
+    }
+
+    .kpi-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+      background: var(--greenSoft);
+      color: var(--green);
+    }
+
+    .kpi:nth-child(2) .kpi-icon { background: var(--blueSoft); color: var(--blue); }
+    .kpi:nth-child(3) .kpi-icon { background: var(--orangeSoft); color: var(--orange); }
+    .kpi:nth-child(4) .kpi-icon { background: var(--purpleSoft); color: var(--purple); }
+    .kpi:nth-child(7) .kpi-icon { background: var(--blueSoft); color: var(--blue); }
+
+    .kpi-label { color: #475467; font-size: 13px; }
+    .kpi-value { margin-top: 5px; font-size: 23px; font-weight: 850; letter-spacing: -.4px; }
+    .kpi-value small { font-size: 14px; font-weight: 750; color: #344054; }
+    .kpi-sub { margin-top: 5px; color: var(--sub); font-size: 12px; }
+    .bar {
+      margin-top: 8px;
+      height: 5px;
+      border-radius: 999px;
+      background: #eef2f0;
+      overflow: hidden;
+      color: var(--green);
+    }
+    .bar span { display: block; height: 100%; border-radius: inherit; background: currentColor; }
+
+    .section {
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      overflow: visible;
+    }
+
+    .section-head {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid #edf0ee;
+    }
+
+    .section-title { font-size: 16px; font-weight: 850; }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--sub);
+      font-size: 13px;
+    }
+
+    .legend i {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .queue-overview {
+      position: relative;
+      min-height: 405px;
+      padding: 20px 24px 26px;
+      background:
+        radial-gradient(circle at 6% 35%, rgba(16,185,129,.08), transparent 24%),
+        radial-gradient(circle at 75% 20%, rgba(37,99,235,.05), transparent 20%),
+        linear-gradient(180deg, #fff, #fcfefd);
+      overflow: visible;
+    }
+
+    .lane-wrap { position: relative; height: 132px; margin: 0 4px 14px; }
+
+    .main-road {
+      position: absolute;
+      left: 64px;
+      right: 64px;
+      top: 78px;
+      height: 8px;
+      border-radius: 999px;
+      background:
+        repeating-linear-gradient(90deg, #d4dbe4 0 18px, transparent 18px 32px),
+        linear-gradient(90deg, transparent, #eef2f6 12%, #eef2f6 88%, transparent);
+    }
+
+    .entry, .exit {
+      position: absolute;
+      top: 54px;
+      width: 54px;
+      height: 48px;
+      border-radius: 8px;
+      border: 1px solid #d0d5dd;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      color: #344054;
+      font-weight: 750;
+      z-index: 4;
+    }
+    .entry { left: 0; }
+    .exit { right: 0; }
+    .entry small, .exit small { display: block; color: var(--green); font-size: 20px; line-height: 10px; }
+
+    .moving-car {
+      position: absolute;
+      top: 52px;
+      left: 32px;
+      width: 62px;
+      height: 34px;
+      z-index: 5;
+      animation: carMove 8s linear infinite;
+      opacity: .9;
+    }
+    .moving-car.delay1 { animation-delay: -2.4s; opacity: .65; }
+    .moving-car.delay2 { animation-delay: -5s; opacity: .78; }
+
+    @keyframes carMove {
+      0% { transform: translateX(-110px); opacity: 0; }
+      8% { opacity: .45; }
+      18% { opacity: .96; }
+      92% { opacity: .92; }
+      100% { transform: translateX(1310px); opacity: 0; }
+    }
+
+    .car-body {
+      position: absolute;
+      inset: 7px 3px 5px;
+      border-radius: 18px 18px 10px 10px;
+      background: linear-gradient(180deg, #fff, #dbeafe);
+      border: 1px solid #aab4c0;
+      box-shadow: 0 9px 18px rgba(15,23,42,.14);
+    }
+    .car-body::before {
+      content: "";
+      position: absolute;
+      left: 19px;
+      top: 2px;
+      width: 22px;
+      height: 9px;
+      border-radius: 8px 8px 3px 3px;
+      background: #bfdbfe;
+    }
+    .car-body::after {
+      content: "";
+      position: absolute;
+      left: 11px;
+      bottom: -4px;
+      width: 40px;
+      height: 8px;
+      background:
+        radial-gradient(circle at 7px 4px, #475467 0 4px, transparent 4px),
+        radial-gradient(circle at 33px 4px, #475467 0 4px, transparent 4px);
+    }
+
+    .pile-grid {
+      position: absolute;
+      left: 116px;
+      right: 108px;
+      top: 0;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(190px, 1fr));
+      gap: 22px;
+      z-index: 6;
+    }
+
+    .pile-top { height: 132px; position: relative; }
+    .pile-name { font-size: 16px; font-weight: 900; margin-bottom: 7px; }
+    .pile-meta { color: #475467; font-size: 12px; line-height: 1.75; }
+    .pile-meta b { color: var(--blue); }
+
+    .run-pill {
+      position: absolute;
+      right: 0;
+      top: 0;
+      height: 22px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: var(--greenSoft);
+      color: var(--green);
+      font-weight: 750;
+      font-size: 12px;
+    }
+
+    .charger {
+      position: absolute;
+      left: 50%;
+      top: 55px;
+      transform: translateX(-50%);
+      width: 28px;
+      height: 54px;
+      border-radius: 8px 8px 5px 5px;
+      border: 1px solid #cbd5e1;
+      background: linear-gradient(180deg, #fff, #e6eaf0);
+      box-shadow: 0 10px 19px rgba(15,23,42,.13);
+      z-index: 2;
+    }
+    .charger::before {
+      content: "";
+      position: absolute;
+      left: 9px;
+      top: 8px;
+      width: 10px;
+      height: 16px;
+      border-radius: 3px;
+      background: var(--green);
+    }
+    .charger::after {
+      content: "⚡";
+      position: absolute;
+      left: 8px;
+      top: 29px;
+      color: var(--green);
+      font-size: 12px;
+    }
+
+    .branch-line {
+      position: absolute;
+      left: 50%;
+      top: 100px;
+      height: 78px;
+      width: 2px;
+      border-left: 2px dashed var(--green);
+      transform: translateX(-50%);
+      z-index: 1;
+    }
+    .branch-line::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      bottom: -2px;
+      width: 10px;
+      height: 10px;
+      border-right: 2px solid var(--green);
+      border-bottom: 2px solid var(--green);
+      transform: rotate(45deg);
+    }
+
+    .queue-columns {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(190px, 1fr));
+      gap: 22px;
+      padding: 0 108px 0 116px;
+      margin-top: -4px;
+    }
+
+    .queue-col { min-height: 190px; padding-top: 2px; }
+    .queue-line { height: 30px; display: flex; align-items: center; gap: 8px; }
+    .queue-no { width: 18px; text-align: right; color: var(--sub); font-size: 12px; font-weight: 750; }
+
+    .chip {
+      height: 26px;
+      min-width: 46px;
+      padding: 0 9px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d0d5dd;
+      background: #f2f4f7;
+      color: #344054;
+      font-size: 13px;
+      font-weight: 850;
+    }
+    .chip.active { color: #fff; background: var(--blue); border-color: var(--blue); box-shadow: 0 8px 18px rgba(37,99,235,.2); }
+    .q-status { color: #475467; font-size: 12px; white-space: nowrap; }
+    .q-status.active { color: var(--blue); font-weight: 750; }
+
+    .wait-area {
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      overflow: visible;
+    }
+
+    .wait-area-head {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid #edf0ee;
+    }
+
+    .wait-title { font-size: 16px; font-weight: 850; display: flex; align-items: center; gap: 14px; }
+    .wait-title .live { color: var(--green); font-size: 12px; font-weight: 750; }
+
+    .wait-capacity { display: flex; align-items: center; gap: 22px; color: #475467; font-size: 13px; }
+    .wait-detail-link { color: var(--green); font-weight: 800; }
+
+    .wait-parking {
+      position: relative;
+      min-height: 166px;
+      padding: 18px 22px 24px;
+      background:
+        radial-gradient(circle at 4% 48%, rgba(16,185,129,.09), transparent 22%),
+        linear-gradient(180deg, #fff, #fcfefd);
+    }
+
+    .wait-lane {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 74px;
+      height: 54px;
+      border-radius: 12px;
+      background: linear-gradient(90deg, rgba(226,232,240,.65), rgba(248,250,252,.9));
+      overflow: hidden;
+    }
+
+    .wait-lane::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 25px;
+      height: 2px;
+      background: repeating-linear-gradient(90deg, #cbd5e1 0 18px, transparent 18px 34px);
+    }
+
+    .wait-entry-car {
+      position: absolute;
+      left: 8px;
+      top: 81px;
+      width: 86px;
+      height: 42px;
+      border-radius: 40px 48px 16px 16px;
+      background: linear-gradient(180deg, #8da3a2, #4b6470);
+      opacity: .55;
+      animation: waitCarIn 5.6s ease-in-out infinite;
+      z-index: 3;
+    }
+
+    .wait-entry-car::before {
+      content: "";
+      position: absolute;
+      left: 27px;
+      top: 6px;
+      width: 32px;
+      height: 12px;
+      border-radius: 10px 10px 4px 4px;
+      background: rgba(219,234,254,.72);
+    }
+
+    @keyframes waitCarIn {
+      0% { transform: translateX(-98px); opacity: 0; }
+      22% { transform: translateX(0); opacity: .55; }
+      58% { transform: translateX(42px); opacity: .4; }
+      100% { transform: translateX(120px); opacity: 0; }
+    }
+
+    .parking-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(20, 1fr);
+      gap: 6px;
+      margin-left: 102px;
+      margin-right: 86px;
+      z-index: 4;
+    }
+
+    .slot {
+      height: 96px;
+      border: 1px dashed #d0d5dd;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,.72);
+      position: relative;
+    }
+
+    .slot.fast { border-color: rgba(16,185,129,.35); background: linear-gradient(180deg, rgba(236,253,245,.9), rgba(255,255,255,.9)); }
+    .slot.slow { border-color: rgba(249,115,22,.35); background: linear-gradient(180deg, rgba(255,247,237,.92), rgba(255,255,255,.9)); }
+    .slot.pending { border-color: rgba(37,99,235,.35); background: linear-gradient(180deg, rgba(239,246,255,.92), rgba(255,255,255,.9)); }
+    .slot.empty { opacity: .78; background: rgba(255,255,255,.68); }
+
+    .slot-car {
+      width: 42px;
+      height: 74px;
+      border-radius: 18px 18px 10px 10px;
+      background: linear-gradient(180deg, #fff, #d7dde4);
+      border: 1px solid #94a3b8;
+      box-shadow: 0 10px 18px rgba(15,23,42,.13);
+      position: relative;
+    }
+    .slot-car.dark { background: linear-gradient(180deg, #475467, #111827); }
+    .slot-car.blue { background: linear-gradient(180deg, #3b82f6, #1e3a8a); }
+    .slot-car::before { content: ""; position: absolute; left: 8px; top: 10px; width: 24px; height: 22px; border-radius: 10px 10px 5px 5px; background: rgba(255,255,255,.5); }
+
+    .slot-no {
+      position: absolute;
+      left: 50%;
+      bottom: -23px;
+      transform: translateX(-50%);
+      min-width: 28px;
+      height: 20px;
+      padding: 0 7px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 850;
+      color: #475467;
+    }
+    .slot.fast .slot-no { color: var(--green); background: var(--greenSoft); }
+    .slot.slow .slot-no { color: var(--orange); background: var(--orangeSoft); }
+    .slot.pending .slot-no { color: var(--blue); background: var(--blueSoft); }
+
+    .wait-exit {
+      position: absolute;
+      right: 24px;
+      top: 76px;
+      width: 58px;
+      height: 48px;
+      border-radius: 8px;
+      border: 1px solid #d0d5dd;
+      background: rgba(255,255,255,.92);
+      display: grid;
+      place-items: center;
+      color: #344054;
+      font-weight: 750;
+    }
+    .wait-exit small { display: block; color: var(--green); font-size: 18px; line-height: 10px; }
+
+    .wait-footnote { display: flex; align-items: center; gap: 18px; padding: 0 22px 16px; color: #667085; font-size: 13px; }
+
+    .table-section {
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .table-title { height: 45px; display: flex; align-items: center; padding: 0 18px; font-weight: 850; border-bottom: 1px solid #edf0ee; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8faf9; color: #475467; text-align: left; padding: 10px 12px; font-weight: 750; border-bottom: 1px solid #edf0ee; }
+    td { padding: 10px 12px; border-bottom: 1px solid #edf0ee; color: #344054; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .state-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:6px; }
+    .tag { padding: 3px 8px; border-radius: 999px; font-weight: 750; font-size: 12px; }
+    .tag.fast { background: var(--greenSoft); color: var(--green); }
+    .tag.slow { background: var(--orangeSoft); color: var(--orange); }
+    .tag.blue { background: var(--blueSoft); color: var(--blue); }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .chart-box {
+      min-height: 230px;
+      padding: 16px 18px 14px;
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+    }
+
+    .chart-title { font-weight: 850; margin-bottom: 14px; font-size: 16px; }
+
+    .donut-wrap {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .donut {
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      position: relative;
+      margin: 0 auto;
+    }
+
+    .status-donut { background: conic-gradient(var(--green) 0 60%, var(--blue) 60% 100%); }
+    .queue-donut { background: conic-gradient(#6ee7b7 0 62.5%, #f59e0b 62.5% 100%); }
+    .wait-donut { background: conic-gradient(#6ee7b7 0 25%, #f59e0b 25% 50%, #60a5fa 50% 70%, #d1d5db 70% 100%); }
+
+    .donut-center {
+      position: absolute;
+      inset: 30px;
+      border-radius: 50%;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 0 1px #edf0ee;
+    }
+
+    .donut-center strong { font-size: 14px; color: #475467; margin-bottom: 4px; }
+    .donut-center span { font-size: 24px; font-weight: 900; color: #101828; line-height: 1; }
+
+    .chart-legend { display: grid; gap: 10px; }
+    .legend-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: #344054; }
+    .legend-left { display: flex; align-items: center; gap: 8px; }
+    .legend-left i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+    .legend-right { color: #475467; white-space: nowrap; }
+
+    .footer {
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: .8fr 1.4fr .82fr 1.2fr;
+      border: 1px solid #edf0ee;
+      border-radius: 16px;
+      background: rgba(255,255,255,.95);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .footer-cell { display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid var(--line); color: #344054; font-size: 14px; }
+    .footer-cell:last-child { border-right: 0; }
+    .footer-icon { color: var(--green); font-size: 22px; }
+    .quick { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; gap: 20px; color: var(--green); text-align: center; font-size: 20px; }
+    .quick small { display: block; color: #344054; font-size: 12px; margin-top: 4px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <div class="brand-title">充电调度系统</div>
+          <div class="brand-sub">管理端</div>
+        </div>
+      </div>
+
+      <nav class="menu">
+        <div class="menu-item active"><span class="mi">▣</span><span>总览</span></div>
+        <div class="menu-item"><span class="mi">⚙</span><span>系统配置</span></div>
+        <div class="menu-item"><span class="mi">⌘</span><span>设备控制</span></div>
+        <div class="menu-item"><span class="mi">👤</span><span>用户管理</span></div>
+        <div class="menu-item"><span class="mi">▥</span><span>报表统计</span></div>
+        <div class="menu-item"><span class="mi">📝</span><span>操作日志</span></div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="side-mini-card">
+          <div class="side-mini-icon">⚡</div>
+          <div>
+            <strong>系统正常</strong>
+            <p>设备在线，监控稳定</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="title"><strong>管理总览</strong><span>实时监控充电站运行状态</span></div>
+        <div class="top-actions">
+          <div class="refresh">↻ 自动刷新：开启</div>
+          <div><b>10:24:36</b><br><span style="color:#667085;font-size:12px;">2025-05-20　星期二</span></div>
+          <div>🔔<sup style="color:#fff;background:#ef4444;border-radius:999px;padding:1px 5px;font-size:10px;">12</sup></div>
+          <div><span class="avatar">●</span>　<b>admin⌄</b></div>
+          <button class="logout">退出</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="kpi-row">
+          <div class="kpi"><div class="kpi-icon">♟</div><div><div class="kpi-label">等候区占用</div><div class="kpi-value">8 <small>/ 20</small></div><div class="kpi-sub">占用率 40%</div><div class="bar"><span style="width:40%"></span></div></div></div>
+          <div class="kpi"><div class="kpi-icon">🚙</div><div><div class="kpi-label">快充等待</div><div class="kpi-value">5 <small>辆</small></div><div class="kpi-sub">占用率 50%</div><div class="bar" style="color:var(--blue)"><span style="width:50%"></span></div></div></div>
+          <div class="kpi"><div class="kpi-icon">◷</div><div><div class="kpi-label">慢充等待</div><div class="kpi-value">3 <small>辆</small></div><div class="kpi-sub">占用率 30%</div><div class="bar" style="color:var(--orange)"><span style="width:30%"></span></div></div></div>
+          <div class="kpi"><div class="kpi-icon">▤</div><div><div class="kpi-label">待处理请求</div><div class="kpi-value">2 <small>条</small></div><div class="kpi-sub">占用率 20%</div><div class="bar" style="color:var(--purple)"><span style="width:20%"></span></div></div></div>
+          <div class="kpi"><div class="kpi-icon">▥</div><div><div class="kpi-label">在线桩</div><div class="kpi-value">5 <small>/ 5</small></div><div class="kpi-sub">在线率 100%</div><div class="bar"><span style="width:100%"></span></div></div></div>
+          <div class="kpi"><div class="kpi-icon">▥</div><div><div class="kpi-label">今日累计充电量</div><div class="kpi-value">1,245 <small>kWh</small></div><div class="kpi-sub">较昨日 +12.5%</div></div></div>
+          <div class="kpi"><div class="kpi-icon">⚡</div><div><div class="kpi-label">今日服务车辆</div><div class="kpi-value">156 <small>辆</small></div><div class="kpi-sub">较昨日 +18 辆</div></div></div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div class="section-title">充电桩队列总览 <span style="color:#667085;font-size:13px;font-weight:600;">（全队列显示）</span></div>
+            <div class="legend"><span><i style="background:var(--green)"></i>运行中</span><span><i style="background:var(--blue)"></i>充电中</span><span><i style="background:var(--gray)"></i>等待中</span><span>----→ 车辆流向</span></div>
+          </div>
+          <div class="queue-overview">
+            <div class="lane-wrap">
+              <div class="entry">入口<small>→</small></div>
+              <div class="exit">出口<small>→</small></div>
+              <div class="main-road"></div>
+              <div class="moving-car"><div class="car-body"></div></div>
+              <div class="moving-car delay1"><div class="car-body"></div></div>
+              <div class="moving-car delay2"><div class="car-body"></div></div>
+
+              <div class="pile-grid">
+                <div class="pile-top"><div class="pile-name">FAST_01</div><span class="run-pill">运行中</span><div class="pile-meta">当前服务：<b>U01</b><br>队列长度：<b>5</b></div><div class="charger"></div><div class="branch-line"></div></div>
+                <div class="pile-top"><div class="pile-name">FAST_02</div><span class="run-pill">运行中</span><div class="pile-meta">当前服务：<b>U06</b><br>队列长度：<b>3</b></div><div class="charger"></div><div class="branch-line"></div></div>
+                <div class="pile-top"><div class="pile-name">FAST_03</div><span class="run-pill">运行中</span><div class="pile-meta">当前服务：<b>U09</b><br>队列长度：<b>4</b></div><div class="charger"></div><div class="branch-line"></div></div>
+                <div class="pile-top"><div class="pile-name">SLOW_01</div><span class="run-pill">运行中</span><div class="pile-meta">当前服务：<b>U13</b><br>队列长度：<b>4</b></div><div class="charger"></div><div class="branch-line"></div></div>
+                <div class="pile-top"><div class="pile-name">SLOW_02</div><span class="run-pill">运行中</span><div class="pile-meta">当前服务：<b>U17</b><br>队列长度：<b>4</b></div><div class="charger"></div><div class="branch-line"></div></div>
+              </div>
+            </div>
+
+            <div class="queue-columns">
+              <div class="queue-col"><div class="queue-line"><span class="queue-no">1</span><span class="chip active">U01</span><span class="q-status active">充电中</span></div><div class="queue-line"><span class="queue-no">2</span><span class="chip">U02</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">3</span><span class="chip">U03</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">4</span><span class="chip">U04</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">5</span><span class="chip">U05</span><span class="q-status">等待中</span></div></div>
+              <div class="queue-col"><div class="queue-line"><span class="queue-no">1</span><span class="chip active">U06</span><span class="q-status active">充电中</span></div><div class="queue-line"><span class="queue-no">2</span><span class="chip">U07</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">3</span><span class="chip">U08</span><span class="q-status">等待中</span></div></div>
+              <div class="queue-col"><div class="queue-line"><span class="queue-no">1</span><span class="chip active">U09</span><span class="q-status active">充电中</span></div><div class="queue-line"><span class="queue-no">2</span><span class="chip">U10</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">3</span><span class="chip">U11</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">4</span><span class="chip">U12</span><span class="q-status">等待中</span></div></div>
+              <div class="queue-col"><div class="queue-line"><span class="queue-no">1</span><span class="chip active">U13</span><span class="q-status active">充电中</span></div><div class="queue-line"><span class="queue-no">2</span><span class="chip">U14</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">3</span><span class="chip">U15</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">4</span><span class="chip">U16</span><span class="q-status">等待中</span></div></div>
+              <div class="queue-col"><div class="queue-line"><span class="queue-no">1</span><span class="chip active">U17</span><span class="q-status active">充电中</span></div><div class="queue-line"><span class="queue-no">2</span><span class="chip">U18</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">3</span><span class="chip">U19</span><span class="q-status">等待中</span></div><div class="queue-line"><span class="queue-no">4</span><span class="chip">U20</span><span class="q-status">等待中</span></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="wait-area">
+          <div class="wait-area-head">
+            <div class="wait-title">等候区实时状态 <span class="live">● 实时更新</span></div>
+            <div class="wait-capacity">
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;"></i>快充等待</span>
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--orange);margin-right:6px;"></i>慢充等待</span>
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blue);margin-right:6px;"></i>待处理请求</span>
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gray);margin-right:6px;"></i>空闲车位</span>
+              <span>等候区容量：20 个车位</span>
+              <span class="wait-detail-link">查看详情</span>
+            </div>
+          </div>
+          <div class="wait-parking">
+            <div class="wait-lane"></div>
+            <div class="wait-entry-car"></div>
+            <div class="parking-grid">
+              <div class="slot fast"><div class="slot-car"></div><span class="slot-no">01</span></div><div class="slot fast"><div class="slot-car blue"></div><span class="slot-no">02</span></div><div class="slot fast"><div class="slot-car"></div><span class="slot-no">03</span></div><div class="slot fast"><div class="slot-car dark"></div><span class="slot-no">04</span></div><div class="slot fast"><div class="slot-car"></div><span class="slot-no">05</span></div>
+              <div class="slot slow"><div class="slot-car"></div><span class="slot-no">06</span></div><div class="slot slow"><div class="slot-car dark"></div><span class="slot-no">07</span></div><div class="slot slow"><div class="slot-car dark"></div><span class="slot-no">08</span></div>
+              <div class="slot pending"><div class="slot-car"></div><span class="slot-no">09</span></div><div class="slot pending"><div class="slot-car blue"></div><span class="slot-no">10</span></div>
+              <div class="slot empty"><span class="slot-no">11</span></div><div class="slot empty"><span class="slot-no">12</span></div><div class="slot empty"><span class="slot-no">13</span></div><div class="slot empty"><span class="slot-no">14</span></div><div class="slot empty"><span class="slot-no">15</span></div><div class="slot empty"><span class="slot-no">16</span></div><div class="slot empty"><span class="slot-no">17</span></div><div class="slot empty"><span class="slot-no">18</span></div><div class="slot empty"><span class="slot-no">19</span></div><div class="slot empty"><span class="slot-no">20</span></div>
+            </div>
+            <div class="wait-exit">出口<small>→</small></div>
+          </div>
+          <div class="wait-footnote"><span>说明：等候区展示尚未进入任一充电桩队列的车辆。</span><span>快充等待 5 辆</span><span>慢充等待 3 辆</span><span>待处理请求 2 条</span><span>空闲车位 10 个</span></div>
+        </section>
+
+        <section class="table-section">
+          <div class="table-title">充电桩运行状态</div>
+          <table>
+            <thead><tr><th>桩位号</th><th>类型</th><th>状态</th><th>当前服务</th><th>队列长度</th><th>等待人数</th><th>累计电量</th><th>累计服务</th></tr></thead>
+            <tbody>
+              <tr><td><b>FAST_01</b></td><td><span class="tag fast">快充</span></td><td><span class="state-dot"></span>运行中</td><td><span style="color:var(--blue);font-weight:800;">U01</span></td><td>5</td><td>4</td><td>356.75 kWh</td><td>24 次</td></tr>
+              <tr><td><b>FAST_02</b></td><td><span class="tag fast">快充</span></td><td><span class="tag blue">空闲</span></td><td>—</td><td>3</td><td>2</td><td>287.50 kWh</td><td>18 次</td></tr>
+              <tr><td><b>FAST_03</b></td><td><span class="tag fast">快充</span></td><td><span class="state-dot"></span>运行中</td><td><span style="color:var(--blue);font-weight:800;">U09</span></td><td>4</td><td>3</td><td>412.30 kWh</td><td>28 次</td></tr>
+              <tr><td><b>SLOW_01</b></td><td><span class="tag slow">慢充</span></td><td><span class="state-dot"></span>运行中</td><td><span style="color:var(--blue);font-weight:800;">U13</span></td><td>4</td><td>3</td><td>98.40 kWh</td><td>12 次</td></tr>
+              <tr><td><b>SLOW_02</b></td><td><span class="tag slow">慢充</span></td><td><span class="tag blue">空闲</span></td><td>—</td><td>4</td><td>3</td><td>90.25 kWh</td><td>9 次</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="charts">
+          <div class="chart-box">
+            <div class="chart-title">桩状态分布（实时）</div>
+            <div class="donut-wrap">
+              <div class="donut status-donut"><div class="donut-center"><strong>总计</strong><span>5</span></div></div>
+              <div class="chart-legend">
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--green)"></i>运行中</div><div class="legend-right">3（60%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--blue)"></i>空闲</div><div class="legend-right">2（40%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--orange)"></i>故障</div><div class="legend-right">0（0%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--gray)"></i>离线</div><div class="legend-right">0（0%）</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-box">
+            <div class="chart-title">队列分布（实时）</div>
+            <div class="donut-wrap">
+              <div class="donut queue-donut"><div class="donut-center"><strong>总计</strong><span>15</span></div></div>
+              <div class="chart-legend">
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--green)"></i>快充队列</div><div class="legend-right">5（62.5%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--orange)"></i>慢充队列</div><div class="legend-right">3（37.5%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--gray)"></i>空闲</div><div class="legend-right">12（-）</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-box">
+            <div class="chart-title">等候区组成（实时）</div>
+            <div class="donut-wrap">
+              <div class="donut wait-donut"><div class="donut-center"><strong>总计</strong><span>10</span></div></div>
+              <div class="chart-legend">
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--green)"></i>快充等待</div><div class="legend-right">5（50%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--orange)"></i>慢充等待</div><div class="legend-right">3（30%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--blue)"></i>待处理请求</div><div class="legend-right">2（20%）</div></div>
+                <div class="legend-row"><div class="legend-left"><i style="background:var(--gray)"></i>空闲车位</div><div class="legend-right">10（50%）</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <div class="footer-cell"><span class="footer-icon">✓</span><span><b>系统状态</b>　<span style="color:var(--green);font-weight:800;">系统运行正常</span></span></div>
+          <div class="footer-cell"><span><b>服务说明</b>　车辆按队列进入充电桩，完成后自动结算。</span></div>
+          <div class="footer-cell"><span><b>系统时间</b>　16:30:18　2025-05-23　星期五</span></div>
+          <div class="footer-cell"><div class="quick"><div>▣<small>设备控制</small></div><div>♙<small>用户管理</small></div><div>▥<small>报表统计</small></div><div>⚙<small>系统配置</small></div></div></div>
+        </footer>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

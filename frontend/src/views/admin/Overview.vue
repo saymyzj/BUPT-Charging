@@ -1,103 +1,264 @@
 <template>
-  <div class="page">
-    <div class="page-head">
-      <h1>管理总览</h1>
-      <p>充电桩运行状态一览</p>
-    </div>
+  <div class="admin-overview">
+    <header class="overview-top">
+      <div class="top-title">
+        <h1>管理总览</h1>
+        <p>实时监控充电站运行状态</p>
+      </div>
+      <div class="top-actions">
+        <span class="refresh-state">自动刷新：开启</span>
+        <span class="time-badge">{{ currentTimeText }}</span>
+        <span class="date-badge">{{ currentDateText }} {{ currentWeekdayText }}</span>
+        <button class="refresh-btn" :disabled="loading" @click="loadStations">
+          {{ loading ? '刷新中' : '刷新状态' }}
+        </button>
+      </div>
+    </header>
 
-    <div class="toolbar">
-      <button class="btn btn-primary" @click="loadStations">刷新状态</button>
-    </div>
+    <section class="kpi-row">
+      <article v-for="item in kpis" :key="item.label" class="kpi">
+        <div class="kpi-icon" :class="item.tone">{{ item.icon }}</div>
+        <div class="kpi-body">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }} <small>{{ item.unit }}</small></strong>
+          <em>{{ item.sub }}</em>
+          <div class="bar" :class="item.tone"><i :style="{ width: item.percent + '%' }"></i></div>
+        </div>
+      </article>
+    </section>
 
-    <div v-if="loading" class="loading-text">加载中...</div>
-
-    <!-- Waiting Area -->
-    <div class="card waiting-card" v-if="!loading">
-      <div class="card-head">
+    <section class="section queue-section">
+      <div class="section-head">
         <div>
-          <h3>等候区</h3>
-          <p>尚未进入任何充电桩队列的活跃请求</p>
+          <h2>充电桩队列总览</h2>
+          <p>按当前实际桩位展示队列，首位充电车辆与等待车辆分层显示</p>
         </div>
-        <span class="waiting-capacity">{{ waitingSummary.total_waiting }} / {{ waitingSummary.capacity }}</span>
+        <div class="legend">
+          <span><i class="green"></i>运行中</span>
+          <span><i class="blue"></i>充电中</span>
+          <span><i class="gray"></i>等待中</span>
+        </div>
       </div>
-      <div class="waiting-stats">
-        <div class="waiting-stat"><span>快充等待</span><strong>{{ waitingSummary.fast_queue_count }}</strong></div>
-        <div class="waiting-stat"><span>慢充等待</span><strong>{{ waitingSummary.slow_queue_count }}</strong></div>
-        <div class="waiting-stat"><span>等候请求</span><strong>{{ waitingAreaRows.length }}</strong></div>
-      </div>
-      <table class="t waiting-table" v-if="waitingAreaRows.length">
-        <thead><tr><th>用户</th><th>请求编号</th><th>排队号</th><th>充电模式</th><th>请求电量</th><th>状态与预计</th></tr></thead>
-        <tbody>
-          <tr v-for="row in waitingAreaRows" :key="row.request_id || row.user_id">
-            <td>{{ row.username || row.user_id }}</td>
-            <td>{{ row.request_id || '--' }}</td>
-            <td><strong>{{ queueNumberText(row) }}</strong></td>
-            <td>{{ modeText(row.charge_mode) }}</td>
-            <td>{{ fmtEnergy(row.request_energy) }}</td>
-            <td>{{ waitingText(row) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else class="empty-inline">等候区暂无用户</div>
-      <div class="queue-note">说明：等候区明细来自后端接口，展示尚未进入任何充电桩队列的活跃请求。</div>
-    </div>
 
-    <!-- Station Grid -->
-    <div class="station-grid" v-if="!loading">
-      <div class="station-card" v-for="s in stations" :key="s.station_code" :class="'st-' + (s.station_status || '').toLowerCase()">
-        <div class="st-header">
-          <span class="st-code">{{ s.station_code }}</span>
-          <span class="st-badge" :class="'badge-' + (s.station_status || '').toLowerCase()">{{ STATION_STATUS_TEXT[s.station_status] || s.station_status }}</span>
-        </div>
-        <div class="st-info">
-          <div class="st-row"><span>模式</span><span>{{ CHARGE_MODE_TEXT[s.charge_mode] || s.charge_mode }}</span></div>
-          <div class="st-row"><span>当前服务</span><span>{{ currentServiceText(s) }}</span></div>
-          <div class="st-row"><span>队列长度</span><span>{{ s.queue_length ?? 0 }}</span></div>
-          <div class="st-row"><span>累计次数</span><span>{{ s.total_charge_count ?? 0 }}</span></div>
-          <div class="st-row"><span>累计时长</span><span>{{ fmtDuration(s.total_charge_seconds) }}</span></div>
-          <div class="st-row"><span>累计电量</span><span>{{ fmtEnergy(s.total_charge_energy) }}</span></div>
-        </div>
-        <div class="station-queue-mini">
-          <div class="mini-head">
-            <span>队列</span>
-            <button class="mini-link" @click="viewQueue(s.station_code)">完整</button>
-          </div>
-          <div class="mini-list" v-if="stationQueueRows(s.station_code).length">
-            <div class="mini-row" v-for="q in stationQueueRows(s.station_code).slice(0, 3)" :key="q.request_id || q.queue_number">
-              <span>{{ q.username || q.user_id || '--' }}</span>
-              <strong>{{ queueNumberText(q) }}</strong>
-            </div>
-            <div class="mini-more" v-if="stationQueueRows(s.station_code).length > 3">
-              还有 {{ stationQueueRows(s.station_code).length - 3 }} 个请求
-            </div>
-          </div>
-          <div v-else class="mini-empty">队列为空</div>
-        </div>
-        <button class="btn-queue" @click="viewQueue(s.station_code)">查看完整队列</button>
-      </div>
-    </div>
+      <div v-if="loading && !stations.length" class="loading-text">加载中...</div>
+      <div v-else class="queue-overview">
+        <div class="lane-wrap">
+          <div class="entry">入口<small>&gt;</small></div>
+          <div class="exit">出口<small>&gt;</small></div>
+          <div class="main-road"></div>
+          <div class="moving-car"><div class="car-body"></div></div>
+          <div class="moving-car delay1"><div class="car-body"></div></div>
+          <div class="moving-car delay2"><div class="car-body"></div></div>
 
-    <!-- Queue Modal -->
-    <div class="modal-overlay" v-if="showModal" @click.self="showModal=false">
+          <div class="pile-grid">
+          <article v-for="station in visibleStations" :key="station.station_code" class="pile-top" :class="stationTone(station)">
+            <div class="pile-head">
+              <div class="pile-name">{{ station.station_code }}</div>
+              <span class="run-pill" :class="stationTone(station)">{{ statusText(station.station_status) }}</span>
+            </div>
+            <div class="pile-meta">
+              <span>当前服务：<b>{{ currentServiceText(station) }}</b></span>
+              <span>队列长度：<b>{{ station.queue_length ?? stationQueueRows(station.station_code).length }}</b></span>
+            </div>
+            <div class="charger" :class="stationTone(station)"></div>
+            <i class="branch-line"></i>
+          </article>
+          </div>
+        </div>
+        <div class="queue-columns">
+          <article v-for="station in visibleStations" :key="station.station_code" class="queue-col">
+            <div class="queue-title">
+              <span>{{ station.station_code }} 队列</span>
+              <button @click="viewQueue(station.station_code)">详情</button>
+            </div>
+            <div v-if="stationQueueRows(station.station_code).length" class="queue-lines">
+              <div
+                v-for="(row, index) in stationQueueRows(station.station_code)"
+                :key="row.request_id || row.queue_number || index"
+                class="queue-line"
+              >
+                <span class="queue-no">{{ index + 1 }}</span>
+                <span class="chip" :class="{ active: isChargingRow(station, row, index) }">
+                  {{ userShort(row) }}
+                </span>
+                <span class="q-status" :class="{ active: isChargingRow(station, row, index) }">
+                  {{ isChargingRow(station, row, index) ? '充电中' : '等待中' }}
+                </span>
+              </div>
+            </div>
+            <div v-else class="queue-empty">队列为空</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="overview-split">
+      <section class="wait-area">
+        <div class="wait-head">
+          <div>
+            <h2>等候区实时状态 <span class="live-dot">实时更新</span></h2>
+          </div>
+          <div class="wait-legend">
+            <span><i class="blue"></i>快充等待</span>
+            <span><i class="orange"></i>慢充等待</span>
+            <span><i class="purple"></i>待处理请求</span>
+            <span><i class="gray"></i>空闲车位</span>
+            <b>容量：{{ waitingCapacity }} 个车位</b>
+          </div>
+        </div>
+        <div class="wait-parking">
+          <div class="wait-lane"></div>
+          <div class="wait-entry-car"></div>
+          <div class="parking-grid" :style="{ '--slot-count': parkingSlots.length }">
+            <div
+              v-for="slot in parkingSlots"
+              :key="slot.index"
+              class="slot"
+              :class="[slot.row ? modeClass(slot.row.charge_mode) : 'empty', { pending: slot.row?.waiting_area_order === 0 }]"
+            >
+              <div
+                v-if="slot.row"
+                class="slot-car"
+                :style="{ '--pulse-delay': (slot.index % 5) * 0.18 + 's' }"
+              ></div>
+              <span class="slot-no">{{ String(slot.index).padStart(2, '0') }}</span>
+              <small v-if="slot.row">{{ queueNumberText(slot.row) }}</small>
+            </div>
+          </div>
+          <div class="wait-exit">出口<small>&gt;</small></div>
+        </div>
+        <div class="wait-footnote">
+          <span>说明：等候区展示尚未进入任一充电桩队列的车辆。</span>
+          <span>快充等待 {{ waitingSummary.fast_queue_count || 0 }} 辆</span>
+          <span>慢充等待 {{ waitingSummary.slow_queue_count || 0 }} 辆</span>
+          <span>待处理请求 {{ pendingCount }} 条</span>
+          <span>空闲车位 {{ freeWaitingSlots }} 个</span>
+        </div>
+      </section>
+
+      <aside class="side-status">
+        <div class="side-card">
+          <div class="side-icon pulse">调</div>
+          <strong>实时调度</strong>
+          <span>队列与车位每 5 秒同步</span>
+        </div>
+        <div class="side-card">
+          <div class="side-icon blue">队</div>
+          <strong>当前队列</strong>
+          <span>{{ stationQueueTotal }} 个桩内请求</span>
+        </div>
+        <div class="side-card">
+          <div class="side-icon orange">候</div>
+          <strong>等候区</strong>
+          <span>{{ waitingTotal }} / {{ waitingCapacity }} 个车位</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="table-section">
+      <div class="table-title">充电桩运行状态</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>桩位号</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>当前服务</th>
+              <th>队列长度</th>
+              <th>等待人数</th>
+              <th>累计电量</th>
+              <th>累计服务</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="station in stations" :key="station.station_code" :class="{ 'row-fault': station.station_status === 'FAULT' }">
+              <td><strong>{{ station.station_code }}</strong></td>
+              <td><span class="mode-pill" :class="modeClass(station.charge_mode)">{{ modeText(station.charge_mode) }}</span></td>
+              <td>
+                <span class="status-cell" :class="stationTone(station)">
+                  <i v-if="station.station_status === 'RUNNING'"></i>
+                  {{ statusText(station.station_status) }}
+                </span>
+              </td>
+              <td>{{ currentServiceText(station) }}</td>
+              <td>{{ station.queue_length ?? stationQueueRows(station.station_code).length }}</td>
+              <td>{{ waitingCount(station) }}</td>
+              <td>{{ fmtEnergy(station.total_charge_energy) }}</td>
+              <td>{{ station.total_charge_count ?? 0 }} 次</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="charts">
+      <article class="chart-box">
+        <h3>桩状态分布</h3>
+        <div class="chart-content">
+          <div class="donut" :style="stationDonutStyle">
+            <div><strong>总计</strong><span>{{ stations.length }}</span></div>
+          </div>
+          <div class="chart-legend">
+            <p><i class="green"></i>运行中 <strong>{{ statusCounts.running }}</strong></p>
+            <p><i class="red"></i>故障 <strong>{{ statusCounts.fault }}</strong></p>
+            <p><i class="gray"></i>关闭 <strong>{{ statusCounts.shutdown }}</strong></p>
+          </div>
+        </div>
+      </article>
+      <article class="chart-box">
+        <h3>队列构成</h3>
+        <div class="chart-content">
+          <div class="donut" :style="queueDonutStyle">
+            <div><strong>总计</strong><span>{{ totalQueued }}</span></div>
+          </div>
+          <div class="chart-legend">
+            <p><i class="blue"></i>快充等待 <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
+            <p><i class="orange"></i>慢充等待 <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
+            <p><i class="gray"></i>桩内队列 <strong>{{ stationQueueTotal }}</strong></p>
+          </div>
+        </div>
+      </article>
+      <article class="chart-box">
+        <h3>等候区组成</h3>
+        <div class="chart-content">
+          <div class="donut" :style="waitingDonutStyle">
+            <div><strong>总计</strong><span>{{ waitingCapacity }}</span></div>
+          </div>
+          <div class="chart-legend">
+            <p><i class="blue"></i>快充等待 <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
+            <p><i class="orange"></i>慢充等待 <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
+            <p><i class="purple"></i>待处理请求 <strong>{{ pendingCount }}</strong></p>
+            <p><i class="gray"></i>空闲车位 <strong>{{ freeWaitingSlots }}</strong></p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <div class="modal-overlay" v-if="showModal" @click.self="showModal = false">
       <div class="modal-card">
-        <div class="modal-head"><h3>{{ modalCode }} 桩队列</h3><button class="modal-close" @click="showModal=false">&times;</button></div>
+        <div class="modal-head">
+          <h3>{{ modalCode }} 桩队列</h3>
+          <button @click="showModal = false">&times;</button>
+        </div>
         <div class="modal-body">
-          <div v-if="queueLoading">加载中...</div>
-          <table class="t" v-if="!queueLoading && queueData.length">
-            <thead><tr><th>用户名</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th class="queue-status-col">状态与预计</th></tr></thead>
+          <div v-if="queueLoading" class="loading-text">加载中...</div>
+          <table v-else-if="queueData.length">
+            <thead>
+              <tr><th>用户</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr>
+            </thead>
             <tbody>
               <tr v-for="(q, index) in queueData" :key="q.request_id || q.queue_number">
                 <td>{{ q.username || '--' }}</td>
                 <td>{{ q.user_id || '--' }}</td>
-                <td>{{ q.battery_capacity }} kWh</td>
-                <td>{{ q.request_energy }} kWh</td>
+                <td>{{ Number(q.battery_capacity || 0).toFixed(2) }} kWh</td>
+                <td>{{ Number(q.request_energy || 0).toFixed(2) }} kWh</td>
                 <td><strong>{{ queueNumberText(q) }}</strong></td>
-                <td class="queue-status-col">{{ queueTimeText(q, index) }}</td>
+                <td>{{ queueTimeText(q, index) }}</td>
               </tr>
             </tbody>
           </table>
-          <div v-if="!queueLoading && queueData.length" class="queue-note">正在充电显示剩余时间；未充电车辆显示前方人数与前方车辆全部充完后的预计时间。</div>
-          <div v-if="!queueLoading && !queueData.length" style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">队列为空</div>
+          <div v-else class="empty-modal">队列为空</div>
         </div>
       </div>
     </div>
@@ -105,10 +266,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getRequestStatus, getStations, getStationsOverview, getStationQueue, getWaitingArea } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
-import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
+import { CHARGE_MODE_TEXT, STATION_STATUS_TEXT } from '@/constants/enums'
 
 const stations = ref([])
 const loading = ref(false)
@@ -119,13 +280,127 @@ const queueLoading = ref(false)
 const currentStation = ref(null)
 const currentFinishTime = ref(null)
 const stationQueues = ref({})
-const waitingSummary = ref({
-  fast_queue_count: 0,
-  slow_queue_count: 0,
-  total_waiting: 0,
-  capacity: 0,
-})
+const waitingSummary = ref({ fast_queue_count: 0, slow_queue_count: 0, total_waiting: 0, capacity: 0 })
 const waitingAreaRows = ref([])
+const now = ref(new Date())
+let timer = null
+
+const currentTimeText = computed(() => now.value.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+const currentDateText = computed(() => now.value.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }))
+const currentWeekdayText = computed(() => ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.value.getDay()] || '')
+const waitingCapacity = computed(() => Number(waitingSummary.value.capacity || waitingAreaRows.value.length || 0))
+const waitingTotal = computed(() => Number(waitingSummary.value.total_waiting ?? waitingAreaRows.value.length))
+const waitingRate = computed(() => percent(waitingTotal.value, waitingCapacity.value))
+const runningStations = computed(() => stations.value.filter((s) => s.station_status === 'RUNNING').length)
+const visibleStations = computed(() => stations.value.slice(0, 5))
+const totalEnergy = computed(() => stations.value.reduce((sum, s) => sum + Number(s.total_charge_energy || 0), 0))
+const totalChargeCount = computed(() => stations.value.reduce((sum, s) => sum + Number(s.total_charge_count || 0), 0))
+const stationQueueTotal = computed(() => Object.values(stationQueues.value).reduce((sum, rows) => sum + rows.length, 0))
+const pendingCount = computed(() => waitingAreaRows.value.filter((row) => row.waiting_area_order === 0).length)
+const totalQueued = computed(() => waitingTotal.value + stationQueueTotal.value)
+const freeWaitingSlots = computed(() => Math.max(0, waitingCapacity.value - waitingTotal.value))
+
+const statusCounts = computed(() => ({
+  running: stations.value.filter((s) => s.station_status === 'RUNNING').length,
+  fault: stations.value.filter((s) => s.station_status === 'FAULT').length,
+  shutdown: stations.value.filter((s) => s.station_status === 'SHUTDOWN').length,
+}))
+
+const kpis = computed(() => [
+  {
+    label: '等候区占用',
+    value: waitingTotal.value,
+    unit: `/ ${waitingCapacity.value || 0}`,
+    sub: `占用率 ${waitingRate.value}%`,
+    percent: waitingRate.value,
+    icon: 'P',
+    tone: 'green',
+  },
+  {
+    label: '快充等待',
+    value: waitingSummary.value.fast_queue_count || 0,
+    unit: '辆',
+    sub: `占用率 ${percent(waitingSummary.value.fast_queue_count || 0, waitingCapacity.value)}%`,
+    percent: percent(waitingSummary.value.fast_queue_count || 0, waitingCapacity.value),
+    icon: 'F',
+    tone: 'blue',
+  },
+  {
+    label: '慢充等待',
+    value: waitingSummary.value.slow_queue_count || 0,
+    unit: '辆',
+    sub: `占用率 ${percent(waitingSummary.value.slow_queue_count || 0, waitingCapacity.value)}%`,
+    percent: percent(waitingSummary.value.slow_queue_count || 0, waitingCapacity.value),
+    icon: 'S',
+    tone: 'orange',
+  },
+  {
+    label: '待处理请求',
+    value: pendingCount.value,
+    unit: '条',
+    sub: '故障重排或未分配',
+    percent: percent(pendingCount.value, waitingCapacity.value),
+    icon: 'R',
+    tone: 'purple',
+  },
+  {
+    label: '正常桩',
+    value: runningStations.value,
+    unit: `/ ${stations.value.length}`,
+    sub: `正常率 ${percent(runningStations.value, stations.value.length)}%`,
+    percent: percent(runningStations.value, stations.value.length),
+    icon: 'N',
+    tone: 'green',
+  },
+  {
+    label: '累计充电量',
+    value: totalEnergy.value.toFixed(1),
+    unit: 'kWh',
+    sub: '来自充电桩统计',
+    percent: 100,
+    icon: 'E',
+    tone: 'blue',
+  },
+  {
+    label: '累计服务车辆',
+    value: totalChargeCount.value,
+    unit: '辆',
+    sub: '来自充电桩统计',
+    percent: 100,
+    icon: 'C',
+    tone: 'green',
+  },
+])
+
+const parkingSlots = computed(() => {
+  const count = Math.max(waitingCapacity.value, waitingAreaRows.value.length, 1)
+  return Array.from({ length: count }, (_, index) => ({
+    index: index + 1,
+    row: waitingAreaRows.value[index] || null,
+  }))
+})
+
+const stationDonutStyle = computed(() => {
+  const total = Math.max(stations.value.length, 1)
+  const running = statusCounts.value.running / total * 100
+  const fault = running + statusCounts.value.fault / total * 100
+  return { background: `conic-gradient(#10b981 0 ${running}%, #ef4444 ${running}% ${fault}%, #98a2b3 ${fault}% 100%)` }
+})
+
+const queueDonutStyle = computed(() => {
+  const total = Math.max(totalQueued.value, 1)
+  const fast = Number(waitingSummary.value.fast_queue_count || 0) / total * 100
+  const slow = fast + Number(waitingSummary.value.slow_queue_count || 0) / total * 100
+  return { background: `conic-gradient(#2563eb 0 ${fast}%, #f97316 ${fast}% ${slow}%, #98a2b3 ${slow}% 100%)` }
+})
+
+const waitingDonutStyle = computed(() => {
+  const total = Math.max(waitingCapacity.value, 1)
+  const fast = Number(waitingSummary.value.fast_queue_count || 0) / total * 100
+  const slow = fast + Number(waitingSummary.value.slow_queue_count || 0) / total * 100
+  const pending = slow + pendingCount.value / total * 100
+  return { background: `conic-gradient(#2563eb 0 ${fast}%, #f97316 ${fast}% ${slow}%, #8b5cf6 ${slow}% ${pending}%, #98a2b3 ${pending}% 100%)` }
+})
 
 async function loadStations() {
   loading.value = true
@@ -135,8 +410,11 @@ async function loadStations() {
     stations.value = Array.isArray(data) ? data : (data.stations || [])
     stationQueues.value = await loadAllStationQueues()
     await loadWaitingArea()
-  } catch (_) { /* silent */ }
-  loading.value = false
+  } catch (_) {
+    /* keep last visible data */
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadWaitingArea() {
@@ -144,19 +422,12 @@ async function loadWaitingArea() {
     getStationsOverview().catch(() => null),
     getWaitingArea().catch(() => null),
   ])
-
   const overview = overviewRes ? unwrapResponseData(overviewRes) : {}
   const waitingPayload = waitingRes ? unwrapResponseData(waitingRes) : {}
   waitingSummary.value = {
-    ...(overview.waiting_queue || {
-      fast_queue_count: 0,
-      slow_queue_count: 0,
-      total_waiting: 0,
-      capacity: 0,
-    }),
+    ...(overview.waiting_queue || {}),
     ...pickWaitingSummary(waitingPayload),
   }
-
   waitingAreaRows.value = Array.isArray(waitingPayload.rows) ? waitingPayload.rows : []
 }
 
@@ -175,9 +446,7 @@ async function loadAllStationQueues() {
 }
 
 function pickWaitingSummary(payload) {
-  if (!payload || !Array.isArray(payload.rows)) {
-    return {}
-  }
+  if (!payload || !Array.isArray(payload.rows)) return {}
   return {
     fast_queue_count: payload.fast_queue_count ?? 0,
     slow_queue_count: payload.slow_queue_count ?? 0,
@@ -190,17 +459,52 @@ function stationQueueRows(code) {
   return stationQueues.value[code] || []
 }
 
-function modeText(mode) {
-  return CHARGE_MODE_TEXT[mode] || mode || '--'
+function isChargingRow(station, row, index) {
+  return row?.request_status === 'CHARGING' || (index === 0 && Boolean(station?.current_request_id))
 }
 
-function waitingText(row) {
-  if (row?.waiting_area_order === 0) return '故障重排中'
-  if (row?.estimated_start_time) return `预计 ${fmtTime(row.estimated_start_time)} 开始`
-  if (row?.estimated_wait_seconds !== null && row?.estimated_wait_seconds !== undefined) {
-    return `预计等待 ${Math.ceil(Number(row.estimated_wait_seconds || 0) / 60)} min`
+function modeText(mode) {
+  return CHARGE_MODE_TEXT[mode] || (mode === 'FAST' ? '快充' : mode === 'SLOW' ? '慢充' : '--')
+}
+
+function modeClass(mode) {
+  return mode === 'FAST' ? 'fast' : mode === 'SLOW' ? 'slow' : 'pending'
+}
+
+function statusText(status) {
+  return STATION_STATUS_TEXT[status] || status || '--'
+}
+
+function stationTone(station) {
+  const status = station?.station_status
+  if (status === 'FAULT') return 'red'
+  if (status === 'SHUTDOWN') return 'gray'
+  return 'green'
+}
+
+function currentServiceText(station) {
+  if (!station?.current_request_id) return '空闲'
+  if (station.current_user?.username) return station.current_user.username
+  if (station.current_user?.user_id) return station.current_user.user_id
+  return station.current_request_id
+}
+
+function waitingCount(station) {
+  const rows = stationQueueRows(station.station_code)
+  if (!rows.length) return 0
+  return rows.filter((row, index) => !isChargingRow(station, row, index)).length
+}
+
+function userShort(row) {
+  return row?.username || row?.user_id || row?.request_id || '--'
+}
+
+function queueNumberText(row) {
+  if (!row) return '--'
+  if (row.is_fault_followup && row.source_queue_number && row.source_queue_number !== row.queue_number) {
+    return `${row.queue_number}（源${row.source_queue_number}）`
   }
-  return '等待中'
+  return row.queue_number || '--'
 }
 
 async function viewQueue(code) {
@@ -214,71 +518,35 @@ async function viewQueue(code) {
     const res = await getStationQueue(code)
     const data = unwrapResponseData(res)
     queueData.value = Array.isArray(data) ? data : (data.queue || [])
+    stationQueues.value = { ...stationQueues.value, [code]: queueData.value }
     if (currentStation.value?.current_request_id) {
       const statusRes = await getRequestStatus(currentStation.value.current_request_id)
       const status = unwrapResponseData(statusRes)
-      if (status.code === undefined || status.code === 0) {
-        currentFinishTime.value = status.estimated_finish_time || null
-      }
+      currentFinishTime.value = status.estimated_finish_time || null
     }
-  } catch (_) { /* silent */ }
-  queueLoading.value = false
+  } catch (_) {
+    /* keep modal open */
+  } finally {
+    queueLoading.value = false
+  }
 }
 
 function queueTimeText(row, index) {
-  const now = new Date()
   const hasChargingHead = Boolean(currentStation.value?.current_request_id)
   if (hasChargingHead && index === 0) {
-    const remain = remainingMinutes(currentFinishTime.value, now)
+    const remain = remainingMinutes(currentFinishTime.value)
     return remain === null ? '正在服务' : `正在服务，还需 ${remain} min`
   }
-
   const frontCount = hasChargingHead ? index : Math.max(0, index)
-  const finish = estimateFinishTime(index, now)
+  const finish = estimateFinishTime(index)
   return `前方 ${frontCount} 人，预计 ${finish ? fmtTime(finish) : '--'} 充完`
 }
 
-function queueNumberText(row) {
-  if (!row) return '--'
-  if (row.is_fault_followup && row.source_queue_number && row.source_queue_number !== row.queue_number) {
-    return `${row.queue_number}（源${row.source_queue_number}）`
-  }
-  return row.queue_number || '--'
-}
-
-function currentServiceText(station) {
-  if (!station?.current_request_id) return '空闲'
-  if (station.current_user?.username) return `用户 ${station.current_user.username}`
-  if (station.current_user?.user_id) return `用户 ${station.current_user.user_id}`
-  return '服务中'
-}
-
-function fmtDuration(value) {
-  const seconds = Math.max(0, Math.floor(Number(value || 0)))
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const rest = seconds % 60
-  if (h > 0) return rest > 0 ? `${h}h ${m}m ${rest}s` : `${h}h ${m}m`
-  if (m > 0) return rest > 0 ? `${m}m ${rest}s` : `${m}m`
-  return `${rest}s`
-}
-
-function fmtEnergy(value) {
-  return `${Number(value || 0).toFixed(2)} kWh`
-}
-
-function remainingMinutes(time, now = new Date()) {
-  if (!time) return null
-  const finish = new Date(time)
-  if (Number.isNaN(finish.getTime())) return null
-  return Math.max(0, Math.ceil((finish.getTime() - now.getTime()) / 60000))
-}
-
-function estimateFinishTime(index, now = new Date()) {
+function estimateFinishTime(index) {
   const station = currentStation.value
   if (!station) return null
   const power = station.charge_mode === 'FAST' ? 30 : 10
-  const start = currentFinishTime.value ? new Date(currentFinishTime.value) : now
+  const start = currentFinishTime.value ? new Date(currentFinishTime.value) : now.value
   if (Number.isNaN(start.getTime())) return null
   const startIndex = station.current_request_id ? 1 : 0
   let cursor = new Date(start)
@@ -290,84 +558,1399 @@ function estimateFinishTime(index, now = new Date()) {
   return cursor
 }
 
+function remainingMinutes(time) {
+  if (!time) return null
+  const finish = new Date(time)
+  if (Number.isNaN(finish.getTime())) return null
+  return Math.max(0, Math.ceil((finish.getTime() - now.value.getTime()) / 60000))
+}
+
 function fmtTime(time) {
   try {
     return new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } catch { return '--' }
+  } catch {
+    return '--'
+  }
 }
 
-onMounted(loadStations)
+function fmtEnergy(value) {
+  return `${Number(value || 0).toFixed(2)} kWh`
+}
+
+function percent(value, total) {
+  const denominator = Number(total || 0)
+  if (!denominator) return 0
+  return Math.min(100, Math.round(Number(value || 0) / denominator * 100))
+}
+
+onMounted(() => {
+  loadStations()
+  timer = window.setInterval(() => {
+    now.value = new Date()
+    loadStations()
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (timer) window.clearInterval(timer)
+})
 </script>
 
 <style scoped>
-.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
-.page-head { margin-bottom: 20px; }
-.page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: #111827; }
-.page-head p { font-size: 14px; color: #6b7280; margin-top: 4px; }
-
-.toolbar { margin-bottom: 16px; }
-.btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.12s; }
-.btn-primary { background: #10b981; color: white; }
-.btn-primary:hover { background: #059669; }
-
-.loading-text { color: #9ca3af; font-size: 14px; padding: 40px 0; text-align: center; }
-
-.card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
-.card-head { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; }
-.card-head h3 { font-size: 15px; font-weight: 700; color: #111827; margin: 0; }
-.card-head p { font-size: 12px; color: #6b7280; margin: 4px 0 0; }
-.waiting-card { margin-bottom: 18px; }
-.waiting-capacity { padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; font-size: 12px; font-weight: 700; }
-.waiting-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; border-bottom: 1px solid #f3f4f6; }
-.waiting-stat { padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8faf9; display: flex; align-items: center; justify-content: space-between; }
-.waiting-stat span { font-size: 12px; color: #6b7280; }
-.waiting-stat strong { font-size: 18px; color: #111827; }
-.waiting-table { border-left: none !important; border-right: none !important; border-radius: 0 !important; }
-.empty-inline { color: #9ca3af; font-size: 13px; text-align: center; padding: 18px 20px; }
-
-.station-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.station-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; transition: 0.2s; }
-.station-card:hover { border-color: #d1d5db; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
-.station-card.st-running { border-left: 3px solid #10b981; }
-.station-card.st-shutdown { border-left: 3px solid #9ca3af; }
-.station-card.st-fault { border-left: 3px solid #ef4444; }
-.st-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.st-code { font-size: 15px; font-weight: 700; color: #111827; }
-.st-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
-.badge-running { background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
-.badge-shutdown { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
-.badge-fault { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
-.st-info { margin-bottom: 14px; }
-.st-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #6b7280; border-bottom: 1px solid #f3f4f6; }
-.st-row span:last-child { font-weight: 600; color: #1f2937; }
-.station-queue-mini { margin: 12px 0; padding: 10px 12px; border: 1px solid #edf2f7; border-radius: 8px; background: #f8faf9; }
-.mini-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #374151; }
-.mini-link { border: none; background: transparent; color: #059669; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
-.mini-list { display: grid; gap: 6px; }
-.mini-row { display: flex; align-items: center; justify-content: space-between; min-height: 24px; font-size: 12px; color: #4b5563; }
-.mini-row strong { color: #111827; font-size: 12px; }
-.mini-more, .mini-empty { font-size: 12px; color: #9ca3af; }
-.btn-queue { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #e5e7eb; background: white; font-size: 12px; font-weight: 600; color: #6b7280; cursor: pointer; transition: 0.12s; }
-.btn-queue:hover { border-color: #10b981; color: #059669; }
-
-/* MODAL */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.modal-card { background: white; border-radius: 16px; width: min(760px, calc(100vw - 48px)); max-height: 80vh; overflow-y: auto; }
-.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
-.modal-head h3 { font-size: 16px; font-weight: 700; }
-.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #9ca3af; }
-.modal-body { padding: 20px 24px; }
-table.t { width: 100%; border-collapse: collapse; }
-table.t th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-table.t td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; color: #374151; }
-table.t td strong { color: #111827; }
-.queue-status-col { min-width: 160px; }
-.queue-note { margin-top: 12px; color: #9ca3af; font-size: 12px; }
-@media (max-width: 980px) {
-  .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .waiting-stats { grid-template-columns: 1fr; }
+.admin-overview {
+  max-width: 1680px;
+  margin: 0;
+  padding: 22px 28px 30px;
+  color: #101828;
+  background: #eef2f0;
 }
-@media (max-width: 640px) {
-  .station-grid { grid-template-columns: 1fr; }
+
+.overview-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: -22px -28px 18px;
+  padding: 0 28px;
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid #edf0ee;
+}
+
+.top-title {
+  min-width: 0;
+}
+
+.overview-top h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+
+.section-head h2,
+.wait-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: .1px;
+}
+
+.overview-top p,
+.section-head p,
+.wait-head p {
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #475467;
+  font-size: 13px;
+}
+
+.refresh-state,
+.time-badge,
+.date-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.refresh-state {
+  color: #059669;
+  border-color: #d1fae5;
+  background: #ecfdf5;
+}
+
+.time-badge {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+
+.date-badge {
+  color: #667085;
+}
+
+.refresh-btn,
+.queue-title button {
+  border: 1px solid #cceedd;
+  background: #ecfdf5;
+  color: #059669;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.queue-title button:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+
+.refresh-btn {
+  height: 38px;
+  padding: 0 16px;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpi {
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #edf0ee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(16, 24, 40, .055);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+  animation: kpiEnter .5s ease both;
+}
+.kpi:hover {
+  border-color: #a7f3d0;
+  box-shadow: 0 20px 48px rgba(16, 24, 40, .09), 0 0 0 3px rgba(16,185,129,.06);
+  transform: translateY(-2px);
+}
+.kpi:nth-child(1) { animation-delay: 0s; }
+.kpi:nth-child(2) { animation-delay: .07s; }
+.kpi:nth-child(3) { animation-delay: .14s; }
+.kpi:nth-child(4) { animation-delay: .21s; }
+.kpi:nth-child(5) { animation-delay: .28s; }
+.kpi:nth-child(6) { animation-delay: .35s; }
+.kpi:nth-child(7) { animation-delay: .42s; }
+
+.kpi:nth-child(1),
+.kpi:nth-child(5) {
+  min-height: 116px;
+}
+.kpi:nth-child(1) .kpi-body strong,
+.kpi:nth-child(5) .kpi-body strong {
+  font-size: 28px;
+}
+
+.kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+
+.kpi-icon.green { background: #ecfdf5; color: #059669; }
+.kpi-icon.blue { background: #eff6ff; color: #2563eb; }
+.kpi-icon.orange { background: #fff7ed; color: #f97316; }
+.kpi-icon.purple { background: #f5f3ff; color: #8b5cf6; }
+
+.kpi-body span {
+  color: #475467;
+  font-size: 13px;
+}
+
+.kpi-body strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 23px;
+  line-height: 1;
+  font-weight: 850;
+}
+
+.kpi-body small {
+  font-size: 14px;
+  color: #344054;
+}
+
+.kpi-body em {
+  display: block;
+  margin-top: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.bar {
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf0ee;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #10b981;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+
+.bar.blue i { background: #2563eb; }
+.bar.orange i { background: #f97316; }
+.bar.purple i { background: #8b5cf6; }
+
+.section,
+.wait-area,
+.table-section,
+.chart-box {
+  border: 1px solid #edf0ee;
+  border-radius: 16px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 14px 38px rgba(16, 24, 40, .055);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+  animation: sectionEnter .55s ease both;
+}
+.section:hover,
+.chart-box:hover {
+  border-color: #d1fae5;
+  box-shadow: 0 22px 52px rgba(16, 24, 40, .08);
+}
+
+.section,
+.wait-area,
+.table-section {
+  margin-bottom: 16px;
+}
+
+.section-head,
+.wait-head,
+.table-title {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 18px;
+  border-bottom: 1px solid #edf0ee;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.legend i,
+.chart-legend i {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  border-radius: 3px;
+}
+
+i.green { background: #10b981; }
+i.blue { background: #2563eb; }
+i.orange { background: #f97316; }
+i.purple { background: #8b5cf6; }
+i.red { background: #ef4444; }
+i.gray { background: #98a2b3; }
+
+.queue-section {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.queue-overview {
+  position: relative;
+  min-height: 300px;
+  min-width: 1200px;
+  padding: 12px 20px 14px;
+  background:
+    radial-gradient(circle at 6% 35%, rgba(16,185,129,.08), transparent 24%),
+    radial-gradient(circle at 75% 20%, rgba(37,99,235,.05), transparent 20%),
+    linear-gradient(180deg, #fff, #fcfefd);
+  overflow: visible;
+}
+
+.lane-wrap {
+  position: relative;
+  height: 132px;
+  margin: 0 2px 6px;
+}
+
+.main-road {
+  position: absolute;
+  left: 64px;
+  right: 64px;
+  top: 88px;
+  height: 8px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(90deg, #d4dbe4 0 18px, transparent 18px 32px),
+    linear-gradient(90deg, transparent, #eef2f6 12%, #eef2f6 88%, transparent);
+}
+
+.entry,
+.exit {
+  position: absolute;
+  top: 62px;
+  width: 50px;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  color: #344054;
+  font-weight: 750;
+  z-index: 4;
+}
+
+.entry { left: 0; }
+.exit { right: 0; }
+
+.entry small,
+.exit small {
+  display: block;
+  color: #059669;
+  font-size: 18px;
+  line-height: 10px;
+}
+
+.moving-car {
+  position: absolute;
+  top: 68px;
+  left: 32px;
+  width: 56px;
+  height: 30px;
+  animation: overviewDrive 8s linear infinite;
+  opacity: .9;
+  z-index: 5;
+}
+
+.moving-car.delay1 {
+  animation-delay: -2.2s;
+}
+
+.moving-car.delay2 {
+  animation-delay: -4.6s;
+}
+
+.car-body {
+  position: absolute;
+  inset: 7px 3px 5px;
+  width: auto;
+  height: auto;
+  border-radius: 18px 18px 10px 10px;
+  background: linear-gradient(180deg, #fff, #dbeafe);
+  border: 1px solid #aab4c0;
+  box-shadow: 0 9px 18px rgba(15,23,42,.14);
+}
+
+.car-body::before {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 2px;
+  width: 22px;
+  height: 9px;
+  border-radius: 8px 8px 3px 3px;
+  background: #bfdbfe;
+}
+
+.car-body::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  bottom: -4px;
+  width: 40px;
+  height: 8px;
+  background:
+    radial-gradient(circle at 7px 4px, #475467 0 4px, transparent 4px),
+    radial-gradient(circle at 33px 4px, #475467 0 4px, transparent 4px);
+}
+
+@keyframes overviewDrive {
+  0% { transform: translateX(-110px); opacity: 0; }
+  6% { opacity: .5; }
+  15% { opacity: .95; }
+  92% { opacity: .9; }
+  100% { transform: translateX(1310px); opacity: 0; }
+}
+
+.pile-grid,
+.queue-columns {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.pile-grid {
+  position: absolute;
+  left: 84px;
+  right: 84px;
+  top: 0;
+  z-index: 6;
+}
+
+.pile-top {
+  position: relative;
+  height: 132px;
+}
+
+.pile-top.gray {
+  opacity: .55;
+  filter: grayscale(.45);
+}
+
+.pile-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.pile-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.3px;
+  color: #101828;
+}
+
+.run-pill {
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #10b981;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  max-width: 80px;
+  overflow: hidden;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(16,185,129,.35);
+}
+
+.run-pill.red {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(239,68,68,.35);
+  animation: faultBlink 1.5s ease-in-out infinite;
+}
+
+@keyframes faultBlink {
+  0%, 100% { opacity: 1; box-shadow: 0 1px 6px rgba(239,68,68,.4); }
+  50% { opacity: .72; box-shadow: 0 2px 14px rgba(239,68,68,.65); }
+}
+
+.run-pill.gray {
+  background: #d1d5db;
+  color: #6b7280;
+  box-shadow: none;
+}
+
+.pile-meta {
+  display: grid;
+  gap: 1px;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1.4;
+  padding-right: 4px;
+}
+
+.pile-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pile-meta b {
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.charger {
+  position: absolute;
+  left: 50%;
+  top: 62px;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 46px;
+  border-radius: 8px 8px 5px 5px;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(180deg, #fff, #e6eaf0);
+  box-shadow: 0 10px 19px rgba(15,23,42,.13);
+  z-index: 2;
+}
+
+.charger::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  width: 9px;
+  height: 14px;
+  border-radius: 3px;
+  background: #10b981;
+}
+
+.charger.red::before { background: #ef4444; }
+.charger.gray::before { background: #98a2b3; }
+
+.charger::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 27px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: rgba(16,185,129,.2);
+}
+
+.branch-line {
+  position: absolute;
+  left: 50%;
+  top: 102px;
+  width: 2px;
+  height: 28px;
+  border-left: 2px dashed #10b981;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.branch-line::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  bottom: -2px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #10b981;
+  border-bottom: 2px solid #10b981;
+  transform: rotate(45deg);
+}
+
+.queue-columns {
+  padding: 0 84px;
+  margin-top: 0;
+  min-width: 1200px;
+}
+
+.queue-col {
+  padding-top: 2px;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.queue-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 24px;
+  gap: 8px;
+}
+
+.queue-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-title button {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.queue-lines {
+  display: grid;
+  gap: 4px;
+  max-height: 74px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.queue-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  font-size: 11px;
+}
+
+.queue-no {
+  color: #667085;
+  text-align: right;
+  font-weight: 800;
+}
+
+.chip {
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-weight: 600;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  border-left: 3px solid #1d4ed8;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.q-status {
+  color: #d1d5db;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.q-status.active {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.queue-empty,
+.empty-modal,
+.loading-text {
+  padding: 20px;
+  color: #98a2b3;
+  text-align: center;
+  font-size: 13px;
+}
+
+.row-fault td {
+  background: rgba(254,242,242,.7);
+}
+.row-fault td:first-child {
+  border-left: 3px solid #ef4444;
+}
+
+.overview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.wait-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.wait-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wait-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.wait-legend b {
+  color: #344054;
+}
+
+.wait-parking {
+  position: relative;
+  min-height: 174px;
+  padding: 18px 22px 28px;
+  background:
+    radial-gradient(circle at 4% 48%, rgba(16,185,129,.09), transparent 22%),
+    linear-gradient(180deg, #fff, #fcfefd);
+  overflow: hidden;
+}
+
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  color: #059669;
+  font-size: 12px;
+  font-weight: 750;
+}
+.live-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16,185,129,.4);
+  animation: livePing 1.6s ease-out infinite;
+  flex-shrink: 0;
+}
+
+.wait-lane {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  top: 72px;
+  height: 54px;
+  margin: 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(226,232,240,.65), rgba(248,250,252,.9));
+  overflow: hidden;
+}
+
+.wait-lane::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 25px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #cbd5e1 0 18px, transparent 18px 34px);
+}
+
+.wait-entry-car {
+  position: absolute;
+  left: 10px;
+  top: 81px;
+  width: 78px;
+  height: 38px;
+  border-radius: 36px 42px 14px 14px;
+  background: linear-gradient(180deg, #8da3a2, #4b6470);
+  opacity: .55;
+  box-shadow: 0 10px 20px rgba(16,185,129,.2);
+  animation: waitCar 4.8s ease-in-out infinite;
+  z-index: 3;
+}
+
+@keyframes waitCar {
+  0% { transform: translateX(-94px); opacity: 0; }
+  25% { transform: translateX(0); opacity: .55; }
+  60% { transform: translateX(42px); opacity: .4; }
+  100% { transform: translateX(118px); opacity: 0; }
+}
+
+.parking-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 8px;
+  margin-left: 92px;
+  margin-right: 78px;
+  z-index: 4;
+}
+
+.slot {
+  min-height: 96px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #d0d5dd;
+  border-radius: 12px;
+  background: rgba(255,255,255,.78);
+  color: #98a2b3;
+  font-weight: 850;
+}
+
+.slot.fast {
+  border-style: solid;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.slot.slow {
+  border-style: solid;
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.slot.pending {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.slot-car {
+  width: 34px;
+  height: 58px;
+  border-radius: 16px 16px 9px 9px;
+  background: linear-gradient(180deg, #fff, currentColor);
+  border: 1px solid rgba(15, 23, 42, .18);
+  opacity: .85;
+  position: relative;
+  animation: parkedPulse 2.4s ease-in-out infinite;
+  animation-delay: var(--pulse-delay, 0s);
+  transform-origin: center bottom;
+}
+
+.slot-car::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+  opacity: .28;
+  animation: chargeDot 1.8s ease-in-out infinite;
+  animation-delay: var(--pulse-delay, 0s);
+}
+
+@keyframes parkedPulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 8px 12px rgba(15,23,42,.12));
+  }
+  50% {
+    transform: translateY(-3px) scale(1.02);
+    filter: drop-shadow(0 12px 18px rgba(15,23,42,.18));
+  }
+}
+
+@keyframes chargeDot {
+  0%, 100% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: .2;
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent;
+    opacity: .48;
+  }
+}
+
+.slot span {
+  position: absolute;
+  left: 8px;
+  top: 7px;
+  font-size: 11px;
+}
+
+.slot small {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  font-size: 11px;
+}
+
+.wait-exit {
+  position: absolute;
+  right: 24px;
+  top: 76px;
+  width: 58px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-top: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: rgba(255,255,255,.92);
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
+  text-align: center;
+  z-index: 5;
+}
+
+.wait-footnote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 11px 18px 14px;
+  border-top: 1px solid #edf0ee;
+  color: #667085;
+  font-size: 12px;
+}
+
+.side-status {
+  display: grid;
+  gap: 12px;
+}
+
+.side-card {
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-content: center;
+  padding: 14px;
+  border: 1px solid #edf0ee;
+  border-radius: 16px;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 14px 38px rgba(16, 24, 40, .055);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.side-card:hover {
+  border-color: #a7f3d0;
+  box-shadow: 0 18px 40px rgba(16, 24, 40, .09);
+  transform: translateY(-2px);
+}
+
+.side-icon {
+  grid-row: 1 / span 2;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.side-icon.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.side-icon.orange {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.side-icon.pulse {
+  animation: sidePulse 1.8s ease-in-out infinite;
+}
+
+@keyframes sidePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,.18); }
+  50% { box-shadow: 0 0 0 9px rgba(16,185,129,.08); }
+}
+
+.side-card strong {
+  color: #101828;
+  font-size: 14px;
+}
+
+.side-card span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.table-title {
+  font-weight: 850;
+  font-size: 16px;
+  color: #101828;
+  letter-spacing: .2px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  background: #f8faf9;
+  color: #475467;
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .2px;
+  border-bottom: 1px solid #edf0ee;
+  white-space: nowrap;
+}
+
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0ee;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+td strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.mode-pill,
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 48px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mode-pill.fast {
+  color: #059669;
+  background: #ecfdf5;
+}
+
+.mode-pill.slow {
+  color: #f97316;
+  background: #fff7ed;
+}
+
+.status-cell.green {
+  color: #0f2f5f;
+  background: transparent;
+  font-weight: 650;
+}
+
+.status-cell.green i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #38a169;
+  box-shadow: 0 0 0 4px rgba(56, 161, 105, .12);
+}
+
+.status-cell.gray {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.status-cell.red {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.chart-box {
+  min-height: 230px;
+  padding: 16px 18px 14px;
+}
+
+.chart-box h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  color: #101828;
+}
+
+.chart-content {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  gap: 18px;
+}
+
+.donut {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  animation: donutIn .8s cubic-bezier(.34,1.56,.64,1) both;
+  animation-delay: .2s;
+}
+
+.donut > div {
+  width: 82px;
+  height: 82px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #edf0ee;
+}
+
+.donut strong {
+  font-size: 12px;
+  color: #667085;
+  font-weight: 850;
+}
+
+.donut span {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 950;
+  color: #101828;
+}
+
+.chart-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.chart-legend p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.chart-legend i {
+  margin-right: 8px;
+}
+
+.chart-legend strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.overview-footer {
+  display: grid;
+  grid-template-columns: 1.1fr 1.45fr;
+  gap: 0;
+  margin-top: 16px;
+  padding: 0;
+  min-height: 78px;
+  border: 1px solid #edf0ee;
+  border-radius: 16px;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 14px 38px rgba(16, 24, 40, .055);
+  overflow: hidden;
+  color: #475467;
+  font-size: 13px;
+}
+
+.overview-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 18px;
+  border-right: 1px solid #edf0ee;
+}
+
+.overview-footer > div:last-child {
+  border-right: 0;
+}
+
+.footer-status,
+.footer-desc {
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,249,.82));
+}
+
+.footer-status > div,
+.footer-desc {
+  min-width: 0;
+}
+
+.footer-status > div,
+.footer-desc {
+  display: grid;
+  gap: 4px;
+}
+
+.footer-status {
+  align-items: center;
+}
+
+.footer-status span,
+.footer-desc span {
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 650;
+}
+
+.overview-footer strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.overview-footer span {
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.ok-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10b981;
+  flex: 0 0 auto;
+  animation: livePing 2s ease-out infinite;
+}
+
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 24, 40, .38);
+  animation: overlayIn .2s ease both;
+}
+
+.modal-card {
+  width: min(820px, calc(100vw - 48px));
+  max-height: 82vh;
+  overflow: auto;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(16,24,40,.22);
+  animation: modalUp .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid #edf0ee;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modal-head button {
+  border: 0;
+  background: transparent;
+  color: #98a2b3;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 18px 22px;
+}
+
+/* ─────────────── ANIMATION KEYFRAMES ─────────────── */
+@keyframes kpiEnter {
+  from { opacity: 0; transform: translateY(16px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sectionEnter {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes donutIn {
+  from { opacity: 0; transform: scale(.7) rotate(-60deg); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes livePing {
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.45); }
+  70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modalUp {
+  from { opacity: 0; transform: translateY(24px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ─── TABLE ROW HOVER ─── */
+tbody tr {
+  transition: background .15s;
+}
+tbody tr:hover td {
+  background: #f8fdf9;
+}
+
+/* ─── REFRESH BTN SPIN ─── */
+.refresh-btn:not(:disabled):hover {
+  transform: scale(1.03);
+}
+.refresh-btn:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+@media (max-width: 1280px) {
+  .kpi-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .overview-split {
+    grid-template-columns: 1fr;
+  }
+
+  .side-status {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-overview {
+    padding: 18px;
+  }
+
+  .overview-top,
+  .section-head,
+  .wait-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .kpi-row,
+  .charts,
+  .side-status {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

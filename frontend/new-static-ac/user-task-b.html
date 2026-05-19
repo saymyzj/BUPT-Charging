@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>充电调度系统 - 当前请求</title>
+  <style>
+    :root{
+      --green:#059669;
+      --green-2:#10b981;
+      --green-soft:#ecfdf5;
+      --blue:#2563eb;
+      --blue-soft:#eff6ff;
+      --amber:#f59e0b;
+      --amber-soft:#fffbeb;
+      --red:#ef4444;
+      --red-soft:#fef2f2;
+      --text:#101828;
+      --muted:#667085;
+      --line:#e5e7eb;
+      --panel:#ffffff;
+      --bg:#f7faf8;
+      --shadow:0 14px 34px rgba(16,24,40,.06);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      min-width:1280px;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 14% 0%, rgba(16,185,129,.05), transparent 24%),
+        radial-gradient(circle at 86% 10%, rgba(37,99,235,.04), transparent 20%),
+        linear-gradient(180deg,#fff 0%,#f7fbf8 100%);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;
+    }
+
+    *{letter-spacing:0}
+
+    .topbar{
+      height:66px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 32px;
+      border-bottom:1px solid var(--line);
+      background:rgba(255,255,255,.92);
+      backdrop-filter:blur(14px);
+      position:sticky;
+      top:0;
+      z-index:20;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:18px;
+      font-weight:850;
+    }
+    .brand-mark{
+      width:32px;
+      height:32px;
+      border-radius:11px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      background:linear-gradient(135deg,var(--green),var(--green-2));
+      box-shadow:0 10px 20px rgba(5,150,105,.22);
+      flex:0 0 auto;
+    }
+    .nav{
+      display:flex;
+      align-items:center;
+      gap:34px;
+      color:#475467;
+      font-size:15px;
+      font-weight:600;
+    }
+    .nav a{
+      text-decoration:none;
+      color:inherit;
+      padding:22px 0 18px;
+      border-bottom:3px solid transparent;
+    }
+    .nav a.active{
+      color:var(--green);
+      border-bottom-color:var(--green);
+    }
+    .userbox{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      color:#344054;
+      font-size:14px;
+    }
+    .user-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,.92);
+    }
+    .avatar{
+      width:22px;
+      height:22px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      background:#101828;
+      color:#fff;
+      font-size:12px;
+    }
+
+    .wrap{
+      max-width:1540px;
+      margin:0 auto;
+      padding:24px 30px 34px;
+    }
+
+    .hero{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:24px;
+      margin-bottom:16px;
+    }
+    .hero h1{
+      margin:0;
+      font-size:28px;
+      line-height:1.15;
+    }
+    .hero p{
+      margin:8px 0 0;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.7;
+    }
+    .live-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      color:var(--green);
+      font-size:13px;
+      font-weight:750;
+      background:rgba(5,150,105,.08);
+      white-space:nowrap;
+    }
+    .live-dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:var(--green-2);
+      box-shadow:0 0 0 0 rgba(16,185,129,.25);
+      animation:pulse 2.8s infinite;
+    }
+
+    .banner{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:20px;
+      padding:16px 20px;
+      margin-bottom:16px;
+      border:1px solid #d8f0df;
+      border-radius:16px;
+      background:linear-gradient(180deg,rgba(236,253,245,.96),rgba(244,251,247,.96));
+      box-shadow:var(--shadow);
+    }
+    .banner-left{display:flex;align-items:center;gap:16px;min-width:0}
+    .banner-icon{
+      width:54px;
+      height:54px;
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      background:linear-gradient(135deg,#34d399,#059669);
+      box-shadow:0 14px 26px rgba(5,150,105,.18);
+      font-size:26px;
+      flex:0 0 auto;
+    }
+    .banner-copy strong{
+      display:block;
+      font-size:17px;
+      line-height:1.2;
+    }
+    .banner-copy span{
+      display:block;
+      margin-top:5px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .status-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(5,150,105,.16);
+      background:rgba(255,255,255,.72);
+      color:var(--green);
+      font-size:13px;
+      font-weight:750;
+      white-space:nowrap;
+    }
+
+    .status-row{
+      display:grid;
+      grid-template-columns:1.35fr repeat(4,1fr);
+      align-items:center;
+      padding:18px 0 22px;
+      border-bottom:1px solid var(--line);
+    }
+    .status-main{display:flex;align-items:center;gap:18px}
+    .status-bolt{
+      width:54px;
+      height:54px;
+      border-radius:50%;
+      background:radial-gradient(circle at 35% 30%, #34d399, #047857);
+      display:grid;
+      place-items:center;
+      color:#fff;
+      font-size:26px;
+      box-shadow:0 16px 30px rgba(5,150,105,.18);
+      animation:throb 5s ease-in-out infinite;
+    }
+    .status-title{font-size:17px;color:#111827}
+    .status-title strong{color:var(--green);font-size:26px;margin-left:8px}
+    .status-sub{margin-top:6px;color:var(--muted);font-size:13px}
+    .metric{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      min-height:58px;
+      border-left:1px solid var(--line);
+    }
+    .metric-icon{
+      width:44px;
+      height:44px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      color:var(--green);
+      background:var(--green-soft);
+      font-size:21px;
+    }
+    .metric-label{color:#667085;font-size:13px}
+    .metric-val{margin-top:4px;font-size:20px;font-weight:800}
+    .metric-val.green{color:var(--green)}
+
+    .queue-zone{
+      padding:22px 0 24px;
+      border-bottom:1px solid var(--line);
+    }
+    .queue-head{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:18px;
+      margin-bottom:16px;
+    }
+    .section-title{
+      margin:0 0 8px;
+      font-size:21px;
+      font-weight:850;
+      line-height:1.2;
+    }
+    .section-sub{
+      margin:0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.65;
+    }
+    .legend{
+      display:flex;
+      align-items:center;
+      gap:18px;
+      color:#667085;
+      font-size:13px;
+      flex-wrap:wrap;
+    }
+    .legend i{
+      width:8px;
+      height:8px;
+      display:inline-block;
+      border-radius:999px;
+      margin-right:6px;
+      vertical-align:middle;
+    }
+
+    .stage{
+      position:relative;
+      min-height:330px;
+      border-radius:22px;
+      border:1px solid #e5efe8;
+      background:linear-gradient(180deg,rgba(236,253,245,.68),rgba(255,255,255,.98));
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .stage::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at 50% 28%, rgba(16,185,129,.08), transparent 25%),
+        radial-gradient(circle at 86% 12%, rgba(37,99,235,.06), transparent 18%);
+      pointer-events:none;
+    }
+    .charger-grid{
+      position:absolute;
+      left:18px;
+      right:18px;
+      top:18px;
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:12px;
+      z-index:2;
+    }
+    .charger-card{
+      min-height:106px;
+      padding:12px 12px 10px;
+      border:1px solid #e5e7eb;
+      border-radius:16px;
+      background:rgba(255,255,255,.8);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      box-shadow:0 10px 20px rgba(16,24,40,.03);
+      position:relative;
+    }
+    .charger-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .charger-card strong{
+      display:block;
+      font-size:13px;
+      font-weight:800;
+      line-height:1.2;
+    }
+    .charger-card em{
+      display:block;
+      margin-top:3px;
+      font-style:normal;
+      color:#667085;
+      font-size:11px;
+      line-height:1.2;
+    }
+    .charger-tag{
+      display:inline-flex;
+      align-items:center;
+      padding:5px 8px;
+      border-radius:999px;
+      background:rgba(5,150,105,.08);
+      color:var(--green);
+      font-size:11px;
+      font-weight:750;
+      white-space:nowrap;
+    }
+    .charger-icon{
+      width:42px;
+      height:42px;
+      border-radius:14px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      background:linear-gradient(135deg,#34d399,#059669);
+      box-shadow:0 10px 18px rgba(5,150,105,.18);
+      font-size:20px;
+      flex:0 0 auto;
+    }
+    .charger-card.active{
+      border-color:#b8ebc7;
+      background:linear-gradient(180deg,rgba(236,253,245,.98),rgba(255,255,255,.98));
+      box-shadow:0 14px 26px rgba(16,24,40,.08);
+      transform:translateY(-1px);
+    }
+    .charger-card.active .charger-tag{
+      background:rgba(5,150,105,.12);
+    }
+    .stage-label{
+      position:absolute;
+      top:186px;
+      color:#667085;
+      font-size:12px;
+      font-weight:600;
+      z-index:2;
+    }
+    .stage-label.left{left:22px}
+    .stage-label.right{right:22px}
+
+    .road{
+      position:absolute;
+      left:36px;
+      right:36px;
+      top:196px;
+      height:3px;
+      border-radius:999px;
+      background:linear-gradient(90deg, transparent, #cbd5e1 10%, #cbd5e1 90%, transparent);
+      z-index:1;
+    }
+    .road::after{
+      content:"";
+      position:absolute;
+      right:-12px;
+      top:-5px;
+      width:12px;
+      height:12px;
+      border-top:3px solid #cbd5e1;
+      border-right:3px solid #cbd5e1;
+      transform:rotate(45deg);
+    }
+
+    .car{
+      position:absolute;
+      left:0;
+      top:0;
+      width:60px;
+      height:26px;
+      opacity:0;
+      pointer-events:none;
+      z-index:4;
+      transition:transform 1.15s cubic-bezier(.4,0,.2,1),opacity .22s ease;
+    }
+    .car-body{
+      position:absolute;
+      left:0;
+      top:4px;
+      width:60px;
+      height:16px;
+      border-radius:10px;
+      background:linear-gradient(180deg,#fff,#dbeafe);
+      border:1px solid rgba(37,99,235,.2);
+      box-shadow:0 10px 18px rgba(15,23,42,.12);
+    }
+    .car-body::before{
+      content:"";
+      position:absolute;
+      left:11px;
+      top:3px;
+      width:24px;
+      height:7px;
+      border-radius:5px;
+      background:rgba(37,99,235,.16);
+    }
+    .wheel{
+      position:absolute;
+      bottom:-4px;
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      background:#111827;
+      border:2px solid #fff;
+    }
+    .wheel.left{left:10px}
+    .wheel.right{right:10px}
+
+    .stage-foot{
+      position:absolute;
+      left:18px;
+      right:18px;
+      bottom:14px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      color:#667085;
+      font-size:12px;
+      z-index:2;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1.06fr .94fr;
+      gap:16px;
+      margin:18px 0 18px;
+    }
+    .left-stack{
+      display:grid;
+      gap:16px;
+      align-content:start;
+    }
+    .panel{
+      border:1px solid var(--line);
+      border-radius:20px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 12px 30px rgba(16,24,40,.05);
+      overflow:hidden;
+    }
+    .panel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:15px 18px;
+      border-bottom:1px solid #eef2ef;
+    }
+    .panel-title{
+      margin:0;
+      font-size:16px;
+      line-height:1.2;
+      font-weight:850;
+    }
+    .panel-sub{
+      margin-top:5px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.55;
+    }
+
+    .detail-wrap{padding:15px 18px 18px}
+    .detail-summary{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .detail-chip{
+      padding:12px 14px;
+      border:1px solid #edf2ef;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fff,#fbfcfb);
+    }
+    .detail-chip span{
+      display:block;
+      color:#98a2b3;
+      font-size:12px;
+      line-height:1.4;
+    }
+    .detail-chip strong{
+      display:block;
+      margin-top:6px;
+      font-size:18px;
+      line-height:1.1;
+    }
+    .detail-table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+    .detail-table tr+tr td{border-top:1px solid #edf2ef}
+    .detail-table td{
+      padding:13px 10px;
+      vertical-align:top;
+    }
+    .detail-table td:nth-child(odd){
+      color:var(--muted);
+      width:23%;
+    }
+    .detail-table td:nth-child(even){
+      text-align:right;
+      width:27%;
+      font-weight:700;
+    }
+
+    .timeline{
+      padding:14px 18px 18px;
+    }
+    .timeline-scroll{
+      max-height:420px;
+      overflow-y:auto;
+      padding-right:6px;
+      scrollbar-width:thin;
+      scrollbar-color:#cbd5e1 transparent;
+    }
+    .timeline-scroll::-webkit-scrollbar{
+      width:8px;
+    }
+    .timeline-scroll::-webkit-scrollbar-track{
+      background:transparent;
+    }
+    .timeline-scroll::-webkit-scrollbar-thumb{
+      background:#cbd5e1;
+      border-radius:999px;
+    }
+    .timeline-list{
+      display:grid;
+      position:relative;
+      padding-left:26px;
+    }
+    .timeline-list::before{
+      content:"";
+      position:absolute;
+      left:10px;
+      top:10px;
+      bottom:10px;
+      width:0;
+      border-left:2px dashed #d7dde6;
+      opacity:.95;
+      pointer-events:none;
+    }
+    .timeline-item{
+      position:relative;
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:14px;
+      align-items:flex-start;
+      padding:14px 12px 14px 4px;
+      border-top:1px solid #edf2ef;
+      border-radius:14px;
+    }
+    .timeline-item:first-child{border-top:0}
+    .timeline-item::before{
+      content:"";
+      position:absolute;
+      left:-18px;
+      top:18px;
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      background:#d1fae5;
+      border:2px solid var(--green);
+      box-shadow:0 0 0 5px rgba(34,197,94,.08);
+    }
+    .timeline-item.warn::before{
+      background:#fef3c7;
+      border-color:var(--amber);
+      box-shadow:0 0 0 5px rgba(245,158,11,.08);
+    }
+    .timeline-item.off::before{
+      background:#fee2e2;
+      border-color:var(--red);
+      box-shadow:0 0 0 5px rgba(239,68,68,.08);
+    }
+    .timeline-item.active::before{
+      width:14px;
+      height:14px;
+      left:-20px;
+      top:16px;
+      background:var(--green);
+      border-color:#d1fae5;
+    }
+    .timeline-main{
+      min-width:0;
+    }
+    .timeline-title{
+      font-size:14px;
+      font-weight:750;
+      line-height:1.35;
+    }
+    .timeline-sub{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
+    .timeline-side{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#667085;
+      font-size:12px;
+      white-space:nowrap;
+      padding-top:2px;
+    }
+    .timeline-pill{
+      display:inline-flex;
+      align-items:center;
+      padding:5px 8px;
+      border-radius:999px;
+      background:var(--green-soft);
+      color:var(--green);
+      font-size:11px;
+      font-weight:750;
+    }
+    .timeline-item.off .timeline-pill{
+      background:#fef2f2;
+      color:var(--red);
+    }
+    .timeline-item.warn .timeline-pill{
+      background:#fffbeb;
+      color:#d97706;
+    }
+    .timeline-item.active{
+      background:linear-gradient(180deg,rgba(236,253,245,.86),rgba(255,255,255,.98));
+      border:1px solid #d9f0df;
+      padding-left:12px;
+    }
+
+    .actions{
+      padding:15px 18px 18px;
+    }
+    .action-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-top:2px;
+      margin-bottom:10px;
+    }
+    .btn{
+      height:42px;
+      padding:0 18px;
+      border-radius:12px;
+      border:1px solid transparent;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      font-size:13px;
+      font-weight:750;
+      background:#fff;
+      color:#344054;
+    }
+    .btn[disabled]{
+      color:#c5ccd6;
+      border-color:#eceff3;
+      background:#fafbfc;
+    }
+    .btn.warn{
+      color:#f97316;
+      border-color:#fde4d3;
+      background:#fffaf6;
+    }
+    .btn.primary{
+      color:#fff;
+      background:linear-gradient(135deg,#34d399,#059669);
+      box-shadow:0 10px 18px rgba(5,150,105,.14);
+    }
+    .notice{
+      margin-top:10px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.7;
+    }
+
+    .footer-band{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:16px;
+      margin-top:18px;
+    }
+    .info-box{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 12px 30px rgba(16,24,40,.05);
+      padding:15px 18px;
+    }
+    .info-box h3{
+      margin:0 0 10px;
+      font-size:15px;
+      line-height:1.2;
+      font-weight:850;
+    }
+    .info-list{display:grid;gap:10px}
+    .info-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:11px 0;
+      border-top:1px solid #edf2ef;
+      color:#344054;
+      font-size:13px;
+      line-height:1.45;
+    }
+    .info-row:first-child{border-top:0;padding-top:0}
+    .info-row strong{color:var(--text)}
+
+    @keyframes pulse{
+      0%{box-shadow:0 0 0 0 rgba(16,185,129,.28)}
+      70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}
+      100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}
+    }
+    @keyframes throb{
+      0%,100%{transform:scale(1)}
+      50%{transform:scale(1.02)}
+    }
+    @keyframes flow{
+      0%{background-position:0 0}
+      100%{background-position:200% 0}
+    }
+
+    @media (max-width:1440px){
+      body{min-width:1180px}
+      .footer-band{grid-template-columns:1fr}
+      .grid{grid-template-columns:1fr}
+      .status-row{grid-template-columns:1.4fr repeat(3,1fr)}
+      .status-row .metric:last-child{display:none}
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">⚡</div>
+      <div>充电调度系统</div>
+    </div>
+    <nav class="nav">
+      <a href="#">工作台</a>
+      <a class="active" href="#">当前请求</a>
+      <a href="#">账单</a>
+      <a href="#">账户</a>
+    </nav>
+    <div class="userbox">
+      <div class="user-pill">
+        <span class="avatar">u</span>
+        <span>user01</span>
+        <span style="color:#98a2b3;">▾</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <h1>当前请求</h1>
+        <p>先看总览，再一眼定位到你的请求。重点信息都在上方，状态变化会实时同步。</p>
+      </div>
+      <div class="live-pill"><span class="live-dot"></span> 实时更新中</div>
+    </section>
+
+    <section class="banner">
+      <div class="banner-left">
+        <div class="banner-icon">⏱</div>
+        <div class="banner-copy">
+          <strong>正在充电</strong>
+          <span>请求已分配到 FAST_01，系统正在持续同步进度。</span>
+        </div>
+      </div>
+      <div class="status-chip"><span class="live-dot"></span> CHARGING</div>
+    </section>
+
+    <section class="status-row">
+      <div class="status-main">
+        <div class="status-bolt">⚡</div>
+        <div>
+          <div class="status-title">当前状态：<strong>充电中</strong></div>
+          <div class="status-sub">你的请求当前在充电流程中，进度会实时更新。</div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-icon">前</div>
+        <div>
+          <div class="metric-label">前车</div>
+          <div class="metric-val">0</div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-icon">%</div>
+        <div>
+          <div class="metric-label">已充</div>
+          <div class="metric-val green">58.7%</div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-icon">时</div>
+        <div>
+          <div class="metric-label">剩余</div>
+          <div class="metric-val">25 min</div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-icon">号</div>
+        <div>
+          <div class="metric-label">队列</div>
+          <div class="metric-val">F6</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="queue-zone">
+      <div class="queue-head">
+        <div>
+          <h2 class="section-title">请求总览</h2>
+          <p class="section-sub">先看整体状态，再快速找到你自己的请求。上方是充电桩总览，中间高亮的是你的单子。</p>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--green)"></i>你的请求</span>
+          <span><i style="background:var(--blue)"></i>等待中</span>
+          <span><i style="background:#94a3b8"></i>空闲</span>
+          <span>状态流向</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="charger-grid">
+          <div class="charger-card active">
+            <div class="charger-head">
+              <div>
+                <strong>FAST_01</strong>
+                <em>你的请求 · 58.7%</em>
+              </div>
+              <span class="charger-tag">充电中</span>
+            </div>
+            <div class="charger-icon">⚡</div>
+          </div>
+          <div class="charger-card">
+            <div class="charger-head">
+              <div>
+                <strong>FAST_02</strong>
+                <em>排队 2 位</em>
+              </div>
+              <span class="charger-tag">等待</span>
+            </div>
+            <div class="charger-icon" style="background:linear-gradient(135deg,#93c5fd,#2563eb)">⚡</div>
+          </div>
+          <div class="charger-card">
+            <div class="charger-head">
+              <div>
+                <strong>FAST_03</strong>
+                <em>队列 4 位</em>
+              </div>
+              <span class="charger-tag">等待</span>
+            </div>
+            <div class="charger-icon" style="background:linear-gradient(135deg,#93c5fd,#2563eb)">⚡</div>
+          </div>
+          <div class="charger-card">
+            <div class="charger-head">
+              <div>
+                <strong>SLOW_01</strong>
+                <em>空闲</em>
+              </div>
+              <span class="charger-tag" style="background:rgba(148,163,184,.1);color:#64748b;">空闲</span>
+            </div>
+            <div class="charger-icon" style="background:linear-gradient(135deg,#cbd5e1,#94a3b8)">⚡</div>
+          </div>
+          <div class="charger-card">
+            <div class="charger-head">
+              <div>
+                <strong>SLOW_02</strong>
+                <em>空闲</em>
+              </div>
+              <span class="charger-tag" style="background:rgba(148,163,184,.1);color:#64748b;">空闲</span>
+            </div>
+            <div class="charger-icon" style="background:linear-gradient(135deg,#cbd5e1,#94a3b8)">⚡</div>
+          </div>
+        </div>
+
+        <div class="stage-label left">请求进入 →</div>
+        <div class="stage-label right">→ 完成返回</div>
+        <div class="road"></div>
+        <div class="car" id="movingCar">
+          <div class="car-body"></div>
+          <div class="wheel left"></div>
+          <div class="wheel right"></div>
+        </div>
+        <div class="stage-foot">
+          <span>入口 → 主路 → 桩位</span>
+          <span>更新时间 05/19 21:36</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="left-stack">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">请求详情</h2>
+              <div class="panel-sub">确认本次请求的核心字段与当前分配结果。</div>
+            </div>
+          </div>
+          <div class="detail-wrap">
+            <div class="detail-summary">
+              <div class="detail-chip"><span>请求编号</span><strong>REQ0008</strong></div>
+              <div class="detail-chip"><span>当前状态</span><strong>充电中</strong></div>
+              <div class="detail-chip"><span>分配桩位</span><strong>FAST_01</strong></div>
+            </div>
+            <table class="detail-table">
+              <tbody>
+                <tr><td>请求编号</td><td>REQ0008</td><td>充电模式</td><td>快充</td></tr>
+                <tr><td>请求电量</td><td>30 kWh</td><td>已充电量</td><td>17.62 kWh</td></tr>
+                <tr><td>已充百分比</td><td>58.7%</td><td>分配桩位</td><td>FAST_01</td></tr>
+                <tr><td>桩队列位置</td><td>1</td><td>预计完成</td><td>05/19 22:26</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <section class="panel actions">
+          <div class="panel-head" style="padding-left:0;padding-right:0;">
+            <div>
+              <h2 class="panel-title">可用操作</h2>
+              <div class="panel-sub">根据当前状态，部分操作暂时不可用。</div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button class="btn" disabled>修改充电模式</button>
+            <button class="btn" disabled>修改充电量</button>
+            <button class="btn warn">取消请求</button>
+            <button class="btn primary">提前结束充电</button>
+          </div>
+          <div class="notice">注：修改充电模式会回到等待区重新排队。提前结束仅在队列或充电中状态可用。</div>
+        </section>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">进度时间线</h2>
+            <div class="panel-sub">用时间线呈现请求从提交到充电的每个状态。</div>
+          </div>
+        </div>
+        <div class="timeline">
+          <div class="timeline-scroll">
+          <div class="timeline-list">
+            <div class="timeline-item">
+              <div class="timeline-main">
+                <div class="timeline-title">请求已提交</div>
+                <div class="timeline-sub">系统收到本次充电请求并进入待处理队列。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:01:12</span></div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-main">
+                <div class="timeline-title">等候区排队</div>
+                <div class="timeline-sub">请求短暂处于等待状态，随后被重新调度。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:01:12</span><span class="timeline-pill">排队号 F6</span></div>
+            </div>
+            <div class="timeline-item off">
+              <div class="timeline-main">
+                <div class="timeline-title">故障中断</div>
+                <div class="timeline-sub">REQ0004 在 FAST_01 被中断，触发重新分配。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:06:18</span><span class="timeline-pill">异常</span></div>
+            </div>
+            <div class="timeline-item warn">
+              <div class="timeline-main">
+                <div class="timeline-title">重新排队</div>
+                <div class="timeline-sub">系统已为剩余电量重新进入调度流程。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:06:20</span><span class="timeline-pill">调整中</span></div>
+            </div>
+            <div class="timeline-item active">
+              <div class="timeline-main">
+                <div class="timeline-title">已分配新充电桩</div>
+                <div class="timeline-sub">FAST_01，队列第 1 位。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:20:05</span><span class="timeline-pill">进行中</span></div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-main">
+                <div class="timeline-title">继续充电</div>
+                <div class="timeline-sub">当前请求正在持续执行，进度同步更新中。</div>
+              </div>
+              <div class="timeline-side"><span>05/19 21:20:06</span></div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-main">
+                <div class="timeline-title">充电完成</div>
+                <div class="timeline-sub">完成后自动生成账单并结束本次流程。</div>
+              </div>
+              <div class="timeline-side"><span>--</span></div>
+            </div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer-band">
+      <div class="info-box">
+        <h3>当前请求摘要</h3>
+        <div class="info-list">
+          <div class="info-row"><span>当前状态</span><strong>正在充电</strong></div>
+          <div class="info-row"><span>请求编号</span><strong>REQ0008</strong></div>
+          <div class="info-row"><span>服务桩位</span><strong>FAST_01</strong></div>
+        </div>
+      </div>
+      <div class="info-box">
+        <h3>系统说明</h3>
+        <div class="info-list">
+          <div class="info-row"><span>调度方式</span><strong>按最短完成时间分配</strong></div>
+          <div class="info-row"><span>当前队列</span><strong>排队长度 0</strong></div>
+          <div class="info-row"><span>更新时间</span><strong>05/19 21:26</strong></div>
+        </div>
+      </div>
+      <div class="info-box">
+        <h3>后续动作</h3>
+        <div class="info-list">
+          <div class="info-row"><span>状态同步</span><strong>自动刷新中</strong></div>
+          <div class="info-row"><span>账单生成</span><strong>完成后自动生成</strong></div>
+          <div class="info-row"><span>消息提醒</span><strong>完成时通知用户</strong></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const car = document.getElementById('movingCar');
+
+    function move(node, x, y, duration = 800, easing = 'cubic-bezier(.4,0,.2,1)') {
+      node.style.transition = `transform ${duration}ms ${easing}, opacity 220ms ease`;
+      node.style.transform = `translate(${x}px, ${y}px)`;
+    }
+
+    function dispatchCar() {
+      const startX = 66;
+      const laneY = 166;
+      const branchX = 240;
+      const branchTopY = 118;
+      const pileY = 88;
+
+      car.style.opacity = '0';
+      move(car, startX - 72, laneY, 0);
+
+      setTimeout(() => {
+        car.style.opacity = '1';
+        move(car, startX, laneY, 380);
+      }, 90);
+
+      setTimeout(() => {
+        move(car, branchX, laneY, 1850, 'linear');
+      }, 580);
+
+      setTimeout(() => {
+        move(car, branchX, branchTopY, 700);
+      }, 2500);
+
+      setTimeout(() => {
+        move(car, branchX, pileY, 520);
+      }, 3260);
+
+      setTimeout(() => {
+        car.style.opacity = '0';
+      }, 4640);
+    }
+
+    dispatchCar();
+    setInterval(dispatchCar, 5800);
+  </script>
+</body>
+</html>
