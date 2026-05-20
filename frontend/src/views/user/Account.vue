@@ -33,7 +33,7 @@
                     <span class="bill-card-date">{{ fmtShort(b.detail_generated_at || b.stop_time) }}</span>
                     <span class="bill-badge" :class="statusBadgeClass(b)">{{ statusLabel(b) }}</span>
                   </div>
-                  <div class="bill-card-id">{{ b.detail_id || b.request_id }}</div>
+                  <div class="bill-card-id">请求 {{ b.request_id || '--' }}</div>
                   <div class="bill-card-amount">{{ fmtMoney(b.total_fee) }}</div>
                 </div>
               </div>
@@ -64,7 +64,7 @@
             </div>
             <p class="dh-meta">
               {{ fmtDateTime(selected.detail_generated_at || selected.stop_time) }}
-              <span class="sep">|</span> 订单编号：<code>{{ selected.detail_id || selected.request_id || '--' }}</code>
+              <span class="sep">|</span> 请求编号：<code>{{ selected.request_id || '--' }}</code>
               <span class="sep">|</span> 充电桩：<strong>{{ selected.station_code || '--' }}</strong>
             </p>
           </div>
@@ -157,13 +157,13 @@
             <!-- Power / SOC Chart -->
             <div class="panel chart-panel">
               <div class="panel-head chart-head">
-                <span class="panel-title"><span class="material-icons">show_chart</span> 实时充电功率采样与时段计费</span>
+                <span class="panel-title"><span class="material-icons">show_chart</span> 账单功率与时段计费</span>
                 <div class="chart-legend">
                   <span v-for="seg in chartSegments" :key="seg.label" class="chart-leg-item">
                     <i :style="{ background: seg.bg, border: `1px solid ${seg.border}` }"></i>{{ seg.label }}
                   </span>
                   <span class="chart-leg-item"><i class="line green"></i>功率 (kW)</span>
-                  <span class="chart-leg-item"><i class="line blue"></i>SOC (%)</span>
+                  <span class="chart-leg-item"><i class="line blue"></i>进度 (%)</span>
                 </div>
               </div>
               <div class="chart-wrap">
@@ -180,11 +180,11 @@
                     <line v-for="y in [20,60,100,140,180]" :key="y" x1="0" :y1="y" x2="600" :y2="y"
                       :stroke="y===180?'#e2e8f0':'#f1f5f9'" stroke-width="1"/>
                     <!-- SOC curve -->
-                    <polyline :points="socPoints" fill="none" stroke="#2563eb" stroke-width="2"/>
+                    <polyline v-if="hasValidChartData" :points="socPoints" fill="none" stroke="#2563eb" stroke-width="2.4"/>
                     <!-- Power curve -->
-                    <polyline :points="powerPoints" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linejoin="round"/>
+                    <polyline v-if="hasValidChartData" :points="powerPoints" fill="none" stroke="#10b981" stroke-width="2.6" stroke-linejoin="round"/>
                     <!-- crosshair -->
-                    <g v-if="crosshair.visible">
+                    <g v-if="hasValidChartData && crosshair.visible">
                       <line :x1="crosshair.svgX" y1="0" :x2="crosshair.svgX" y2="180"
                         stroke="#94a3b8" stroke-dasharray="3,3" stroke-width="1"/>
                       <circle :cx="crosshair.svgX" :cy="crosshair.powerY" r="4"
@@ -193,23 +193,24 @@
                         fill="#2563eb" stroke="white" stroke-width="2"/>
                     </g>
                   </svg>
+                  <div v-if="!hasValidChartData" class="chart-empty">
+                    该账单没有有效的实际电量或充电时长，无法绘制功率曲线
+                  </div>
                   <!-- y-axis labels -->
                   <div class="chart-y-labels">
-                    <span>120<br><span class="y2">100</span></span>
-                    <span>90<br><span class="y2">75</span></span>
-                    <span>60<br><span class="y2">50</span></span>
-                    <span>30<br><span class="y2">25</span></span>
-                    <span>0<br><span class="y2">0</span></span>
+                    <span v-for="label in powerAxisLabels" :key="label.power">
+                      {{ label.power }}<br><span class="y2">{{ label.progress }}</span>
+                    </span>
                   </div>
                   <!-- tooltip -->
-                  <div v-if="crosshair.visible" class="chart-tooltip"
+                  <div v-if="hasValidChartData && crosshair.visible" class="chart-tooltip"
                     :style="{ left: crosshair.tipX + 'px', top: crosshair.tipY + 'px' }">
                     <div class="tt-head">
                       <span>{{ crosshair.time }}</span>
                       <span :class="crosshair.priceClass">{{ crosshair.price }}</span>
                     </div>
-                    <div class="tt-row"><span>实时功率</span><span class="tt-green">{{ crosshair.power }} kW</span></div>
-                    <div class="tt-row"><span>电池电量</span><span class="tt-blue">{{ crosshair.soc }} %</span></div>
+                    <div class="tt-row"><span>平均功率</span><span class="tt-green">{{ crosshair.power }} kW</span></div>
+                    <div class="tt-row"><span>充电进度</span><span class="tt-blue">{{ crosshair.soc }} %</span></div>
                   </div>
                 </div>
                 <!-- x-axis time labels -->
@@ -245,10 +246,6 @@
                   <div class="pay-row">
                     <span>支付时间</span>
                     <span class="mono">{{ fmtDateTime(selected.paid_at) }}</span>
-                  </div>
-                  <div class="pay-row">
-                    <span>交易单号</span>
-                    <span class="mono small">{{ selected.detail_id || '--' }}</span>
                   </div>
                 </div>
                 <div class="pay-tip success">
@@ -391,37 +388,61 @@ const chartSegments = [
 
 const chartBillingInfo = computed(() => {
   const b = selected.value
-  if (!b) return { startMs: 0, durationMin: 60 }
-  const startMs = new Date(b.start_time || 0).getTime()
-  const durationMin = Math.max(10, Math.round((b.charge_duration_seconds || 3600) / 60))
-  return { startMs, durationMin }
+  if (!b) return { startMs: 0, durationMin: 60, endMs: 60 * 60000, energy: 0, avgPower: 0, maxPower: 30 }
+  const parsedStart = new Date(b.start_time || 0).getTime()
+  const startMs = Number.isFinite(parsedStart) ? parsedStart : 0
+  const durationSeconds = Number(b.charge_duration_seconds)
+  const durationMin = Math.max(1, Number.isFinite(durationSeconds) ? durationSeconds / 60 : 60)
+  const endMs = startMs + durationMin * 60000
+  const energy = Math.max(0, Number(b.actual_energy) || 0)
+  const avgPower = durationMin > 0 ? energy / (durationMin / 60) : 0
+  const ratedPower = b.charge_mode === 'SLOW' ? 10 : 30
+  const maxPower = Math.max(ratedPower, Math.ceil(avgPower / 10) * 10, 10)
+  return { startMs, durationMin, endMs, energy, avgPower, maxPower }
+})
+
+const hasValidChartData = computed(() => {
+  const { energy, durationMin } = chartBillingInfo.value
+  return energy > 0 && durationMin > 0
 })
 
 const chartSegBgs = computed(() => {
-  const { startMs, durationMin } = chartBillingInfo.value
-  const endMs = startMs + durationMin * 60000
-  const peakStart = new Date(startMs)
-  peakStart.setHours(18, 0, 0, 0)
-  const peakRatio = startMs < peakStart.getTime() && peakStart.getTime() < endMs
-    ? (peakStart.getTime() - startMs) / (endMs - startMs) : 0.5
-  return [
-    { x: 0, w: Math.round(peakRatio * 600), fill: 'rgba(16,185,129,0.05)' },
-    { x: Math.round(peakRatio * 600), w: 600 - Math.round(peakRatio * 600), fill: 'rgba(245,158,11,0.05)' },
-  ]
+  const { startMs, endMs } = chartBillingInfo.value
+  if (!startMs || endMs <= startMs) return [{ x: 0, w: 600, fill: 'rgba(16,185,129,0.05)' }]
+  const segments = []
+  let cursor = startMs
+  while (cursor < endMs) {
+    const nextBoundary = nextPriceBoundary(cursor)
+    const next = Math.min(endMs, nextBoundary)
+    const x = Math.round(((cursor - startMs) / (endMs - startMs)) * 600)
+    const w = Math.max(1, Math.round(((next - cursor) / (endMs - startMs)) * 600))
+    segments.push({ x, w, fill: priceInfoAt(cursor).fill })
+    cursor = next
+  }
+  return segments
 })
 
 const socPoints = computed(() => {
-  return Array.from({ length: 11 }, (_, i) => {
-    const x = i * 60
-    const socVal = 0.32 + (0.82 - 0.32) * (i / 10)
-    const y = 180 - socVal * 160
+  return Array.from({ length: 16 }, (_, i) => {
+    const ratio = i / 15
+    const x = ratio * 600
+    const y = progressToY(ratio * 100)
     return `${x},${y.toFixed(1)}`
   }).join(' ')
 })
 
 const powerPoints = computed(() => {
-  const seed = [170,60,65,55,80,50,45,55,40,48,45,50,40,45,42,38,60,55,80,90,95,85,90,110,115,125,120,140,145,160,170]
-  return seed.map((y, i) => `${(i / (seed.length - 1) * 600).toFixed(1)},${y}`).join(' ')
+  const { avgPower, maxPower } = chartBillingInfo.value
+  const y = powerToY(avgPower, maxPower)
+  return `0,${y.toFixed(1)} 600,${y.toFixed(1)}`
+})
+
+const powerAxisLabels = computed(() => {
+  const max = chartBillingInfo.value.maxPower
+  return [1, 0.75, 0.5, 0.25, 0].map(ratio => ({
+    power: Math.round(max * ratio),
+    progress: Math.round(100 * ratio),
+  }))
 })
 
 const chartTimeTicks = computed(() => {
@@ -438,31 +459,52 @@ const chartTimeTicks = computed(() => {
   return ticks
 })
 
-function getSimY(svgX, type) {
-  if (type === 'soc') return 180 - (0.32 + (svgX / 600) * 0.5) * 160
-  const base = 70 + Math.sin(svgX / 30) * 20 + Math.cos(svgX / 10) * 10
-  return base + (svgX > 400 ? (svgX - 400) * 0.4 : 0)
+function powerToY(power, maxPower) {
+  if (!maxPower) return 180
+  return 180 - Math.max(0, Math.min(1, power / maxPower)) * 160
+}
+
+function progressToY(progress) {
+  return 180 - Math.max(0, Math.min(1, progress / 100)) * 160
+}
+
+function priceInfoAt(ms) {
+  const h = new Date(ms).getHours()
+  if (h >= 18 && h < 21) return { price: '¥1.00 (峰)', priceClass: 'tt-amber', fill: 'rgba(245,158,11,0.06)' }
+  if (h >= 23 || h < 7) return { price: '¥0.40 (谷)', priceClass: 'tt-green', fill: 'rgba(16,185,129,0.05)' }
+  return { price: '¥0.70 (平)', priceClass: 'tt-blue', fill: 'rgba(37,99,235,0.045)' }
+}
+
+function nextPriceBoundary(ms) {
+  const d = new Date(ms)
+  const candidates = [7, 18, 21, 23].map(hour => {
+    const next = new Date(d)
+    next.setHours(hour, 0, 0, 0)
+    if (next.getTime() <= ms) next.setDate(next.getDate() + 1)
+    return next.getTime()
+  })
+  return Math.min(...candidates)
 }
 
 function onChartMove(e) {
+  if (!hasValidChartData.value) return
   const el = chartArea.value
   if (!el) return
   const rect = el.getBoundingClientRect()
   const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
   const svgX = ratio * 600
-  const powerY = getSimY(svgX, 'power')
-  const socY = getSimY(svgX, 'soc')
-  const { startMs, durationMin } = chartBillingInfo.value
+  const { startMs, durationMin, avgPower, maxPower } = chartBillingInfo.value
+  const powerY = powerToY(avgPower, maxPower)
+  const progress = ratio * 100
+  const socY = progressToY(progress)
   const elapsed = Math.round(ratio * durationMin)
   const d = new Date(startMs + elapsed * 60000)
   const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-  const h = d.getHours()
-  const isPeak = h >= 18 && h < 21
-  const isValley = h >= 23 || h < 7
-  const price = isPeak ? '¥1.00 (峰)' : isValley ? '¥0.40 (谷)' : '¥0.70 (平)'
-  const priceClass = isPeak ? 'tt-amber' : isValley ? 'tt-green' : 'tt-blue'
-  const powerVal = ((180 - powerY) / 160 * 120).toFixed(1)
-  const socVal = ((180 - socY) / 160 * 100).toFixed(1)
+  const priceMeta = priceInfoAt(d.getTime())
+  const price = priceMeta.price
+  const priceClass = priceMeta.priceClass
+  const powerVal = avgPower.toFixed(1)
+  const socVal = progress.toFixed(1)
   let tipX = e.clientX - rect.left + 12
   if (tipX + 176 > rect.width) tipX = e.clientX - rect.left - 188
   crosshair.value = {
@@ -732,6 +774,18 @@ onMounted(loadBills)
 .chart-wrap { padding: 4px 18px 12px; }
 .chart-area { position: relative; height: 200px; cursor: crosshair; overflow: hidden; }
 .chart-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 24px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
 .chart-y-labels { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 0 4px 20px; pointer-events: none; }
 .chart-y-labels span { font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; }
 .y2 { color: #bfdbfe; }

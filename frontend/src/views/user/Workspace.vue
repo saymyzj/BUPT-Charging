@@ -1394,7 +1394,7 @@ onUnmounted(() => {
 .axis-bar {
   height:58px;
   display:grid;
-  grid-template-columns: 7fr 3fr 5fr 3fr 3fr 2fr 1fr;
+  grid-template-columns: minmax(0,7fr) minmax(0,3fr) minmax(0,5fr) minmax(0,3fr) minmax(0,3fr) minmax(0,2fr) minmax(0,1fr);
   border-radius:12px;
   box-shadow: inset 0 0 0 1px #d9e2dd;
   overflow:visible;
@@ -1424,6 +1424,10 @@ onUnmounted(() => {
   border-right:1px solid rgba(255,255,255,.58);
   font-weight:800;
   font-size:14px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
 }
 
 .seg small {
@@ -1503,7 +1507,7 @@ onUnmounted(() => {
 .now-marker {
   position: absolute;
   top: -10px;
-  bottom: 0;
+  bottom: -12px;
   width: 0;
   border-left: 2px dashed #059669;
   z-index: 6;
@@ -1531,7 +1535,7 @@ onUnmounted(() => {
 .now-marker::after {
   content: "";
   position: absolute;
-  bottom: 38px;
+  bottom: 8px;
   left: -6px;
   width: 9px;
   height: 9px;

@@ -172,7 +172,7 @@
                   <div class="entry-sub">{{ bill.station_code || '--' }} · {{ requestResultText(bill) }}</div>
                 </td>
                 <td class="amount" :class="isPaid(bill) ? '' : 'amount-unpaid'">{{ fmtMoney(bill.total_fee) }}</td>
-                <td class="mono order-td">{{ bill.detail_id ? `订单 ${bill.detail_id}` : '—' }}</td>
+                <td class="mono order-td">请求 {{ bill.request_id || '—' }}</td>
                 <td class="td-detail">
                   <button class="detail-link" @click="router.push({ path: '/user/bills', query: { id: bill.request_id } })">详情 ›</button>
                 </td>

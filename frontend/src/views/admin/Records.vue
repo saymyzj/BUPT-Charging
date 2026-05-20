@@ -188,6 +188,7 @@
       </section>
     </template>
   </div>
+  <ActionDialog v-bind="dialog" @confirm="confirmDialog" @cancel="cancelDialog" />
 </template>
 
 <script setup>
@@ -195,6 +196,10 @@ import { computed, onMounted, ref } from 'vue'
 import { getStations, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
+import ActionDialog from '@/components/ActionDialog.vue'
+import { useActionDialog } from '@/composables/useActionDialog'
+
+const { dialog, openConfirm, openMessage, confirmDialog, cancelDialog } = useActionDialog()
 
 const stations = ref([])
 const loading = ref(false)
@@ -226,22 +231,37 @@ async function loadStations() {
   loading.value = false
 }
 
+const ACTION_LABELS = {
+  start: { title: '启动充电桩', message: (c) => `确认启动 ${c}？`, severity: 'primary', confirmText: '启动' },
+  shutdown: { title: '关闭充电桩', message: (c) => `确认关闭 ${c}？关闭后将停止接受新请求。`, severity: 'warning', confirmText: '关闭' },
+  fault: { title: '标记故障', message: (c) => `确认将 ${c} 标记为故障？队列中的请求将被重新调度。`, severity: 'danger', confirmText: '确认故障' },
+  recover: { title: '恢复充电桩', message: (c) => `确认恢复 ${c}？`, severity: 'primary', confirmText: '恢复' },
+}
+
 async function doAction(code, action) {
   const map = { start: startStation, shutdown: shutdownStation, fault: faultStation, recover: recoverStation }
   const fn = map[action]
   if (!fn) return
+  const label = ACTION_LABELS[action]
+  const confirmed = await openConfirm({
+    title: label.title,
+    message: label.message(code),
+    severity: label.severity,
+    confirmText: label.confirmText,
+  })
+  if (!confirmed) return
   try {
     const res = await fn(code)
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) {
-      alert(data.message || '操作失败')
+      await openMessage({ title: '操作失败', message: data.message || '操作失败', severity: 'danger' })
       return
     }
     await loadStations()
   } catch (e) {
-    const code = e?.response?.data?.code
-    if (code === 1007) alert('充电桩未处于可关闭状态')
-    else alert(e?.response?.data?.message || '操作失败')
+    const errCode = e?.response?.data?.code
+    const msg = errCode === 1007 ? '充电桩未处于可关闭状态' : (e?.response?.data?.message || '操作失败')
+    await openMessage({ title: '操作失败', message: msg, severity: 'danger' })
   }
 }
 

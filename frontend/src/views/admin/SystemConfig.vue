@@ -154,6 +154,7 @@
       </section>
     </template>
   </div>
+  <ActionDialog v-bind="dialog" @confirm="confirmDialog" @cancel="cancelDialog" />
 </template>
 
 <script setup>
@@ -161,6 +162,10 @@ import { ref, computed, onMounted } from 'vue'
 import { getSystemConfig, setDispatchMode, setFaultDispatchMode } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { DISPATCH_MODE, DISPATCH_MODE_TEXT, FAULT_DISPATCH_MODE, FAULT_DISPATCH_MODE_TEXT } from '@/constants/enums'
+import ActionDialog from '@/components/ActionDialog.vue'
+import { useActionDialog } from '@/composables/useActionDialog'
+
+const { dialog, openMessage, confirmDialog, cancelDialog } = useActionDialog()
 
 const config = ref(null)
 const loading = ref(false)
@@ -231,9 +236,14 @@ async function changeDispatch(mode) {
   try {
     const res = await setDispatchMode({ dispatch_mode: mode })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '切换失败', message: data.message || '切换失败', severity: 'danger' })
+      return
+    }
     await loadConfig()
-  } catch (e) { alert(e?.response?.data?.message || '切换失败') }
+  } catch (e) {
+    await openMessage({ title: '切换失败', message: e?.response?.data?.message || '切换失败', severity: 'danger' })
+  }
 }
 
 async function changeFault(mode) {
@@ -241,9 +251,14 @@ async function changeFault(mode) {
   try {
     const res = await setFaultDispatchMode({ fault_dispatch_mode: mode })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '切换失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '切换失败', message: data.message || '切换失败', severity: 'danger' })
+      return
+    }
     await loadConfig()
-  } catch (e) { alert(e?.response?.data?.message || '切换失败') }
+  } catch (e) {
+    await openMessage({ title: '切换失败', message: e?.response?.data?.message || '切换失败', severity: 'danger' })
+  }
 }
 
 onMounted(loadConfig)

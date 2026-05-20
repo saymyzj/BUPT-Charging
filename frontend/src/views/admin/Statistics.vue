@@ -61,47 +61,60 @@
       </div>
 
       <!-- Charts -->
-      <div class="charts-row">
-        <!-- Horizontal bar chart -->
-        <div class="chart-card">
-          <div class="chart-title">各桩充电电量排行 (kWh)</div>
-          <div class="hbar-list">
-            <div class="hbar-item" v-for="(c, idx) in chartDataSorted" :key="c.code">
-              <div class="hbar-header">
-                <span class="station-tag" :class="c.code.startsWith('FAST') ? 'fast' : 'slow'">{{ c.code }}</span>
-                <span class="hbar-num mono">{{ fmtEnergy(c.energy) }}</span>
-              </div>
-              <div class="hbar-track">
-                <div class="hbar-fill"
-                  :style="{ width: barH(c.energy, maxEnergy) + '%', background: c.code.startsWith('FAST') ? '#4f86f7' : '#34b27b', opacity: 1 - idx * 0.12 }"
-                ></div>
-              </div>
+      <div class="grid-2">
+        <!-- Vertical bar chart: Energy -->
+        <div class="chart-box">
+          <div class="chart-title">各桩充电电量 (kWh)</div>
+          <div class="bars">
+            <div class="y-axis">
+              <span v-for="v in yAxisEnergy" :key="v">{{ v }}</span>
+            </div>
+            <div class="bar-item" v-for="c in chartData" :key="c.code">
+              <div class="bar"><span :style="{ height: barH(c.energy, yAxisEnergyMax) + '%' }"></span></div>
+              <div class="bar-value mono">{{ fmtEnergy(c.energy) }}</div>
+              <div class="bar-label">{{ c.code }}</div>
             </div>
           </div>
         </div>
 
-        <!-- Donut chart -->
-        <div class="chart-card donut-card">
-          <div class="chart-title">各桩收益贡献构成</div>
-          <div class="donut-body">
-            <div class="donut-wrap">
-              <svg viewBox="0 0 36 36" class="donut-svg">
-                <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f0f2f5" stroke-width="4"/>
-                <circle v-for="seg in donutSegments" :key="seg.code"
-                  cx="18" cy="18" r="15.915" fill="transparent"
-                  :stroke="seg.color" stroke-width="4"
-                  :stroke-dasharray="`${seg.pct} ${100 - Number(seg.pct)}`"
-                  :stroke-dashoffset="seg.dashOffset"
-                />
-              </svg>
+        <!-- Vertical bar chart: Fee + Donut -->
+        <div class="chart-box">
+          <div class="chart-title">各桩总费用 (¥)</div>
+          <div class="chart-wrap">
+            <div class="bars" style="height:260px">
+              <div class="y-axis">
+                <span v-for="v in yAxisFee" :key="v">{{ v }}</span>
+              </div>
+              <div class="bar-item" v-for="c in chartData" :key="c.code">
+                <div class="bar money"><span :style="{ height: barH(c.fee, yAxisFeeMax) + '%' }"></span></div>
+                <div class="bar-value mono">¥{{ c.fee.toFixed(2) }}</div>
+                <div class="bar-label">{{ c.code }}</div>
+              </div>
             </div>
-            <div class="donut-legend">
-              <div class="legend-item" v-for="seg in donutSegments" :key="seg.code">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span class="legend-dot" :style="{ background: seg.color }"></span>
-                  <span class="legend-name">{{ seg.code }}</span>
+            <div class="donut-side">
+              <div class="donut-ring">
+                <svg viewBox="0 0 36 36" class="donut-svg">
+                  <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f0f2f5" stroke-width="4"/>
+                  <circle v-for="seg in donutSegments" :key="seg.code"
+                    cx="18" cy="18" r="15.915" fill="transparent"
+                    :stroke="seg.color" stroke-width="4"
+                    :stroke-dasharray="`${seg.pct} ${100 - Number(seg.pct)}`"
+                    :stroke-dashoffset="seg.dashOffset"
+                  />
+                </svg>
+                <div class="donut-center">
+                  <strong>总费用</strong>
+                  <span class="mono">¥{{ Math.round(totalFeeAll) }}</span>
                 </div>
-                <span class="legend-pct mono">{{ seg.pct }}%</span>
+              </div>
+              <div class="legend">
+                <div class="legend-row" v-for="seg in donutSegments" :key="seg.code">
+                  <div class="legend-left">
+                    <span class="swatch" :style="{ background: seg.color }"></span>
+                    <span>{{ seg.code }}</span>
+                  </div>
+                  <strong class="mono">{{ seg.pct }}%</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -109,10 +122,10 @@
       </div>
 
       <!-- Table -->
-      <div class="table-card">
-        <div class="table-head">
-          <span class="table-title">详细数据记录</span>
-          <span class="table-count">{{ reports.length }} 条</span>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>详细报表</h2>
+          <span class="panel-meta">{{ reports.length }} 条记录</span>
         </div>
         <div class="table-scroll">
           <table>
@@ -144,7 +157,7 @@
         </div>
       </div>
       <div class="footer-note">
-        <span>说明：报表按所选时间维度统计，不同维度下数据会自动聚合。</span>
+        <div>说明：报表按所选时间维度统计，不同维度下数据会自动聚合。</div>
       </div>
     </template>
 
@@ -213,6 +226,16 @@ const donutSegments = computed(() => {
 })
 
 function barH(val, max) { return Math.max((val / max) * 100, 2) }
+
+function yAxisSteps(max) {
+  const nice = Math.ceil(max / 4)
+  return [nice * 4, nice * 3, nice * 2, nice, 0].map(String)
+}
+
+const yAxisEnergyMax = computed(() => Math.ceil(maxEnergy.value / 4) * 4)
+const yAxisFeeMax = computed(() => Math.ceil(maxFee.value / 4) * 4)
+const yAxisEnergy = computed(() => yAxisSteps(maxEnergy.value))
+const yAxisFee = computed(() => yAxisSteps(maxFee.value))
 
 async function loadData() {
   loading.value = true
@@ -308,21 +331,54 @@ onMounted(loadData)
 .kpi-icon.red { background: #fff1f1; color: #ef4444; }
 .kpi-icon.purple { background: #f4f7ff; color: #7a5af8; }
 
-/* Charts */
-.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-.chart-card {
+/* Charts grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-box {
   min-height: 320px; background: #fff; border: 1px solid #edf0f2;
   border-radius: 18px; padding: 18px;
   box-shadow: 0 10px 28px rgba(16,24,40,.06);
 }
 .chart-title { font-size: 16px; font-weight: 850; color: #101828; margin-bottom: 18px; }
+.chart-wrap { display: grid; grid-template-columns: 1fr 240px; gap: 18px; align-items: stretch; }
 
-/* Horizontal bars */
-.hbar-list { display: flex; flex-direction: column; gap: 16px; }
-.hbar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 12px; color: #667085; }
-.hbar-num { color: #1d2939; font-weight: 700; }
-.hbar-track { width: 100%; background: #e9f0eb; border-radius: 999px; height: 8px; overflow: hidden; }
-.hbar-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+/* Vertical bars */
+.bars {
+  position: relative; height: 260px;
+  display: flex; align-items: flex-end; gap: 16px;
+  padding: 18px 10px 14px 48px;
+  border-bottom: 1px solid #edf0f2; overflow: hidden;
+}
+.bars::before {
+  content: ""; position: absolute; left: 42px; right: 8px; top: 18px; bottom: 14px;
+  background:
+    linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 100% / 100% 25%,
+    linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 75% / 100% 25%,
+    linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 50% / 100% 25%,
+    linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 25% / 100% 25%;
+  background-repeat: no-repeat; pointer-events: none;
+}
+.y-axis {
+  position: absolute; left: 0; top: 12px; bottom: 14px; width: 38px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: #98a2b3; font-size: 11px; text-align: right; padding-right: 8px; pointer-events: none;
+}
+.y-axis span { display: block; transform: translateY(50%); }
+.bar-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 10px; min-width: 0; position: relative; z-index: 1; height: 100%;
+}
+.bar {
+  flex: 1; width: 100%; max-width: 92px; border-radius: 14px 14px 6px 6px;
+  position: relative; background: #edf0f2; overflow: hidden;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.5); min-height: 0;
+}
+.bar span {
+  position: absolute; left: 0; bottom: 0; width: 100%; border-radius: inherit;
+  min-height: 16px; background: linear-gradient(180deg, #59c892, #34b27b); transition: height .4s;
+}
+.bar.money span { background: linear-gradient(180deg, #f4c562, #d8a23a); }
+.bar-label { font-size: 12px; color: #98a2b3; font-weight: 700; }
+.bar-value { font-size: 13px; font-weight: 850; color: #1d2939; white-space: nowrap; }
 
 /* Station tag */
 .station-tag {
@@ -334,28 +390,34 @@ onMounted(loadData)
 .station-tag.slow { background: #eaf8f1; color: #1f8f60; }
 
 /* Donut */
-.donut-card { display: flex; flex-direction: column; }
-.donut-body { flex: 1; display: flex; align-items: center; justify-content: center; gap: 32px; }
-.donut-wrap { width: 170px; height: 170px; transform: rotate(-90deg); flex-shrink: 0; }
-.donut-svg { width: 100%; height: 100%; }
-.donut-legend { display: flex; flex-direction: column; gap: 10px; min-width: 120px; }
-.legend-item { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #344054; }
-.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.legend-name { color: #344054; font-weight: 500; }
-.legend-pct { color: #1d2939; font-weight: 700; }
+.donut-side { width: 240px; display: grid; gap: 12px; align-content: start; }
+.donut-ring {
+  width: 170px; height: 170px; margin: 0 auto; position: relative;
+}
+.donut-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+}
+.donut-center strong { display: block; font-size: 13px; color: #667085; }
+.donut-center span { display: block; font-size: 26px; font-weight: 900; margin-top: 6px; }
+.legend { display: grid; gap: 10px; margin-top: 8px; }
+.legend-row { display: flex; justify-content: space-between; gap: 16px; color: #344054; font-size: 13px; }
+.legend-left { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-/* Table */
-.table-card {
+/* Table Panel */
+.panel {
   background: #fff; border: 1px solid #edf0f2; border-radius: 18px;
   overflow: hidden; box-shadow: 0 10px 28px rgba(16,24,40,.06);
   margin-bottom: 16px;
 }
-.table-head {
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 18px 18px 14px; border-bottom: 1px solid #f0f2f4;
-  display: flex; align-items: center; justify-content: space-between;
 }
-.table-title { font-size: 16px; font-weight: 850; color: #101828; }
-.table-count { font-size: 13px; color: #98a2b3; }
+.panel-head h2 { margin: 0; font-size: 16px; font-weight: 850; }
+.panel-meta { color: #98a2b3; font-size: 13px; }
 .table-scroll { overflow-x: auto; }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; color: #344054; }
@@ -377,7 +439,8 @@ th.num, td.num { text-align: right; }
 
 @media (max-width: 1180px) {
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .charts-row { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .chart-wrap { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .page { padding: 18px 14px 24px; }

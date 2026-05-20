@@ -249,6 +249,7 @@
 
     </template>
   </div>
+  <ActionDialog v-bind="dialog" @confirm="confirmDialog" @cancel="cancelDialog" />
 </template>
 
 <script setup>
@@ -258,6 +259,10 @@ import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
 import { clearLegacyLocalState } from '@/utils/authSession'
 import { formatRequestRemainingText } from '@/utils/requestEta'
+import ActionDialog from '@/components/ActionDialog.vue'
+import { useActionDialog } from '@/composables/useActionDialog'
+
+const { dialog, openConfirm, openInput, openMessage, confirmDialog, cancelDialog } = useActionDialog()
 
 const ACTIVE_SNAPSHOT_KEY = 'active_request_snapshot'
 const FAULT_HANDOFF_KEY = 'active_request_fault_handoff'
@@ -668,55 +673,105 @@ async function loadProfile() {
 
 async function editMode() {
   const newMode = req.value.charge_mode === 'FAST' ? 'SLOW' : 'FAST'
-  if (!confirm(`切换为 ${CHARGE_MODE_TEXT[newMode]}？将回到等候区重新排队。`)) return
+  const confirmed = await openConfirm({
+    title: '修改充电模式',
+    message: `切换为 ${CHARGE_MODE_TEXT[newMode]}？将回到等候区重新排队。`,
+    severity: 'warning',
+    confirmText: '确认切换',
+  })
+  if (!confirmed) return
   try {
     const res = await updateChargeMode({ request_id: req.value.request_id, charge_mode: newMode })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '修改失败', message: data.message || '修改失败', severity: 'danger' })
+      return
+    }
     await refresh()
-  } catch (e) { alert(e?.response?.data?.message || '修改失败') }
+  } catch (e) {
+    await openMessage({ title: '修改失败', message: e?.response?.data?.message || '修改失败', severity: 'danger' })
+  }
 }
 
 async function editEnergy() {
   const cap = batteryCapacity.value
-  const hint = cap ? `输入新电量 (kWh，最大 ${cap} kWh):` : '输入新电量 (kWh):'
-  const val = prompt(hint, req.value.request_energy)
-  if (!val) return
+  const val = await openInput({
+    title: '修改充电量',
+    message: cap ? `当前请求电量 ${req.value.request_energy} kWh（电池容量 ${cap} kWh）` : `当前请求电量 ${req.value.request_energy} kWh`,
+    inputLabel: '新充电量 (kWh)',
+    inputPlaceholder: '输入新电量',
+    inputType: 'number',
+    inputMin: 0.1,
+    inputStep: 0.1,
+    inputValue: req.value.request_energy,
+    confirmText: '确认修改',
+  })
+  if (val == null) return
   const num = parseFloat(val)
-  if (!num || num <= 0) { alert('电量必须大于 0'); return }
+  if (!num || num <= 0) {
+    await openMessage({ title: '输入无效', message: '电量必须大于 0', severity: 'danger' })
+    return
+  }
   if (cap && num > cap) {
-    alert(`超出电池容量！最大可请求 ${cap} kWh，当前输入 ${num} kWh`)
+    await openMessage({ title: '超出限制', message: `请求电量不能超过电池容量 ${cap} kWh`, severity: 'warning' })
     return
   }
   try {
     const res = await updateRequestEnergy({ request_id: req.value.request_id, request_energy: num })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '修改失败', message: data.message || '修改失败', severity: 'danger' })
+      return
+    }
     await refresh()
-  } catch (e) { alert(e?.response?.data?.message || '修改失败') }
+  } catch (e) {
+    await openMessage({ title: '修改失败', message: e?.response?.data?.message || '修改失败', severity: 'danger' })
+  }
 }
 
 async function cancelReq() {
-  if (!confirm('确认取消当前请求？')) return
+  const confirmed = await openConfirm({
+    title: '取消请求',
+    message: '确认取消当前充电请求？取消后不可恢复。',
+    severity: 'danger',
+    confirmText: '确认取消',
+  })
+  if (!confirmed) return
   try {
     const res = await cancelRequest({ request_id: req.value.request_id })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '取消失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '取消失败', message: data.message || '取消失败', severity: 'danger' })
+      return
+    }
     await refresh()
-  } catch (e) { alert(e?.response?.data?.message || '取消失败') }
+  } catch (e) {
+    await openMessage({ title: '取消失败', message: e?.response?.data?.message || '取消失败', severity: 'danger' })
+  }
 }
 
 async function stopReq() {
-  if (!confirm('确认提前结束充电？将按已充电量结算。')) return
+  const confirmed = await openConfirm({
+    title: '提前结束充电',
+    message: '确认提前结束充电？将按已充电量结算。',
+    severity: 'warning',
+    confirmText: '确认结束',
+  })
+  if (!confirmed) return
   try {
     const res = await stopRequest({
       request_id: req.value.request_id,
       stop_time: formatLocalDateTime()
     })
     const data = unwrapResponseData(res)
-    if (data.code !== undefined && data.code !== 0) { alert(data.message || '操作失败'); return }
+    if (data.code !== undefined && data.code !== 0) {
+      await openMessage({ title: '操作失败', message: data.message || '操作失败', severity: 'danger' })
+      return
+    }
     await refresh()
-  } catch (e) { alert(e?.response?.data?.message || '操作失败') }
+  } catch (e) {
+    await openMessage({ title: '操作失败', message: e?.response?.data?.message || '操作失败', severity: 'danger' })
+  }
 }
 
 function startPoll() { stopPoll(); pollTimer = setInterval(refresh, 5000) }
