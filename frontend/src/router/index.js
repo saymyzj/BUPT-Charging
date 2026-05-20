@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getProfile } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
-import { clearAuthSession, getAuthToken } from '@/utils/authSession'
+import { clearAuthSession, getAuthToken, setAuthSession } from '@/utils/authSession'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -10,6 +10,12 @@ const routes = [
     name: 'Login',
     component: () => import('../views/Login.vue'),
     meta: { title: '登录 - 智能充电桩系统', guest: true }
+  },
+  {
+    path: '/acceptance',
+    name: 'AcceptanceConsole',
+    component: () => import('../views/admin/Acceptance.vue'),
+    meta: { title: '验收控制台' }
   },
 
   // 用户端
@@ -67,6 +73,13 @@ async function loadProfileRole() {
 router.beforeEach(async (to, from, next) => {
   // 页面标题
   if (to.meta.title) document.title = to.meta.title
+
+  if (typeof to.query.token === 'string' && to.query.token) {
+    setAuthSession({ token: to.query.token })
+    const cleanQuery = { ...to.query }
+    delete cleanQuery.token
+    return next({ path: to.path, query: cleanQuery, replace: true })
+  }
 
   const token = getAuthToken()
   const requiresAuth = to.matched.some(r => r.meta.requiresAuth)

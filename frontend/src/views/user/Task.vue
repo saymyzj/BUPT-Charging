@@ -253,7 +253,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getActiveRequest, getProfile, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest, getStationsOverview } from '@/api/charging'
+import { addAcceptanceEvent, getAcceptanceState, getActiveRequest, getProfile, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest, getStationsOverview } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
 import { clearLegacyLocalState } from '@/utils/authSession'
@@ -265,12 +265,17 @@ const req = ref(null)
 const initialLoading = ref(true)
 const batteryCapacity = ref(null)
 const faultHandoff = ref(loadFaultHandoff())
+const vehicleCode = ref('')
 const stationOverview = ref(null)
 const stationOverviewLoaded = ref(false)
 const pileTargets = [212, 424, 636, 848, 1060]
 let pollTimer = null
 
-const statusText = computed(() => REQUEST_STATUS_TEXT[req.value?.request_status] || req.value?.request_status || '--')
+const isFaultQueue = computed(() => Boolean(req.value?.is_fault_queue || req.value?.queue_context === 'FAULT_QUEUE'))
+const statusText = computed(() => {
+  if (isFaultQueue.value) return '故障队列等待'
+  return REQUEST_STATUS_TEXT[req.value?.request_status] || req.value?.request_status || '--'
+})
 
 const bannerClass = computed(() => {
   const s = req.value?.request_status
@@ -294,6 +299,7 @@ const bannerSub = computed(() => {
   if (hasFaultHandoff.value && (s === REQUEST_STATUS.QUEUED || s === REQUEST_STATUS.CHARGING)) {
     return `从 ${faultHandoff.value.fromStation || '原充电桩'} 中断后，已重新分配至 ${req.value.station_code || '新充电桩'}`
   }
+  if (isFaultQueue.value) return `故障队列 ${queueNumberText(req.value)} · 前方 ${frontVehicleCountText.value} 辆车，优先重调度`
   if (s === REQUEST_STATUS.WAITING_AREA) return `排队号 ${queueNumberText(req.value)} · 前方 ${frontVehicleCountText.value} 辆车`
   if (s === REQUEST_STATUS.QUEUED) return `分配至 ${req.value.station_code} · 队列第 ${req.value.station_queue_position ?? '?'} 位 · 前方 ${frontVehicleCountText.value} 辆车`
   if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code} 充电中 · 已充 ${chargePercentText.value}`
@@ -358,6 +364,7 @@ const hasFaultHandoff = computed(() => {
 const locationText = computed(() => {
   if (!req.value) return '--'
   const s = req.value.request_status
+  if (isFaultQueue.value) return '故障队列等待重调度'
   if (s === REQUEST_STATUS.WAITING_AREA) return '等候区等待调度'
   if (s === REQUEST_STATUS.QUEUED) return `${req.value.station_code || '充电桩'} 桩队列第 ${req.value.station_queue_position ?? '?'} 位`
   if (s === REQUEST_STATUS.CHARGING) return `${req.value.station_code || '充电桩'} 正在充电`
@@ -369,6 +376,7 @@ const reasonText = computed(() => {
   if (!req.value) return ''
   if (hasFaultHandoff.value) return `原 ${faultHandoff.value.fromStation || '充电桩'} 故障中断后，系统已为剩余电量重新调度。`
   const s = req.value.request_status
+  if (isFaultQueue.value) return `位于故障队列，故障队列清空前系统不会叫号普通等候区车辆。`
   if (s === REQUEST_STATUS.WAITING_AREA) return `还未进入固定桩队列，前方 ${frontVehicleCountText.value} 辆车等待调度。`
   if (s === REQUEST_STATUS.QUEUED) return `已分配充电桩，前方 ${frontVehicleCountText.value} 辆车完成后开始充电。`
   if (s === REQUEST_STATUS.CHARGING) return `已充 ${chargedEnergyText.value}，目标 ${requestEnergyNumber.value ? `${requestEnergyNumber.value.toFixed(2)} kWh` : '--'}。`
@@ -415,9 +423,19 @@ function tlClass(step) {
 }
 
 const timelineItems = computed(() => {
+  if (Array.isArray(req.value?.timeline) && req.value.timeline.length) {
+    const events = req.value.timeline
+    return events.map((event, index) => ({
+      key: `${event.event_type}-${event.request_id}-${event.id || index}`,
+      text: event.label || event.event_type,
+      sub: event.description || timelineEventSub(event),
+      state: timelineEventState(event, index, events),
+    }))
+  }
+
   const items = [
     { key: 'submitted', text: '请求已提交', state: tlClass(0) },
-    { key: 'waiting', text: '等候区排队', state: tlClass(1) },
+    { key: 'waiting', text: isFaultQueue.value ? '故障队列' : '等候区排队', state: tlClass(1) },
   ]
 
   if (hasFaultHandoff.value) {
@@ -455,10 +473,34 @@ const timelineItems = computed(() => {
   return items
 })
 
+function timelineEventSub(event) {
+  if (event.station_code && event.queue_position) return `${event.station_code} · 队列第 ${event.queue_position} 位`
+  if (event.station_code) return event.station_code
+  return ''
+}
+
+function timelineEventState(event, index, events) {
+  const isLast = index === events.length - 1
+  const terminal = [
+    REQUEST_STATUS.COMPLETED,
+    REQUEST_STATUS.COMPLETED_EARLY,
+    REQUEST_STATUS.CANCELLED,
+    REQUEST_STATUS.FAULT_INTERRUPTED,
+  ].includes(req.value?.request_status)
+  if (isLast && !terminal) {
+    if (event.event_type === 'FAULT_INTERRUPTED') return 'active danger'
+    if (event.event_type === 'FAULT_REQUEUED') return 'active warning'
+    return 'active'
+  }
+  if (event.event_type === 'FAULT_INTERRUPTED') return 'done danger'
+  if (event.event_type === 'FAULT_REQUEUED') return 'done warning'
+  return 'done'
+}
+
 // Button rules per §4.3
-const canEditMode = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA)
-const canEditEnergy = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA)
-const canCancel = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA)
+const canEditMode = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA && !isFaultQueue.value)
+const canEditEnergy = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA && !isFaultQueue.value)
+const canCancel = computed(() => req.value?.request_status === REQUEST_STATUS.WAITING_AREA && !isFaultQueue.value)
 const canStop = computed(() => [REQUEST_STATUS.QUEUED, REQUEST_STATUS.CHARGING].includes(req.value?.request_status))
 const canViewDetail = computed(() => HAS_DETAIL_STATUSES.includes(req.value?.request_status))
 
@@ -639,7 +681,7 @@ function updateFaultTrace(data) {
   const requestChanged = previous?.requestId && previous.requestId !== next.requestId
   const stationChanged = previous?.requestId === next.requestId && previousHadStation && nextHadStation && previous.stationCode !== next.stationCode
 
-  if ((requestChanged && previousHadStation) || stationChanged) {
+  if (data.is_fault_followup && ((requestChanged && previousHadStation) || stationChanged)) {
     const handoff = {
       fromRequestId: previous.requestId,
       toRequestId: next.requestId,
@@ -651,7 +693,10 @@ function updateFaultTrace(data) {
     faultHandoff.value = handoff
   } else {
     const currentHandoff = loadFaultHandoff()
-    faultHandoff.value = currentHandoff?.toRequestId === next.requestId ? currentHandoff : null
+    faultHandoff.value = data.is_fault_followup && currentHandoff?.toRequestId === next.requestId ? currentHandoff : null
+    if (!data.is_fault_followup) {
+      sessionStorage.removeItem(FAULT_HANDOFF_KEY)
+    }
   }
 
   saveJson(ACTIVE_SNAPSHOT_KEY, next)
@@ -663,6 +708,34 @@ async function loadProfile() {
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return
     batteryCapacity.value = Number(data.battery_capacity)
+    vehicleCode.value = data.user_id || ''
+  } catch (_) { /* silent */ }
+}
+
+async function pausedAcceptanceState() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    return data.enabled && data.status === 'PAUSED' ? data : null
+  } catch (_) {
+    return null
+  }
+}
+
+async function queueManualAcceptanceEvent(payload) {
+  const acceptance = await pausedAcceptanceState()
+  if (!acceptance) return false
+  await addAcceptanceEvent({
+    at: acceptance.simulation_time,
+    vehicle_code: vehicleCode.value,
+    ...payload,
+  })
+  notifyAcceptanceEventChanged()
+  return true
+}
+
+function notifyAcceptanceEventChanged() {
+  try {
+    localStorage.setItem('acceptance:event-updated', String(Date.now()))
   } catch (_) { /* silent */ }
 }
 
@@ -670,6 +743,12 @@ async function editMode() {
   const newMode = req.value.charge_mode === 'FAST' ? 'SLOW' : 'FAST'
   if (!confirm(`切换为 ${CHARGE_MODE_TEXT[newMode]}？将回到等候区重新排队。`)) return
   try {
+    if (await queueManualAcceptanceEvent({
+      event_type: 'CHANGE',
+      charge_mode: newMode,
+      value: -1,
+      raw_text: `手动修改 ${vehicleCode.value} 为 ${newMode}`,
+    })) return
     const res = await updateChargeMode({ request_id: req.value.request_id, charge_mode: newMode })
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
@@ -689,6 +768,11 @@ async function editEnergy() {
     return
   }
   try {
+    if (await queueManualAcceptanceEvent({
+      event_type: 'CHANGE',
+      value: num,
+      raw_text: `手动修改 ${vehicleCode.value} 电量 ${num}kWh`,
+    })) return
     const res = await updateRequestEnergy({ request_id: req.value.request_id, request_energy: num })
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '修改失败'); return }
@@ -699,6 +783,11 @@ async function editEnergy() {
 async function cancelReq() {
   if (!confirm('确认取消当前请求？')) return
   try {
+    if (await queueManualAcceptanceEvent({
+      event_type: 'CANCEL_OR_STOP',
+      value: 0,
+      raw_text: `手动取消 ${vehicleCode.value}`,
+    })) return
     const res = await cancelRequest({ request_id: req.value.request_id })
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { alert(data.message || '取消失败'); return }
@@ -709,6 +798,11 @@ async function cancelReq() {
 async function stopReq() {
   if (!confirm('确认提前结束充电？将按已充电量结算。')) return
   try {
+    if (await queueManualAcceptanceEvent({
+      event_type: 'CANCEL_OR_STOP',
+      value: 0,
+      raw_text: `手动提前结束 ${vehicleCode.value}`,
+    })) return
     const res = await stopRequest({
       request_id: req.value.request_id,
       stop_time: formatLocalDateTime()
@@ -719,7 +813,17 @@ async function stopReq() {
   } catch (e) { alert(e?.response?.data?.message || '操作失败') }
 }
 
-function startPoll() { stopPoll(); pollTimer = setInterval(refresh, 5000) }
+function isTypingTarget() {
+  const el = document.activeElement
+  return Boolean(el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable))
+}
+
+async function refreshIfIdle() {
+  if (isTypingTarget()) return
+  await refresh()
+}
+
+function startPoll() { stopPoll(); pollTimer = setInterval(refreshIfIdle, 5000) }
 function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
 onMounted(async () => { loadProfile(); await refresh(); initialLoading.value = false; loadStationOverview(); startPoll() })

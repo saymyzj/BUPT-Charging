@@ -192,7 +192,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { getStations, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
+import { addAcceptanceEvent, getAcceptanceState, getStations, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 
@@ -231,6 +231,18 @@ async function doAction(code, action) {
   const fn = map[action]
   if (!fn) return
   try {
+    const acceptance = await pausedAcceptanceState()
+    if (acceptance && ['fault', 'recover'].includes(action)) {
+      await addAcceptanceEvent({
+        at: acceptance.simulation_time,
+        event_type: action === 'fault' ? 'FAULT' : 'RECOVER',
+        station_code: code,
+        value: action === 'fault' ? 0 : null,
+        raw_text: `手动${action === 'fault' ? '标记故障' : '恢复'} ${code}`,
+      })
+      alert('验收模式暂停中：操作已加入当前模拟时刻待执行队列。')
+      return
+    }
     const res = await fn(code)
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) {
@@ -242,6 +254,15 @@ async function doAction(code, action) {
     const code = e?.response?.data?.code
     if (code === 1007) alert('充电桩未处于可关闭状态')
     else alert(e?.response?.data?.message || '操作失败')
+  }
+}
+
+async function pausedAcceptanceState() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    return data.enabled && data.status === 'PAUSED' ? data : null
+  } catch (_) {
+    return null
   }
 }
 

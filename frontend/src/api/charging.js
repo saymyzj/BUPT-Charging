@@ -66,3 +66,27 @@ export const updateBatteryCapacity = (userId, data) => request({ url: `/api/admi
 
 // 报表统计
 export const getReports = (granularity) => request({ url: '/api/admin/reports', method: 'get', params: { granularity } })
+
+// 验收控制台
+export const getAcceptanceState = () => request({ url: '/api/acceptance/state', method: 'get' })
+export const initializeAcceptanceDatabase = (data) => request({ url: '/api/acceptance/initialize', method: 'post', data })
+export const resetAcceptance = (data) => request({ url: '/api/acceptance/reset', method: 'post', data })
+export const enableAcceptance = (data) => request({ url: '/api/acceptance/enable', method: 'post', data })
+export const disableAcceptance = () => request({ url: '/api/acceptance/disable', method: 'post' })
+export const setAcceptanceTime = (data) => request({ url: '/api/acceptance/time', method: 'put', data })
+export const setAcceptanceStatus = (data) => request({ url: '/api/acceptance/status', method: 'put', data })
+export const parseAcceptanceXlsx = (file) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request({ url: '/api/acceptance/xlsx/parse', method: 'post', data })
+}
+export const getAcceptanceEvents = () => request({ url: '/api/acceptance/events', method: 'get' })
+export const saveAcceptanceEvents = (data) => request({ url: '/api/acceptance/events', method: 'put', data })
+export const addAcceptanceEvent = (data) => request({ url: '/api/acceptance/events', method: 'post', data })
+export const executeAcceptanceEvent = (eventId) => request({ url: `/api/acceptance/events/${eventId}/execute`, method: 'post' })
+export const executeAcceptanceCurrent = () => request({ url: '/api/acceptance/execute-current', method: 'post' })
+export const executeAcceptanceUntil = (data) => request({ url: '/api/acceptance/execute-until', method: 'post', data })
+export const executeAcceptanceAll = () => request({ url: '/api/acceptance/execute-all', method: 'post' })
+export const getAcceptanceSnapshot = (params) => request({ url: '/api/acceptance/snapshot', method: 'get', params })
+export const getAcceptanceSnapshots = () => request({ url: '/api/acceptance/snapshots', method: 'get' })
+export const exportAcceptanceXlsxUrl = '/api/acceptance/export.xlsx'

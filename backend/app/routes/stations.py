@@ -34,6 +34,7 @@ def _waiting_count(charge_mode=None):
         SELECT COUNT(*) AS cnt
         FROM charge_request
         WHERE request_status = ?
+          AND waiting_area_order > 0
     """
     args = [RequestStatus.WAITING_AREA.value]
     if charge_mode:

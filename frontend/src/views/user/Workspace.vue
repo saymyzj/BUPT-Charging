@@ -5,11 +5,13 @@
         <div class="status-bolt">{{ isWaiting && hasActive ? '⏳' : '⚡' }}</div>
         <div>
           <div class="status-title" :class="{ 'amber-text': isWaiting && hasActive }">
-            <template v-if="isWaiting && hasActive">等待系统分配中</template>
+            <template v-if="isFaultQueue && hasActive">故障队列优先重调度中</template>
+            <template v-else-if="isWaiting && hasActive">等待系统分配中</template>
             <template v-else>当前状态：<strong>{{ hasActive ? statusText : '空闲' }}</strong></template>
           </div>
           <div class="status-sub" :class="{ 'amber-text': isWaiting && hasActive }">
-            <template v-if="isWaiting && hasActive">系统正在计算最优充电策略，请将车辆驶入公共等候区。</template>
+            <template v-if="isFaultQueue && hasActive">当前位于故障队列，不占用公共等候区容量。</template>
+            <template v-else-if="isWaiting && hasActive">系统正在计算最优充电策略，请将车辆驶入公共等候区。</template>
             <template v-else>{{ hasActive ? statusHeadline : '当前没有进行中的充电请求' }}</template>
           </div>
         </div>
@@ -182,7 +184,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { createChargeRequest, getActiveRequest, getProfile, getStationsOverview } from '@/api/charging'
+import { addAcceptanceEvent, createChargeRequest, getAcceptanceState, getActiveRequest, getProfile, getStationsOverview } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
 import { clearLegacyLocalState } from '@/utils/authSession'
@@ -202,6 +204,7 @@ const stationOverviewLoaded = ref(Boolean(stationOverview.value))
 let pollTimer = null
 let clockTimer = null
 const now = ref(new Date())
+const vehicleCode = ref('')
 
 const pileTargets = [212, 424, 636, 848, 1060]
 
@@ -218,6 +221,7 @@ const activeRequest = computed(() => hasActive.value ? currentReq.value : null)
 
 const statusText = computed(() => {
   if (!activeRequest.value) return '空闲'
+  if (isFaultQueue.value) return '故障队列等待'
   return REQUEST_STATUS_TEXT[activeRequest.value.request_status] || activeRequest.value.request_status
 })
 
@@ -261,6 +265,7 @@ const chargePercentText = computed(() => {
 const statusHeadline = computed(() => {
   if (!hasActive.value) return '没有进行中的充电请求'
   const request = activeRequest.value
+  if (isFaultQueue.value) return `故障队列 ${queueNumberText(request)}，前方 ${frontVehicleCountText.value} 辆`
   if (request.request_status === REQUEST_STATUS.WAITING_AREA) return `等候区排队，前方 ${frontVehicleCountText.value} 辆`
   if (request.request_status === REQUEST_STATUS.QUEUED) return `${request.station_code || '充电桩'} 队列第 ${request.station_queue_position ?? '?'} 位`
   if (request.request_status === REQUEST_STATUS.CHARGING) return `${request.station_code || '充电桩'} 正在充电，已充 ${chargePercentText.value}`
@@ -270,6 +275,7 @@ const statusHeadline = computed(() => {
 const statusSubline = computed(() => {
   if (!hasActive.value) return '选择充电模式和目标电量后提交，页面会自动同步排队状态。'
   const request = activeRequest.value
+  if (isFaultQueue.value) return '故障队列不占用等候区容量，系统会优先为队列车辆重新分配桩位。'
   if (request.request_status === REQUEST_STATUS.CHARGING) return `已充电量 ${chargedEnergy.value === null ? '--' : `${chargedEnergy.value.toFixed(2)} kWh`}，预计完成 ${fmtDateTime(request.estimated_finish_time)}`
   return `预计开始 ${fmtDateTime(request.estimated_start_time)}，剩余排队 ${durationMetricDisplay.value}`
 })
@@ -364,6 +370,7 @@ const dispatchPiles = computed(() => {
 })
 
 const isWaiting = computed(() => activeRequest.value?.request_status === REQUEST_STATUS.WAITING_AREA)
+const isFaultQueue = computed(() => Boolean(activeRequest.value?.is_fault_queue || activeRequest.value?.queue_context === 'FAULT_QUEUE'))
 const isQueued = computed(() => activeRequest.value?.request_status === REQUEST_STATUS.QUEUED)
 const isCharging = computed(() => activeRequest.value?.request_status === REQUEST_STATUS.CHARGING)
 
@@ -443,7 +450,17 @@ async function loadProfile() {
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) return
     batteryCapacity.value = Number(data.battery_capacity)
+    vehicleCode.value = data.user_id || ''
   } catch (_) { /* silent */ }
+}
+
+async function pausedAcceptanceState() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    return data.enabled && data.status === 'PAUSED' ? data : null
+  } catch (_) {
+    return null
+  }
 }
 
 async function loadStationOverview() {
@@ -530,6 +547,27 @@ async function submitRequest() {
 
   submitting.value = true
   try {
+    const acceptance = await pausedAcceptanceState()
+    if (acceptance) {
+      const queued = unwrapResponseData(await addAcceptanceEvent({
+        at: acceptance.simulation_time,
+        event_type: 'APPLY',
+        vehicle_code: vehicleCode.value,
+        charge_mode: form.value.charge_mode,
+        value: form.value.request_energy,
+        raw_text: `手动提交 ${vehicleCode.value} ${form.value.charge_mode} ${form.value.request_energy}kWh`,
+      }))
+      submitResult.value = {
+        request_id: queued?.event?.event_id || '待执行',
+        queue_number: '待执行',
+        charge_mode: form.value.charge_mode,
+        request_energy: form.value.request_energy,
+        request_status: 'PENDING',
+      }
+      notifyAcceptanceEventChanged()
+      await syncAcceptanceClock()
+      return
+    }
     const res = await createChargeRequest({
       charge_mode: form.value.charge_mode,
       request_energy: form.value.request_energy,
@@ -571,6 +609,7 @@ async function submitRequest() {
 }
 
 async function pollStatus() {
+  if (isTypingTarget()) return
   await Promise.all([
     loadActiveRequest(),
     loadStationOverview(),
@@ -586,13 +625,34 @@ function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
+async function syncAcceptanceClock() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    now.value = data.enabled && data.simulation_time ? new Date(data.simulation_time) : new Date()
+  } catch (_) {
+    now.value = new Date()
+  }
+}
+
+function notifyAcceptanceEventChanged() {
+  try {
+    localStorage.setItem('acceptance:event-updated', String(Date.now()))
+  } catch (_) { /* silent */ }
+}
+
+function isTypingTarget() {
+  const el = document.activeElement
+  return Boolean(el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable))
+}
+
 onMounted(() => {
   loadProfile()
   loadStationOverview()
   pollStatus()
   startPoll()
+  syncAcceptanceClock()
   clockTimer = setInterval(() => {
-    now.value = new Date()
+    syncAcceptanceClock()
   }, 30000)
 })
 

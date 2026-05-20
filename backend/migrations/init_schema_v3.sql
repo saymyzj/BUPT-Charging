@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS charge_request (
             'WAITING_AREA', 'QUEUED', 'CHARGING',
             'COMPLETED', 'COMPLETED_EARLY', 'CANCELLED', 'FAULT_INTERRUPTED'
         )),
-    queue_number TEXT UNIQUE NOT NULL,
+    queue_number TEXT NOT NULL,
     waiting_area_order INTEGER,
     station_id INTEGER,
     station_queue_position INTEGER,
@@ -130,6 +130,37 @@ CREATE TABLE IF NOT EXISTS scheduler_config (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS acceptance_event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT UNIQUE NOT NULL,
+    source TEXT NOT NULL DEFAULT 'MANUAL'
+        CHECK(source IN ('XLSX', 'MANUAL', 'SYSTEM')),
+    event_time TIMESTAMP NOT NULL,
+    event_type TEXT NOT NULL
+        CHECK(event_type IN ('APPLY', 'CHANGE', 'CANCEL_OR_STOP', 'FAULT', 'RECOVER')),
+    vehicle_code TEXT,
+    station_code TEXT,
+    charge_mode TEXT,
+    event_value REAL,
+    raw_text TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK(status IN ('PENDING', 'EXECUTED', 'FAILED', 'SKIPPED')),
+    error_message TEXT,
+    result_payload TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS acceptance_snapshot (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT,
+    snapshot_time TIMESTAMP NOT NULL,
+    snapshot_phase TEXT NOT NULL CHECK(snapshot_phase IN ('CURRENT', 'BEFORE', 'AFTER', 'FINAL')),
+    snapshot_payload TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES acceptance_event(event_id)
+);
+
 INSERT OR IGNORE INTO charging_station (
     station_code, charge_mode, power_kw, station_status, queue_capacity
 ) VALUES
@@ -142,6 +173,10 @@ INSERT OR IGNORE INTO charging_station (
 INSERT OR IGNORE INTO scheduler_config (config_key, config_value) VALUES
 ('dispatch_mode', 'NORMAL'),
 ('fault_dispatch_mode', 'TIME_ORDER'),
+('acceptance_enabled', '0'),
+('acceptance_simulation_time', '2026-05-20T06:00:00'),
+('acceptance_status', 'IDLE'),
+('acceptance_sample_name', ''),
 ('peak_price', '1.0'),
 ('flat_price', '0.7'),
 ('valley_price', '0.4'),
@@ -154,3 +189,6 @@ CREATE INDEX IF NOT EXISTS idx_charge_request_queue_number ON charge_request(que
 CREATE INDEX IF NOT EXISTS idx_charging_station_mode_status ON charging_station(charge_mode, station_status);
 CREATE INDEX IF NOT EXISTS idx_request_detail_request ON request_detail(request_id);
 CREATE INDEX IF NOT EXISTS idx_request_detail_generated_at ON request_detail(detail_generated_at);
+CREATE INDEX IF NOT EXISTS idx_acceptance_event_time ON acceptance_event(event_time, id);
+CREATE INDEX IF NOT EXISTS idx_acceptance_event_status ON acceptance_event(status);
+CREATE INDEX IF NOT EXISTS idx_acceptance_snapshot_event ON acceptance_snapshot(event_id, snapshot_phase);
