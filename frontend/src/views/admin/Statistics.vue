@@ -81,7 +81,7 @@
         <div class="chart-box">
           <div class="chart-title">各桩总费用 (¥)</div>
           <div class="chart-wrap">
-            <div class="bars" style="height:260px">
+            <div class="bars">
               <div class="y-axis">
                 <span v-for="v in yAxisFee" :key="v">{{ v }}</span>
               </div>
@@ -345,11 +345,12 @@ onMounted(loadData)
 .bars {
   position: relative; height: 260px;
   display: flex; align-items: flex-end; gap: 16px;
-  padding: 18px 10px 14px 48px;
-  border-bottom: 1px solid #edf0f2; overflow: hidden;
+  padding: 18px 10px 0 48px;
+  border-bottom: 1px solid #edf0f2;
+  margin-bottom: 48px;
 }
 .bars::before {
-  content: ""; position: absolute; left: 42px; right: 8px; top: 18px; bottom: 14px;
+  content: ""; position: absolute; left: 42px; right: 8px; top: 18px; bottom: 0;
   background:
     linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 100% / 100% 25%,
     linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 75% / 100% 25%,
@@ -358,27 +359,35 @@ onMounted(loadData)
   background-repeat: no-repeat; pointer-events: none;
 }
 .y-axis {
-  position: absolute; left: 0; top: 12px; bottom: 14px; width: 38px;
+  position: absolute; left: 0; top: 12px; bottom: 0; width: 38px;
   display: flex; flex-direction: column; justify-content: space-between;
   color: #98a2b3; font-size: 11px; text-align: right; padding-right: 8px; pointer-events: none;
 }
 .y-axis span { display: block; transform: translateY(50%); }
 .bar-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  gap: 10px; min-width: 0; position: relative; z-index: 1; height: 100%;
+  flex: 1; display: flex; align-items: center; justify-content: flex-end;
+  min-width: 0; position: relative; z-index: 1; height: 100%;
 }
 .bar {
-  flex: 1; width: 100%; max-width: 92px; border-radius: 14px 14px 6px 6px;
+  width: 100%; max-width: 92px; height: 100%; border-radius: 14px 14px 6px 6px;
   position: relative; background: #edf0f2; overflow: hidden;
-  box-shadow: inset 0 -1px 0 rgba(255,255,255,.5); min-height: 0;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.5);
 }
 .bar span {
   position: absolute; left: 0; bottom: 0; width: 100%; border-radius: inherit;
   min-height: 16px; background: linear-gradient(180deg, #59c892, #34b27b); transition: height .4s;
 }
 .bar.money span { background: linear-gradient(180deg, #f4c562, #d8a23a); }
-.bar-label { font-size: 12px; color: #98a2b3; font-weight: 700; }
-.bar-value { font-size: 13px; font-weight: 850; color: #1d2939; white-space: nowrap; }
+.bar-value {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 6px;
+  font-size: 13px; font-weight: 850; color: #1d2939; white-space: nowrap;
+}
+.bar-label {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 24px;
+  font-size: 12px; color: #98a2b3; font-weight: 700; white-space: nowrap;
+}
 
 /* Station tag */
 .station-tag {
