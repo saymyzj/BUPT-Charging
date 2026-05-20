@@ -16,4 +16,5 @@ backend/*.db-wal
 backend/*.db-shm
 backend/*.sqlite
 backend/*.sqlite3
+backend/.env
 tmp/
