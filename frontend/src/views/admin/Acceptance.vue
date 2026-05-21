@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="acceptance-page">
     <header class="page-head">
       <div>
@@ -59,71 +59,141 @@
       </div>
     </section>
 
-    <section class="control-panel">
-      <div class="timeline-head">
-        <div>
-          <h2>模拟时间轴</h2>
-          <p>拖动只改变模拟时刻；执行按钮会按当前时刻推进真实业务状态。</p>
+    <section class="timeline-panel">
+      <div class="timeline-head--hero">
+        <div class="timeline-title">
+          <div class="timeline-title-icon"><span class="material-icons">schedule</span></div>
+          <div>
+            <h2>模拟时间轴</h2>
+            <p>拖动时间轴或使用控制按钮改变模拟时刻，执行将按当前时刻推进真实业务状态</p>
+          </div>
         </div>
-        <div class="timeline-badges">
-          <span class="timeline-badge">当前 {{ timelineClockText }}</span>
-          <span v-if="nextPendingEvent" class="timeline-badge accent">下一事件 {{ formatClock(nextPendingEvent.clock || nextPendingEvent.at) }}</span>
-          <span v-else class="timeline-badge muted">没有待执行事件</span>
+        <div class="timeline-stats">
+          <div class="timeline-stat"><span class="timeline-stat-label"><span class="material-icons">schedule</span> 当前时刻</span><strong>{{ timelineClockText }}</strong></div>
+          <div class="timeline-stat"><span class="timeline-stat-label"><span class="material-icons">directions_car</span> 待执行事件</span><strong>{{ pendingEventCount }} 辆</strong></div>
         </div>
       </div>
-      <div class="timeline-layout">
-        <div class="timeline-config">
-          <div class="timeline-tools">
-            <label>起点 <input v-model="timelineStart" type="time" @change="normalizeTimelineBounds" /></label>
-            <label>终点 <input v-model="timelineEnd" type="time" @change="normalizeTimelineBounds" /></label>
-            <label>跳转 <input v-model="jumpTimeText" type="text" placeholder="08:20:30" /></label>
-            <button class="tool-btn compact" @click="jumpToSpecifiedTime"><span class="material-icons">my_location</span>跳转</button>
+
+      <div class="timeline-config-card">
+        <div class="control-actions-head"><span class="section-chip"><span class="material-icons">settings</span>时间轴配置</span></div>
+        <div class="timeline-config-grid">
+          <div class="timeline-config-item">
+            <span class="timeline-config-label">起点时刻</span>
+            <div class="timeline-config-value"><strong><input v-model="timelineStart" type="text" placeholder="06:00:00" @change="normalizeTimelineBounds" /></strong><span class="timeline-config-badge">今天</span></div>
           </div>
-          <div class="speed-group">
-            <button v-for="speed in speeds" :key="speed" :class="{ active: playbackSpeed === speed }" @click="playbackSpeed = speed">{{ speed }}x</button>
+          <div class="timeline-config-item">
+            <span class="timeline-config-label">终点时刻</span>
+            <div class="timeline-config-value"><strong><input v-model="timelineEnd" type="text" placeholder="11:00:00" @change="normalizeTimelineBounds" /></strong><span class="timeline-config-badge">今天</span></div>
           </div>
-        </div>
-        <div class="timeline-stage">
-          <div class="timeline-row">
-            <span>{{ timelineStart }}</span>
-            <div class="timeline-frame">
-              <div class="timeline-fill" :style="{ width: `${timelineProgress}%` }"></div>
-              <button
-                v-for="mark in timelineMarks"
-                :key="mark.key"
-                class="timeline-mark"
-                :class="{ done: mark.done, failed: mark.failed }"
-                :style="{ left: `${mark.left}%` }"
-                :title="mark.title"
-                @click="jumpToEvent(mark.event)"
-              ></button>
-              <input
-                v-model.number="sliderSeconds"
-                type="range"
-                min="0"
-                :max="timelineDuration"
-                step="1"
-                @input="handleSliderInput"
-                @change="commitSliderTime"
-              />
+          <div class="timeline-config-item">
+            <span class="timeline-config-label">跳转间隔</span>
+            <div class="timeline-config-value">
+              <div class="jump-input-row"><input v-model="jumpTimeText" type="text" placeholder="08:00:00" /><button class="jump-confirm" @click="jumpToSpecifiedTime"><span class="material-icons">my_location</span>跳转</button></div>
             </div>
-            <span>{{ timelineEnd }}</span>
           </div>
-          <div class="timeline-meta">
-            <span>当前：{{ timelineClockText }}</span>
-            <span v-if="nextPendingEvent">下一事件：{{ formatClock(nextPendingEvent.clock || nextPendingEvent.at) }} · {{ eventTitle(nextPendingEvent) }}</span>
-            <span v-else>没有待执行事件</span>
+          <div class="timeline-config-item">
+            <span class="timeline-config-label">时间跳转倍速</span>
+            <div class="speed-group">
+              <button v-for="speed in speeds" :key="speed" :class="{ active: playbackSpeed === speed }" @click="playbackSpeed = speed">{{ speed }}x</button>
+            </div>
           </div>
         </div>
       </div>
-      <div class="control-actions">
-        <button class="tool-btn primary" :disabled="isRunning" @click="startExecution"><span class="material-icons">play_arrow</span>开始执行</button>
-        <button class="tool-btn secondary" :disabled="!hasPendingEvent" @click="executeUntilNext"><span class="material-icons">double_arrow</span>执行到下一事件</button>
-        <button class="tool-btn danger primary" @click="executeAll"><span class="material-icons">fast_forward</span>立即执行至最终态</button>
-        <button class="tool-btn secondary" :disabled="!hasPendingEvent" @click="jumpRelative(1)"><span class="material-icons">keyboard_double_arrow_right</span>下一事件</button>
-        <button class="tool-btn ghost" @click="pauseExecution"><span class="material-icons">pause_circle</span>暂停执行</button>
-        <button class="tool-btn ghost" disabled title="验收执行不支持回溯；如需回看请使用快照历史"><span class="material-icons">keyboard_double_arrow_left</span>上一事件</button>
+
+      <div class="timeline-board">
+        <div class="timeline-track-container">
+          <div class="end-label start">
+            <div class="end-time">{{ formatClock(timelineStart) }}</div>
+            <div class="end-text">起点</div>
+          </div>
+          <div class="end-label end">
+            <div class="end-time">{{ formatClock(timelineEnd) }}</div>
+            <div class="end-text">终点</div>
+          </div>
+          <div class="track-bg"></div>
+          <div class="track-fill" :style="{ width: `calc((100% - 180px) * ${timelineProgress / 100})` }"></div>
+          <div class="ticks-container">
+            <template v-for="(tick, idx) in timelineTicks" :key="idx">
+              <div class="tick" :class="{ passed: tick.pct <= timelineProgress, major: tick.major, minor: tick.minor, micro: tick.micro }" :style="{ left: tick.pct + '%' }"></div>
+              <div v-if="tick.label && tick.pct > 3 && tick.pct < 97" class="tick-label" :class="{ major: tick.major, nearest: hoverNearestIdx === idx }" :style="{ left: tick.pct + '%' }">{{ tick.label }}</div>
+            </template>
+          </div>
+          <div class="cursor-group" :style="{ left: `calc(90px + (100% - 180px) * ${timelineProgress / 100})` }">
+            <div class="cursor-bubble">
+              <div class="bubble-label">当前时刻</div>
+              <div class="bubble-time">{{ timelineClockText }}</div>
+            </div>
+            <div class="cursor-point"></div>
+          </div>
+          <button
+            v-for="mark in timelineMarks"
+            :key="mark.key"
+            class="timeline-mark"
+            :class="{ done: mark.done, failed: mark.failed }"
+            :style="{ left: `calc(90px + (100% - 180px) * ${mark.left / 100})` }"
+            :title="mark.title"
+            @click="jumpToEvent(mark.event)"
+          ></button>
+          <div v-if="hoverTime" class="hover-tooltip" :style="{ left: hoverLeft }">{{ hoverTime }}</div>
+          <input
+            class="timeline-slider"
+            v-model.number="sliderSeconds"
+            type="range"
+            min="0"
+            :max="timelineDuration"
+            step="1"
+            @input="handleSliderInput"
+            @change="commitSliderTime"
+            @mousemove="handleTrackHover"
+            @mouseleave="hoverTime = ''; hoverNearestIdx = -1"
+          />
+        </div>
+        <div class="timeline-foot">
+          <div class="footer-item"><span class="material-icons">schedule</span> 当前模拟时长 {{ elapsedText }}</div>
+          <div class="footer-item right">时间范围：{{ rangeHoursText }}</div>
+        </div>
       </div>
+
+      <div class="execution-card">
+        <div class="control-actions-head"><span class="section-chip"><span class="material-icons">bolt</span>执行控制</span></div>
+        <div class="control-actions-grid">
+          <button class="action-tile" disabled title="验收执行不支持回溯；如需回看请使用快照历史">
+            <span class="material-icons">skip_previous</span>
+            <strong>上一事件</strong>
+            <small>返回到上一个已执行事件</small>
+          </button>
+          <button class="action-tile" :disabled="!hasPendingEvent" @click="executeUntilNext">
+            <span class="material-icons">double_arrow</span>
+            <strong>执行到下一事件</strong>
+            <small>推进到下一个待执行事件时刻</small>
+          </button>
+          <button class="action-tile primary" :disabled="isRunning" @click="startExecution">
+            <span class="material-icons">play_arrow</span>
+            <strong>开始执行</strong>
+            <small>从当前时刻开始执行</small>
+          </button>
+          <button class="action-tile" @click="pauseExecution">
+            <span class="material-icons">pause</span>
+            <strong>暂停执行</strong>
+            <small>暂停当前正在执行的事件</small>
+          </button>
+          <button class="action-tile" :disabled="!hasPendingEvent" @click="jumpRelative(1)">
+            <span class="material-icons">keyboard_double_arrow_right</span>
+            <strong>下一事件</strong>
+            <small>查看下一个待执行事件详情</small>
+          </button>
+          <button class="action-tile danger" @click="executeAll">
+            <span class="material-icons">flag</span>
+            <strong>立即执行至最终态</strong>
+            <small>跳过所有中间事件直接执行到结束时刻</small>
+          </button>
+        </div>
+        <div class="control-hint">
+          <span class="material-icons">info</span>
+          <span>提示：使用时间跳转倍速可以加快模拟速度，推荐在测试环境中使用 10x 或更高倍速</span>
+        </div>
+      </div>
+
       <div v-if="snapshot?.integrity?.warnings?.length" class="integrity-box">
         <strong>正确性告警</strong>
         <span v-for="warning in snapshot.integrity.warnings" :key="warning">{{ warning }}</span>
@@ -415,8 +485,8 @@ const selectedFile = ref(null)
 const parsed = ref(null)
 const editableEvents = ref([])
 const playbackSpeed = ref(10)
-const timelineStart = ref('06:00')
-const timelineEnd = ref('11:00')
+const timelineStart = ref('06:00:00')
+const timelineEnd = ref('11:00:00')
 const jumpTimeText = ref('08:00:00')
 const sliderSeconds = ref(0)
 const isRunning = ref(false)
@@ -424,6 +494,9 @@ const isScrubbing = ref(false)
 const runningEventId = ref('')
 const actionLog = ref([])
 const demoNextEvent = ref(false)
+const hoverTime = ref('')
+const hoverLeft = ref('0px')
+const hoverNearestIdx = ref(-1)
 let refreshTimer = null
 
 const tabs = [
@@ -521,6 +594,42 @@ const snapshotRows = computed(() => snapshots.value.map(item => ({
   eventLabel: item.snapshot?.events_at_time?.map(eventTitle).join('；') || item.event_id || '当前状态',
 })))
 const hasPendingEvent = computed(() => Boolean(nextPendingEvent.value))
+const pendingEventCount = computed(() => events.value.filter(e => e.status === 'PENDING').length)
+const elapsedText = computed(() => {
+  const secs = sliderSeconds.value
+  const h = String(Math.floor(secs / 3600)).padStart(2, '0')
+  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0')
+  const s = String(secs % 60).padStart(2, '0')
+  return `${h}:${m}:${s}`
+})
+const rangeHoursText = computed(() => {
+  const totalMinutes = timelineDuration.value / 60
+  const hours = Math.floor(totalMinutes / 60)
+  const mins = Math.round(totalMinutes % 60)
+  return mins > 0 ? `${hours} 小时 ${mins} 分钟` : `${hours} 小时`
+})
+const timelineTicks = computed(() => {
+  const startMin = timelineStartMinutes.value
+  const endMin = timelineEndMinutes.value
+  const range = endMin - startMin
+  if (range <= 0) return []
+  const ticks = []
+  for (let m = startMin; m <= endMin; m += 15) {
+    const h = String(Math.floor(m / 60)).padStart(2, '0')
+    const mm = String(m % 60).padStart(2, '0')
+    const isMajor = m % 60 === 0
+    const isMinor = !isMajor && m % 30 === 0
+    const isMicro = !isMajor && !isMinor
+    ticks.push({
+      label: isMicro ? '' : `${h}:${mm}:00`,
+      pct: ((m - startMin) / range) * 100,
+      major: isMajor,
+      minor: isMinor,
+      micro: isMicro,
+    })
+  }
+  return ticks
+})
 
 function clockToMinuteOfDay(value, fallback = 0) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
@@ -579,16 +688,36 @@ function timeFromSeconds(seconds) {
   return `2026-05-20T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
 }
 
+function handleTrackHover(e) {
+  const el = e.currentTarget
+  const rect = el.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const pct = Math.max(0, Math.min(1, x / rect.width))
+  const sec = Math.round(timelineStartSeconds.value + pct * timelineDuration.value)
+  const hh = String(Math.floor(sec / 3600) % 24).padStart(2, '0')
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0')
+  const ss = String(sec % 60).padStart(2, '0')
+  hoverTime.value = `${hh}:${mm}:${ss}`
+  hoverLeft.value = `${90 + x}px`
+  const ticks = timelineTicks.value
+  let best = -1, bestDist = Infinity
+  for (let i = 0; i < ticks.length; i++) {
+    const d = Math.abs(pct * 100 - ticks[i].pct)
+    if (d < bestDist) { bestDist = d; best = i }
+  }
+  hoverNearestIdx.value = bestDist < 6 ? best : -1
+}
+
 function normalizeTimelineBounds() {
   const start = clockToMinuteOfDay(timelineStart.value, 6 * 60)
   const end = clockToMinuteOfDay(timelineEnd.value, 11 * 60)
-  timelineStart.value = `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`
+  timelineStart.value = `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}:00`
   if (end <= start) {
     const fixed = Math.min(23 * 60 + 59, start + 60)
-    timelineEnd.value = `${String(Math.floor(fixed / 60)).padStart(2, '0')}:${String(fixed % 60).padStart(2, '0')}`
+    timelineEnd.value = `${String(Math.floor(fixed / 60)).padStart(2, '0')}:${String(fixed % 60).padStart(2, '0')}:00`
     pushActionLog('终点必须晚于起点，已自动调整为起点后一小时', 'info')
   } else {
-    timelineEnd.value = `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`
+    timelineEnd.value = `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}:00`
   }
   sliderSeconds.value = secondsFromTime(simulationTime.value)
 }
@@ -949,7 +1078,7 @@ onUnmounted(() => {
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 18px; }
 .page-head h1 { margin: 0; font-size: 25px; line-height: 1.15; font-weight: 900; letter-spacing: 0; }
 .page-head p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-.head-actions, .control-actions, .quick-links, .speed-group, .tabs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.head-actions, .quick-links, .tabs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 button, a { font: inherit; }
 .primary-btn, .ghost-btn, .tool-btn {
   height: 38px;
@@ -993,8 +1122,27 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .bad { color: var(--red); }
 .muted { color: #98a2b3; }
 .quick-links { grid-column: 1 / -1; display: flex; justify-content: space-evenly; gap: 20px; padding: 12px 16px; border: 1px solid #e5ece8; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(16,24,40,.035); }
-.quick-links a { color: #0f766e; text-decoration: none; font-size: 12px; font-weight: 850; display: grid; justify-items: center; gap: 5px; min-width: 52px; }
-.quick-links .material-icons { font-size: 21px; color: var(--green); }
+.quick-links a { 
+  color: #0f766e; 
+  text-decoration: none; 
+  font-size: 12px; 
+  font-weight: 850; 
+  display: flex;              /* 必须是 flex */
+  flex-direction: column;     /* 必须是垂直排列 */
+  align-items: center;        /* 居中 */
+  gap: 5px; 
+  min-width: 52px; 
+}
+.quick-links .material-icons { 
+  font-size: 21px; 
+  color: var(--green); 
+  /* --- 关键新增部分 --- */
+  line-height: 1;
+  width: 21px;               /* 强制宽度等于字体大小 */
+  height: 21px;              /* 强制高度等于字体大小 */
+  text-align: center;        /* 让图标字体在自己这个正方形模具里居中 */
+  display: block;
+}
 .account-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1013,20 +1161,108 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .account-links { flex: 1 1 100%; order: 10; display: flex; flex-wrap: wrap; gap: 8px; overflow: hidden; justify-content: flex-start; padding-top: 2px; }
 .account-links a, .more-users { min-width: 72px; height: 34px; padding: 0 12px; border-radius: 7px; background: #f4fdf8; color: #00895f; font-size: 12px; font-weight: 900; text-decoration: none; border: 1px solid #d4f2e2; display: inline-flex; align-items: center; justify-content: center; }
 .more-users { min-width: 38px; cursor: pointer; }
-.control-panel { padding: 18px 20px; margin-bottom: 14px; }
-.timeline-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid #edf2ef; margin-bottom: 14px; }
-.timeline-head h2, .card-head h3, .upload-card h3 { margin: 0; font-size: 17px; font-weight: 900; }
-.timeline-head p, .upload-card p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-.tool-btn.compact { height: 34px; padding: 0 10px; }
-.timeline-row { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 10px; margin: 18px 0 8px; color: #475569; font-size: 13px; font-weight: 900; }
-.timeline-frame { position: relative; height: 34px; display: flex; align-items: center; }
-.timeline-frame::before { content: ""; position: absolute; left: 0; right: 0; top: 16px; height: 3px; border-radius: 999px; background: #cbd5e1; }
-.timeline-fill { position: absolute; left: 0; top: 16px; height: 3px; border-radius: 999px; background: var(--green); pointer-events: none; }
-.timeline-mark { position: absolute; top: 10px; z-index: 2; width: 13px; height: 13px; margin-left: -6px; border: 1px solid #fff; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px var(--amber), 0 0 0 1px #fbbf24; padding: 0; cursor: pointer; }
+.timeline-panel { padding: 28px 28px 18px; border-radius: 14px; border: 1px solid #e6edf3; background: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.08); display: grid; gap: 18px; margin-bottom: 14px; }
+.timeline-head--hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 0; border: 0; }
+.timeline-title { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+.timeline-title-icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #35d391, #07945e); box-shadow: inset 0 -6px 12px rgba(0,0,0,.12), 0 10px 20px rgba(16,185,129,.22); }
+.timeline-title-icon .material-icons { font-size: 28px; }
+.timeline-head--hero h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.15; font-weight: 900; color: #0f172a; }
+.timeline-head--hero p { margin: 0; color: #475569; font-size: 13px; font-weight: 650; }
+.timeline-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+.timeline-stat { min-width: 140px; height: 62px; border: 1px solid #e6edf3; border-radius: 12px; background: linear-gradient(180deg, #fff, #fbfcfd); box-shadow: 0 6px 16px rgba(15,23,42,.04); display: grid; place-content: center; text-align: center; padding: 8px 14px; }
+.timeline-stat-label { color: #475569; font-size: 13px; font-weight: 760; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.timeline-stat-label .material-icons { font-size: 14px; color: #10b981; }
+.timeline-stat strong { color: #08a264; font-size: 22px; line-height: 1.2; font-weight: 900; }
+.timeline-config-card, .timeline-board, .execution-card { border: 1px solid #e6edf3; border-radius: 14px; background: #fff; box-shadow: 0 8px 20px rgba(15,23,42,.035); }
+.timeline-config-card { padding: 20px 22px 18px; }
+.control-actions-head { display: flex; align-items: center; margin-bottom: 16px; }
+.section-chip { display: inline-flex; align-items: center; gap: 8px; color: #111827; font-size: 16px; font-weight: 900; }
+.section-chip .material-icons { color: #0aaa68; font-size: 20px; }
+.timeline-config-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.timeline-config-item { min-height: 80px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(180deg, #fff, #fcfdff); padding: 14px 16px; display: grid; align-content: center; gap: 8px; }
+.timeline-config-label { color: #475569; font-size: 13px; font-weight: 760; }
+.timeline-config-value { display: flex; align-items: center; gap: 10px; }
+.timeline-config-value strong { color: #0f172a; font-size: 18px; font-weight: 500; letter-spacing: 0; }
+.timeline-config-value input[type='time'], .timeline-config-value input[type='text'] { border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-size: 18px; font-weight: 900; padding: 0; width: 110px; }
+.timeline-config-badge { color: #334155; background: #f1f5f9; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 760; }
+.jump-input-row { height: 40px; display: grid; grid-template-columns: 1fr 80px; border: 1px solid #dfe7ef; border-radius: 10px; overflow: hidden; background: #fff; }
+.jump-input-row input { border: 0; outline: 0; padding: 0 12px; font-size: 16px; color: #0f172a; background: transparent; font-weight: 900; }
+.jump-confirm { border: 0; border-left: 1px solid #dfe7ef; background: #fff; color: #07945e; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 900; cursor: pointer; }
+.jump-confirm .material-icons { font-size: 16px; }
+.speed-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0; border-radius: 10px; border: 1px solid #dfe7ef; background: #fff; overflow: hidden; }
+.speed-group button { height: 38px; min-width: 0; border: 0; border-right: 1px solid #e5e7eb; border-radius: 0; background: #fff; color: #0f172a; font-size: 14px; font-weight: 900; cursor: pointer; }
+.speed-group button:last-child { border-right: 0; }
+.speed-group button.active { color: #fff; background: linear-gradient(135deg, #35d391, #07945e); box-shadow: 0 6px 14px rgba(16,185,129,.22); }
+.timeline-board { padding: 24px 32px; }
+.timeline-track-container { position: relative; margin: 70px 0 50px; padding: 0 90px; min-height: 50px; }
+.end-label { position: absolute; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; z-index: 4; }
+.end-label.start { left: 0; }
+.end-label.end { right: 0; }
+.end-time { font-size: 14px; font-weight: 700; padding: 5px 12px; border-radius: 999px; margin-bottom: 4px; background: #10b981; color: #fff; }
+.end-label.end .end-time { background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
+.end-text { font-size: 13px; color: #64748b; }
+.track-bg { position: absolute; top: 50%; left: 90px; right: 90px; height: 4px; background: #e2e8f0; transform: translateY(-50%); border-radius: 4px; }
+.track-fill {
+  position: absolute; top: 50%; left: 90px; height: 4px; transform: translateY(-50%); border-radius: 4px; z-index: 2;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 3px,
+      rgba(255,255,255,.15) 3px,
+      rgba(255,255,255,.15) 6px
+    ),
+    #10b981;
+  background-size: 20px 20px, 100% 100%;
+  animation: stripe-scroll .8s linear infinite;
+}
+@keyframes stripe-scroll { to { background-position: -20px 0, 0 0; } }
+.ticks-container { position: absolute; top: 50%; left: 90px; right: 90px; height: 20px; transform: translateY(-50%); pointer-events: none; z-index: 3; }
+.tick { position: absolute; transform: translateX(-50%); }
+.tick.major { width: 2px; height: 14px; background: #94a3b8; top: 3px; }
+.tick.minor { width: 1px; height: 8px; background: #cbd5e1; top: 6px; }
+.tick.micro { width: 1px; height: 5px; background: #dde3ea; top: 8px; }
+.tick.passed.micro { background: rgba(255,255,255,.4); }
+.tick.passed.major { background: #fff; }
+.tick.passed.minor { background: rgba(255,255,255,.6); }
+.tick-label { position: absolute; top: 24px; transform: translateX(-50%); font-size: 12px; color: var(--text-muted, #94a3b8); font-weight: 600; white-space: nowrap; transition: color .15s, font-weight .15s; }
+.tick-label.major { font-size: 13px; color: #64748b; }
+.tick-label.nearest { color: #0f172a; font-weight: 900; }
+.hover-tooltip { position: absolute; top: -28px; transform: translateX(-50%); background: #1e293b; color: #fff; font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 20; }
+.hover-tooltip::after { content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 6px; height: 6px; background: #1e293b; }
+.cursor-group { position: absolute; top: 50%; transform: translateY(-50%); z-index: 10; }
+.cursor-point { width: 14px; height: 14px; background: #fff; border: 3px solid #10b981; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 4px rgba(16,185,129,.1); cursor: pointer; }
+.cursor-bubble { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 12px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.05); white-space: nowrap; }
+.cursor-bubble::after { content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px; background: #fff; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
+.bubble-label { font-size: 12px; color: #64748b; margin-bottom: 2px; }
+.bubble-time { font-size: 16px; font-weight: 800; color: #059669; }
+.timeline-mark { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; width: 12px; height: 12px; margin-left: -6px; border: 1px solid #fff; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px var(--amber), 0 0 0 1px #fbbf24; padding: 0; cursor: pointer; }
 .timeline-mark.done { background: #10b981; box-shadow: 0 0 0 1px #34d399; }
 .timeline-mark.failed { background: #ef4444; box-shadow: 0 0 0 1px #f87171; }
-input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color: #059669; background: transparent; }
-.timeline-meta { display: flex; justify-content: space-between; gap: 16px; color: #475569; font-size: 13px; font-weight: 850; margin-bottom: 12px; }
+.timeline-slider { position: absolute; top: 0; left: 90px; right: 90px; bottom: 0; width: calc(100% - 180px); opacity: 0; cursor: crosshair; z-index: 11; }
+.timeline-foot { display: flex; justify-content: space-between; margin-top: 20px; padding: 12px 16px; background: #d1fae5; border-radius: 8px; opacity: .8; }
+.footer-item { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #059669; font-weight: 700; }
+.footer-item .material-icons { font-size: 16px; }
+.footer-item.right { color: #64748b; }
+.execution-card { padding: 18px 22px; }
+.control-actions-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+.action-tile { min-height: 90px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 10px; text-align: center; cursor: pointer; box-shadow: 0 6px 16px rgba(15,23,42,.03); transition: box-shadow .15s; gap: 4px; }
+.action-tile:hover:not(:disabled) { box-shadow: 0 8px 20px rgba(15,23,42,.08); }
+.action-tile .material-icons { font-size: 22px; color: #667085; }
+.action-tile strong { color: #0f172a; font-size: 13px; font-weight: 900; white-space: nowrap; }
+.action-tile small { color: #64748b; font-size: 11px; font-weight: 700; line-height: 1.4; }
+.action-tile.primary { color: #fff; border-color: #16b978; background: linear-gradient(135deg, #39d794, #07945e); box-shadow: 0 12px 24px rgba(16,185,129,.22); }
+.action-tile.primary .material-icons { color: #08a264; background: #fff; box-shadow: 0 8px 14px rgba(15,23,42,.12); }
+.action-tile.primary strong, .action-tile.primary small { color: #fff; }
+.action-tile.danger { border-color: #fecdd3; background: #fff5f6; }
+.action-tile.danger .material-icons, .action-tile.danger strong { color: #be123c; }
+.action-tile:disabled { background: #fafbfc; color: #94a3b8; cursor: not-allowed; }
+.action-tile:disabled strong, .action-tile:disabled small, .action-tile:disabled .material-icons { color: #94a3b8; }
+.control-hint { margin-top: 16px; min-height: 44px; border-radius: 8px; padding: 0 16px; display: flex; align-items: center; gap: 8px; background: #f4f7fb; color: #55709a; font-size: 13px; font-weight: 720; }
+.control-hint .material-icons { color: #4f8ce8; font-size: 18px; }
+.card-head h3, .upload-card h3 { margin: 0; font-size: 17px; font-weight: 900; }
+.upload-card p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.tool-btn.compact { height: 34px; padding: 0 10px; }
 .integrity-box { margin-top: 12px; padding: 10px 12px; border: 1px solid #fecdd3; border-radius: 10px; background: #fff1f2; color: #be123c; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; font-weight: 780; }
 .action-log { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .action-log span { padding: 6px 9px; border-radius: 8px; background: #f8fafc; color: #475467; border: 1px solid #e5e7eb; font-size: 12px; font-weight: 760; }
@@ -1036,7 +1272,7 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .tabs button { height: 38px; border: 1px solid var(--line); background: rgba(255,255,255,.92); border-radius: 10px; padding: 0 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 850; color: #334155; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
 .tabs button.active { background: var(--green-soft); color: var(--green-strong); border-color: #b7ebcf; }
 .tabs .material-icons { font-size: 18px; }
-.workspace-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.8fr) minmax(240px, .7fr); gap: 14px; align-items: start; }
+.workspace-grid { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 2fr) minmax(220px, .7fr); gap: 14px; align-items: stretch; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf2f7; }
 .card-head span { color: var(--muted); font-size: 12px; font-weight: 850; }
 .event-list { max-height: 560px; overflow: auto; padding: 8px; }
@@ -1050,7 +1286,7 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .event-status.EXECUTED { background: #dcfce7; color: #15803d; }
 .event-status.PENDING { background: #fef3c7; color: #b45309; }
 .event-status.FAILED { background: #ffe4e6; color: #be123c; }
-.station-grid { padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.station-grid { padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .station-tile { border: 1px solid #e5ece8; border-radius: 10px; padding: 12px; background: #fbfefc; }
 .station-tile.fault { background: #fff1f2; border-color: #fecdd3; }
 .station-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -1073,7 +1309,7 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .fault-queue-card span { color: #64748b; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .fault-queue-card em { margin-left: auto; font-style: normal; border-radius: 999px; padding: 2px 7px; color: #c2410c; background: #ffedd5; font-size: 10px; font-weight: 900; white-space: nowrap; }
 .empty { color: #98a2b3; text-align: center; padding: 24px 0; font-size: 13px; }
-.sample-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px; align-items: start; }
+.sample-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .upload-card { padding: 20px; display: grid; gap: 14px; min-height: 410px; align-content: start; }
 .upload-zone { height: 130px; border: 1px dashed #a7e0c7; border-radius: 10px; background: #fbfffd; display: grid; place-items: center; align-content: center; gap: 8px; color: #0f766e; text-align: center; cursor: pointer; }
 .upload-zone .material-icons { font-size: 36px; color: #34c88a; }
@@ -1088,8 +1324,8 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .editor-head { color: #475569; font-size: 12px; font-weight: 900; border-bottom: 1px solid #edf2ef; background: #fbfcfd; }
 .editor-row { border-bottom: 1px solid #f1f5f3; }
 .editor-row input, .editor-row select { height: 32px; border: 1px solid #dfe8e3; border-radius: 7px; padding: 0 10px; background: #fff; font-weight: 720; color: var(--ink); }
-.snapshot-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start; }
-.history-list { max-height: 520px; overflow: hidden; }
+.snapshot-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.history-list { overflow: auto; }
 .history-list .card-head { position: sticky; top: 0; z-index: 2; background: #fff; }
 .snapshot-row { width: 100%; display: grid; grid-template-columns: 82px 1fr auto; gap: 10px; align-items: center; border: 0; border-bottom: 1px solid #edf2ef; background: #fff; padding: 12px 16px; text-align: left; cursor: pointer; }
 .snapshot-row:hover, .snapshot-row.active { background: #f0fdf4; box-shadow: inset 3px 0 0 #10b981; }
@@ -1129,14 +1365,14 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .acceptance-table th:nth-child(2) { width: 190px; }
 .acceptance-table th:nth-child(n+3):nth-child(-n+7) { width: 260px; }
 .acceptance-table th:last-child { width: 270px; }
-th, td { border-top: 1px solid #edf2ef; padding: 10px 12px; vertical-align: top; white-space: normal; font-size: 12px; line-height: 1.45; overflow: hidden; }
-th { position: sticky; top: 0; z-index: 2; color: #475569; background: #fbfcfd; text-align: left; font-weight: 900; }
+th, td { border-top: 1px solid #edf2ef; padding: 10px 12px; vertical-align: middle; text-align: center; white-space: normal; font-size: 12px; line-height: 1.45; overflow: hidden; }
+th { position: sticky; top: 0; z-index: 2; color: #475569; background: #fbfcfd; text-align: center; font-weight: 900; }
 td { color: #344054; background: #fff; }
 .acceptance-table tr:hover td { background: #fbfefc; }
 .time-cell { color: var(--green-strong); font-weight: 900; font-variant-numeric: tabular-nums; }
 .event-cell { color: var(--ink); font-weight: 900; }
-.table-slot { min-height: 38px; display: grid; gap: 6px; align-content: start; min-width: 0; }
-.table-slot.empty { align-content: center; }
+.table-slot { min-height: 38px; display: grid; gap: 6px; align-content: center; justify-items: center; min-width: 0; }
+.table-slot.empty { align-content: center; justify-items: center; }
 .table-slot.fault { color: var(--red); }
 .charge-chip { min-height: 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cdeee0; border-radius: 8px; background: #f4fdf8; color: #334155; font-weight: 820; }
 .charge-chip b { color: var(--ink); font-weight: 900; }
@@ -1145,7 +1381,7 @@ td { color: #344054; background: #fff; }
 .charge-chip em.QUEUED { background: #f1f5f9; color: #475569; }
 .charge-chip.fault-queue-chip { border-color: #fed7aa; background: #fff7ed; }
 .charge-chip.fault-queue-chip em { color: #c2410c; background: #ffedd5; }
-.empty-text { display: inline-flex; min-height: 30px; align-items: center; color: #64748b; }
+.empty-text { display: inline-flex; min-height: 30px; align-items: center; justify-content: center; color: #64748b; }
 .danger-text { color: var(--red); font-weight: 900; }
 .waiting-cell-stack { display: grid; gap: 8px; }
 .fault-table-list { display: grid; gap: 6px; }
@@ -1191,66 +1427,29 @@ td { color: #344054; background: #fff; }
 .snapshot-board :deep(.mini-waiting div) { display: flex; flex-wrap: wrap; gap: 6px; }
 .snapshot-board :deep(.mini-waiting span) { padding: 4px 7px; border-radius: 8px; background: #f8fafc; color: #475467; font-size: 11px; font-weight: 700; }
 
-.timeline-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.timeline-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: #f8fafc; color: #475467; font-size: 12px; font-weight: 850; white-space: nowrap; }
-.timeline-badge.accent { background: #ecfdf3; color: #047857; }
-.timeline-badge.muted { background: #f2f4f7; color: #667085; }
-.timeline-layout { display: grid; gap: 12px; }
-.timeline-config { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #e5ece8; border-radius: 12px; background: #fcfefe; }
-.timeline-tools { display: grid; grid-template-columns: repeat(3, minmax(112px, 1fr)) auto; align-items: end; gap: 8px; min-width: 0; }
-.timeline-tools label { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 11px; color: #667085; font-weight: 850; white-space: nowrap; }
-.timeline-tools input { width: 100%; }
-.timeline-tools input[type='time'] { min-width: 100px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 900; padding: 0; letter-spacing: 0; }
-.timeline-tools input[type='text'] { min-width: 96px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 900; padding: 0; }
-.timeline-tools input::placeholder { color: #98a2b3; font-weight: 700; }
-.speed-group { justify-self: end; display: inline-flex; gap: 6px; padding: 4px; border-radius: 12px; background: #ecfdf3; border: 1px solid #bbf7d0; }
-.speed-group button { min-width: 42px; height: 30px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #047857; font-size: 12px; font-weight: 850; }
-.speed-group button.active { background: #10b981; color: #fff; border-color: #10b981; box-shadow: 0 8px 18px rgba(16,185,129,.18); }
-.timeline-stage { display: grid; gap: 8px; padding: 12px 14px 14px; border: 1px solid #e5ece8; border-radius: 12px; background: #fff; }
-.control-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #edf2ef; }
-.control-actions .tool-btn { justify-content: center; width: 100%; height: 36px; font-size: 12px; border-radius: 10px; }
-.control-actions .tool-btn.primary { background: #f0fdf4; color: #047857; border-color: #bbf7d0; }
-.control-actions .tool-btn.secondary { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.control-actions .tool-btn.danger.primary { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
-.control-actions .tool-btn.ghost { background: #fff; color: #475467; }
-.control-actions .tool-btn:disabled { background: #f8fafc; color: #98a2b3; border-color: #e5e7eb; }
 .event-list, .waiting-list { scrollbar-width: thin; }
-.station-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 
+@media (max-width: 1280px) {
+  .timeline-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 1180px) {
   .workspace-grid, .sample-grid, .snapshot-grid { grid-template-columns: 1fr; }
   .compare-grid { grid-template-columns: 1fr; }
   .compare-grid::before { display: none; }
   .compare-grid .snapshot-board:first-child, .compare-grid .snapshot-board:last-child { grid-column: auto; }
   .status-strip { grid-template-columns: repeat(2, 1fr); }
-  .timeline-head { flex-direction: column; align-items: stretch; }
-  .timeline-badges { justify-content: flex-start; }
-  .timeline-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
-  .timeline-tools label:last-of-type { grid-column: 1 / -1; }
-  .speed-group { justify-self: stretch; justify-content: center; }
-  .control-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .timeline-meta { display: grid; }
+  .timeline-head--hero { flex-direction: column; }
+  .timeline-stats { justify-content: flex-start; }
   .quick-links { justify-content: flex-start; }
   .account-links { justify-content: flex-start; }
 }
+@media (max-width: 760px) {
+  .timeline-panel { padding: 18px 14px; }
+  .timeline-head--hero, .timeline-stats { display: grid; justify-content: stretch; }
+  .timeline-config-grid, .control-actions-grid { grid-template-columns: 1fr; }
+  .timeline-scale, .timeline-track-wrap { margin-left: 20px; margin-right: 20px; }
+  .current-bubble { display: none; }
+}
 </style>
 
-<style>
-.snapshot-board-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #edf2ef; background: #fff; }
-.snapshot-board-head strong { font-size: 14px; font-weight: 900; }
-.snapshot-board-head span { color: #64748b; font-size: 12px; font-weight: 850; }
-.mini-stations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; }
-.mini-station { border: 1px solid #e5ece8; border-radius: 10px; padding: 10px; background: #fff; min-width: 0; }
-.mini-station.fault { background: #fff1f2; border-color: #fecdd3; }
-.mini-station-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 900; }
-.mini-station-top span { color: #00895f; background: #ecfdf3; border-radius: 999px; padding: 2px 7px; font-weight: 900; font-size: 10px; white-space: nowrap; }
-.mini-lane { display: grid; gap: 6px; }
-.mini-slot { min-height: 38px; border: 1px solid #e5ece8; border-radius: 8px; padding: 6px 8px; display: grid; align-content: center; color: #98a2b3; font-size: 11px; font-weight: 750; background: #fbfcfd; }
-.mini-slot.occupied { color: #344054; background: #fff; border-color: #cdeee0; }
-.mini-slot b { font-size: 12px; font-weight: 900; }
-.mini-slot small { color: #667085; margin-top: 2px; }
-.mini-waiting { border-top: 1px solid #edf2ef; padding: 10px 12px; display: grid; gap: 8px; }
-.mini-waiting b { font-size: 12px; }
-.mini-waiting div { display: flex; flex-wrap: wrap; gap: 6px; }
-.mini-waiting span { padding: 4px 7px; border-radius: 8px; background: #f8fafc; color: #475467; font-size: 11px; font-weight: 700; }
-</style>

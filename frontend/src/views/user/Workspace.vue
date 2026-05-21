@@ -773,7 +773,7 @@ onUnmounted(() => {
 
 .queue-zone { padding: 24px 0 26px; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
 .queue-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
-.section-title { font-size: 18px; font-weight: 800; margin: 0 0 8px; color: #101828; }
+.section-title { font-size: 18px; font-weight: 800; margin: 0 0 8px; color: #101828; display: flex;align-items: center; line-height: 1;}
 .section-sub { color: #667085; font-size: 14px; margin: 0; line-height: 1.7; }
 .legend { display: flex; gap: 18px; color: #667085; font-size: 13px; white-space: nowrap; }
 .legend i { width: 8px; height: 8px; display: inline-block; border-radius: 3px; margin-right: 6px; }
@@ -1581,10 +1581,10 @@ onUnmounted(() => {
 
 .bottom {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, .8fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(240px, 0.7fr);
   gap: 20px;
   padding: 26px 0 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .bottom > div {
@@ -1600,6 +1600,8 @@ onUnmounted(() => {
   font-size: 14px;
   color: #667085;
   font-weight: 500;
+  line-height: 1;
+  margin-left: 6px;
 }
 
 .time-axis {
@@ -1627,7 +1629,7 @@ onUnmounted(() => {
 .axis-bar {
   height:58px;
   display:grid;
-  grid-template-columns: minmax(0,7fr) minmax(0,3fr) minmax(0,5fr) minmax(0,3fr) minmax(0,3fr) minmax(0,2fr) minmax(0,1fr);
+  grid-template-columns: 29.166667% 12.5% 20.833333% 12.5% 12.5% 8.333333% 4.166667%;
   border-radius:12px;
   box-shadow: inset 0 0 0 1px #d9e2dd;
   overflow:visible;
