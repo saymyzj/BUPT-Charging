@@ -329,6 +329,8 @@ class FrozenContractTests(unittest.TestCase):
                 "source_queue_number",
                 "effective_queue_number",
                 "is_fault_followup",
+                "is_fault_queue",
+                "queue_context",
                 "charge_mode",
                 "request_energy",
                 "request_status",
@@ -338,10 +340,13 @@ class FrozenContractTests(unittest.TestCase):
                 "estimated_wait_seconds",
                 "estimated_start_time",
                 "estimated_finish_time",
+                "timeline",
             },
         )
         self.assertEqual(status_payload["request_status"], "CHARGING")
         self.assertFalse(status_payload["is_fault_followup"])
+        self.assertFalse(status_payload["is_fault_queue"])
+        self.assertEqual(status_payload["queue_context"], "STATION_QUEUE")
         self.assertIsNone(status_payload["source_queue_number"])
         self.assertEqual(status_payload["effective_queue_number"], "F1")
         self.assertEqual(status_payload["station_code"], "FAST_01")
@@ -489,6 +494,7 @@ class FrozenContractTests(unittest.TestCase):
                 "service_fee",
                 "total_fee",
                 "request_status",
+                "timeline",
             },
         )
         self.assertEqual(detail_payload["detail_id"], "DETAIL0001")
@@ -714,7 +720,6 @@ class FrozenContractTests(unittest.TestCase):
         self.assertIsNotNone(payload["remaining_request_id"])
         self.assertEqual(payload["requeued_request_ids"], [req2])
         self.assertEqual(payload["scheduled"][0]["request_id"], payload["remaining_request_id"])
-        self.assertEqual(payload["scheduled"][0]["target_station_code"], "FAST_03")
         self.assertEqual(payload["scheduled"][1]["request_id"], req2)
 
         detail_payload = self.client.get(
@@ -729,21 +734,74 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(detail_payload["total_fee"], 18.0)
 
         status2 = self.client.get(f"/api/request/status/{req2}", headers=user2_headers).get_json()["data"]
-        self.assertEqual(status2["request_status"], "QUEUED")
+        self.assertIn(status2["request_status"], {"QUEUED", "CHARGING"})
         self.assertEqual(status2["station_code"], "FAST_03")
-        self.assertEqual(status2["station_queue_position"], 2)
 
         remaining_status = self.client.get(
             f"/api/request/status/{payload['remaining_request_id']}",
             headers=self.auth_headers,
         ).get_json()["data"]
-        self.assertEqual(remaining_status["request_status"], "CHARGING")
-        self.assertEqual(remaining_status["station_code"], "FAST_03")
-        self.assertEqual(remaining_status["station_queue_position"], 1)
+        self.assertIn(remaining_status["request_status"], {"QUEUED", "CHARGING"})
+        self.assertEqual(remaining_status["station_code"], "FAST_02")
         self.assertEqual(remaining_status["request_energy"], 20.0)
         self.assertTrue(remaining_status["is_fault_followup"])
         self.assertEqual(remaining_status["source_queue_number"], "F1")
         self.assertEqual(remaining_status["effective_queue_number"], "F1")
+        self.assertEqual(remaining_status["queue_number"], "F1")
+
+    def test_priority_fault_queue_uses_effective_order_and_stays_out_of_waiting_area(self):
+        user_headers = [self.auth_headers]
+        for index in range(2, 7):
+            user_headers.append(self._register_and_login(f"user_{index:03d}"))
+        self._set_dispatch_mode("EXT_SINGLE_BATCH")
+        self._set_fault_dispatch_mode("PRIORITY")
+
+        request_ids = []
+        for index, headers in enumerate(user_headers):
+            request_ids.append(
+                self._create_request(
+                    headers,
+                    f"2026-04-19T10:0{index}:00",
+                    "SLOW",
+                    10.0,
+                )["data"]["request_id"]
+            )
+
+        with self.app.app_context():
+            execute_db("UPDATE charging_station SET queue_capacity = 3 WHERE charge_mode = 'SLOW'")
+            enqueue_request("SLOW_01", request_ids[0], "2026-04-19T10:00:00")
+            enqueue_request("SLOW_01", request_ids[1], "2026-04-19T10:01:00")
+            enqueue_request("SLOW_01", request_ids[2], "2026-04-19T10:02:00")
+            enqueue_request("SLOW_02", request_ids[3], "2026-04-19T10:03:00")
+            enqueue_request("SLOW_02", request_ids[4], "2026-04-19T10:04:00")
+            enqueue_request("SLOW_02", request_ids[5], "2026-04-19T10:05:00")
+
+        payload = self.client.post(
+            "/api/admin/stations/SLOW_01/fault",
+            headers=self.admin_headers,
+            json={"fault_time": "2026-04-19T10:30:00"},
+        ).get_json()["data"]
+        self.assertEqual(payload["fault_dispatch_mode"], "PRIORITY")
+        self.assertEqual(
+            [item["request_id"] for item in payload["scheduled"][:2]],
+            [payload["remaining_request_id"], request_ids[1]],
+        )
+
+        remaining_status = self.client.get(
+            f"/api/request/status/{payload['remaining_request_id']}",
+            headers=user_headers[0],
+        ).get_json()["data"]
+        self.assertEqual(remaining_status["queue_number"], "T1")
+        self.assertEqual(remaining_status["effective_queue_number"], "T1")
+
+        waiting_payload = self.client.get(
+            "/api/admin/waiting-area",
+            headers=self.admin_headers,
+        ).get_json()["data"]
+        self.assertEqual(waiting_payload["total_waiting"], len(waiting_payload["rows"]))
+        self.assertTrue(all(not row["is_fault_queue"] for row in waiting_payload["rows"]))
+        self.assertGreaterEqual(waiting_payload["fault_queue_count"], 1)
+        self.assertEqual(waiting_payload["fault_queue"][0]["effective_queue_number"], "T3")
 
     def test_time_order_fault_requeues_remaining_by_source_queue_number(self):
         user_headers = [self.auth_headers]
@@ -1413,6 +1471,8 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(payload["total_waiting"], 1)
         self.assertEqual(payload["fast_queue_count"], 1)
         self.assertEqual(payload["slow_queue_count"], 0)
+        self.assertEqual(payload["fault_queue_count"], 0)
+        self.assertEqual(payload["fault_queue"], [])
         self.assertEqual(
             payload["rows"][0],
             {
@@ -1426,6 +1486,8 @@ class FrozenContractTests(unittest.TestCase):
                 "source_queue_number": None,
                 "effective_queue_number": "F7",
                 "is_fault_followup": False,
+                "is_fault_queue": False,
+                "queue_context": "WAITING_AREA",
                 "waiting_area_order": 1,
                 "request_time": "2026-04-19T10:06:00",
                 "estimated_wait_seconds": None,

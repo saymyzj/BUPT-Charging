@@ -101,7 +101,6 @@
           <div class="wait-legend">
             <span><i class="blue"></i>快充等待</span>
             <span><i class="orange"></i>慢充等待</span>
-            <span><i class="purple"></i>待处理请求</span>
             <span><i class="gray"></i>空闲车位</span>
             <b>容量：{{ waitingCapacity }} 个车位</b>
           </div>
@@ -114,7 +113,7 @@
               v-for="slot in parkingSlots"
               :key="slot.index"
               class="slot"
-              :class="[slot.row ? modeClass(slot.row.charge_mode) : 'empty', { pending: slot.row?.waiting_area_order === 0 }]"
+              :class="[slot.row ? modeClass(slot.row.charge_mode) : 'empty']"
             >
               <div
                 v-if="slot.row"
@@ -128,15 +127,19 @@
           <div class="wait-exit">出口<small>&gt;</small></div>
         </div>
         <div class="wait-footnote">
-          <span>说明：等候区展示尚未进入任一充电桩队列的车辆。</span>
+          <span>说明：等候区只展示普通等待车辆，故障队列不占用等候区容量。</span>
           <span>快充等待 {{ waitingSummary.fast_queue_count || 0 }} 辆</span>
           <span>慢充等待 {{ waitingSummary.slow_queue_count || 0 }} 辆</span>
-          <span>待处理请求 {{ pendingCount }} 条</span>
           <span>空闲车位 {{ freeWaitingSlots }} 个</span>
         </div>
       </section>
 
       <aside class="side-status">
+        <div class="side-card fault-queue-card">
+          <div class="side-icon red">障</div>
+          <strong>故障队列</strong>
+          <span>{{ faultQueueRows.length }} 辆等待优先重调度</span>
+        </div>
         <div class="side-card">
           <div class="side-icon pulse">调</div>
           <strong>实时调度</strong>
@@ -228,11 +231,22 @@
           <div class="chart-legend">
             <p><i class="blue"></i>快充等待 <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
             <p><i class="orange"></i>慢充等待 <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
-            <p><i class="purple"></i>待处理请求 <strong>{{ pendingCount }}</strong></p>
             <p><i class="gray"></i>空闲车位 <strong>{{ freeWaitingSlots }}</strong></p>
           </div>
         </div>
       </article>
+    </section>
+
+    <section v-if="faultQueueRows.length" class="fault-queue-section">
+      <div class="table-title">故障队列</div>
+      <div class="fault-queue-list">
+        <article v-for="row in faultQueueRows" :key="row.request_id" class="fault-queue-item" :class="modeClass(row.charge_mode)">
+          <span class="fault-rank">{{ queueNumberText(row) }}</span>
+          <strong>{{ row.username || row.user_id || row.request_id }}</strong>
+          <em>{{ modeText(row.charge_mode) }} {{ Number(row.request_energy || 0).toFixed(2) }} kWh</em>
+          <small>{{ row.is_fault_followup ? '故障中断续充' : '故障桩等待车辆' }}</small>
+        </article>
+      </div>
     </section>
 
     <div class="modal-overlay" v-if="showModal" @click.self="showModal = false">
@@ -267,7 +281,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getRequestStatus, getStations, getStationsOverview, getStationQueue, getWaitingArea } from '@/api/charging'
+import { getAcceptanceState, getRequestStatus, getStations, getStationsOverview, getStationQueue, getWaitingArea } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { CHARGE_MODE_TEXT, STATION_STATUS_TEXT } from '@/constants/enums'
 
@@ -282,6 +296,7 @@ const currentFinishTime = ref(null)
 const stationQueues = ref({})
 const waitingSummary = ref({ fast_queue_count: 0, slow_queue_count: 0, total_waiting: 0, capacity: 0 })
 const waitingAreaRows = ref([])
+const faultQueueRows = ref([])
 const now = ref(new Date())
 let timer = null
 
@@ -296,7 +311,6 @@ const visibleStations = computed(() => stations.value.slice(0, 5))
 const totalEnergy = computed(() => stations.value.reduce((sum, s) => sum + Number(s.total_charge_energy || 0), 0))
 const totalChargeCount = computed(() => stations.value.reduce((sum, s) => sum + Number(s.total_charge_count || 0), 0))
 const stationQueueTotal = computed(() => Object.values(stationQueues.value).reduce((sum, rows) => sum + rows.length, 0))
-const pendingCount = computed(() => waitingAreaRows.value.filter((row) => row.waiting_area_order === 0).length)
 const totalQueued = computed(() => waitingTotal.value + stationQueueTotal.value)
 const freeWaitingSlots = computed(() => Math.max(0, waitingCapacity.value - waitingTotal.value))
 
@@ -335,11 +349,11 @@ const kpis = computed(() => [
     tone: 'orange',
   },
   {
-    label: '待处理请求',
-    value: pendingCount.value,
+    label: '故障队列',
+    value: faultQueueRows.value.length,
     unit: '条',
-    sub: '故障重排或未分配',
-    percent: percent(pendingCount.value, waitingCapacity.value),
+    sub: '不占用等候区容量',
+    percent: percent(faultQueueRows.value.length, Math.max(waitingCapacity.value, 1)),
     icon: 'R',
     tone: 'purple',
   },
@@ -398,8 +412,7 @@ const waitingDonutStyle = computed(() => {
   const total = Math.max(waitingCapacity.value, 1)
   const fast = Number(waitingSummary.value.fast_queue_count || 0) / total * 100
   const slow = fast + Number(waitingSummary.value.slow_queue_count || 0) / total * 100
-  const pending = slow + pendingCount.value / total * 100
-  return { background: `conic-gradient(#2563eb 0 ${fast}%, #f97316 ${fast}% ${slow}%, #8b5cf6 ${slow}% ${pending}%, #98a2b3 ${pending}% 100%)` }
+  return { background: `conic-gradient(#2563eb 0 ${fast}%, #f97316 ${fast}% ${slow}%, #98a2b3 ${slow}% 100%)` }
 })
 
 async function loadStations() {
@@ -417,6 +430,19 @@ async function loadStations() {
   }
 }
 
+async function loadAcceptanceClock() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    if (data.enabled && data.simulation_time) {
+      now.value = new Date(data.simulation_time)
+    } else {
+      now.value = new Date()
+    }
+  } catch (_) {
+    now.value = new Date()
+  }
+}
+
 async function loadWaitingArea() {
   const [overviewRes, waitingRes] = await Promise.all([
     getStationsOverview().catch(() => null),
@@ -429,6 +455,7 @@ async function loadWaitingArea() {
     ...pickWaitingSummary(waitingPayload),
   }
   waitingAreaRows.value = Array.isArray(waitingPayload.rows) ? waitingPayload.rows : []
+  faultQueueRows.value = Array.isArray(waitingPayload.fault_queue) ? waitingPayload.fault_queue : []
 }
 
 async function loadAllStationQueues() {
@@ -451,6 +478,7 @@ function pickWaitingSummary(payload) {
     fast_queue_count: payload.fast_queue_count ?? 0,
     slow_queue_count: payload.slow_queue_count ?? 0,
     total_waiting: payload.total_waiting ?? payload.rows.length,
+    fault_queue_count: payload.fault_queue_count ?? 0,
     capacity: payload.capacity ?? 0,
   }
 }
@@ -584,9 +612,10 @@ function percent(value, total) {
 }
 
 onMounted(() => {
+  loadAcceptanceClock()
   loadStations()
   timer = window.setInterval(() => {
-    now.value = new Date()
+    loadAcceptanceClock()
     loadStations()
   }, 5000)
 })
@@ -814,6 +843,7 @@ onUnmounted(() => {
 .section,
 .wait-area,
 .table-section,
+.fault-queue-section,
 .chart-box {
   border: 1px solid #edf0ee;
   border-radius: 16px;
@@ -830,7 +860,8 @@ onUnmounted(() => {
 
 .section,
 .wait-area,
-.table-section {
+.table-section,
+.fault-queue-section {
   margin-bottom: 16px;
 }
 
@@ -1552,6 +1583,56 @@ i.gray { background: #98a2b3; }
 .side-icon.orange {
   background: #fff7ed;
   color: #f97316;
+}
+
+.side-icon.red {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.fault-queue-card {
+  border-color: #ffe4e6;
+  background: linear-gradient(180deg, #fff 0%, #fff7f8 100%);
+}
+
+.fault-queue-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.fault-queue-item {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 5px 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #ffe4e6;
+  border-radius: 14px;
+  background: #fff7f8;
+}
+
+.fault-rank {
+  grid-row: 1 / span 3;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffe4e6;
+  color: #be123c;
+  font-weight: 900;
+}
+
+.fault-queue-item strong {
+  color: #101828;
+}
+
+.fault-queue-item em,
+.fault-queue-item small {
+  color: #667085;
+  font-style: normal;
+  font-size: 12px;
 }
 
 .side-icon.pulse {

@@ -29,20 +29,25 @@
         </div>
       </div>
     </nav>
+    <div v-if="acceptance.enabled" class="acceptance-clock">
+      验收模式 · 当前模拟时间 {{ acceptance.clock }} · {{ acceptance.statusText }}
+    </div>
     <router-view />
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getProfile } from '@/api/charging'
+import { getAcceptanceState, getProfile } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { clearAuthSession } from '@/utils/authSession'
 
 const router = useRouter()
 const menuOpen = ref(false)
 const username = ref('user')
+const acceptance = ref({ enabled: false, clock: '--', statusText: '未启用' })
+let acceptanceTimer = null
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value
@@ -68,7 +73,29 @@ async function loadProfile() {
   } catch (_) { /* silent */ }
 }
 
-onMounted(loadProfile)
+async function loadAcceptanceState() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    acceptance.value = {
+      enabled: !!data.enabled,
+      clock: (data.simulation_time || '').slice(11, 19),
+      statusText: ({ IDLE: '未启用', PAUSED: '暂停中', RUNNING: '执行中', COMPLETED: '已完成' }[data.status] || data.status || '--'),
+    }
+  } catch (_) { /* silent */ }
+}
+
+onMounted(() => {
+  loadProfile()
+  loadAcceptanceState()
+  acceptanceTimer = setInterval(loadAcceptanceState, 1000)
+})
+
+onUnmounted(() => {
+  if (acceptanceTimer) {
+    clearInterval(acceptanceTimer)
+    acceptanceTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -86,4 +113,5 @@ onMounted(loadProfile)
 .menu-pop { position: absolute; top: calc(100% + 8px); right: 0; width: 112px; padding: 6px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; box-shadow: 0 10px 24px rgba(15,23,42,0.12); }
 .menu-pop button { display: block; width: 100%; padding: 9px 10px; border: none; border-radius: 7px; background: transparent; color: #ef4444; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .menu-pop button:hover { background: #f3f4f6; color: #dc2626; }
+.acceptance-clock { position: sticky; top: 56px; z-index: 90; height: 34px; display: flex; align-items: center; justify-content: center; background: #ecfdf3; color: #047857; border-bottom: 1px solid #bbf7d0; font-size: 13px; font-weight: 800; }
 </style>

@@ -126,23 +126,11 @@
               </div>
               <table class="process-table process-table-large">
                 <tbody>
-                  <tr>
-                    <td class="pt-icon"><span class="material-icons">play_circle_filled</span></td>
-                    <td class="pt-time">{{ fmtDateTime(selected.start_time) }}</td>
-                    <td class="pt-event">开始充电</td>
-                    <td class="pt-desc">充电桩 {{ selected.station_code }} 开始为车辆充电</td>
-                  </tr>
-                  <tr>
-                    <td class="pt-icon charging"><span class="material-icons">offline_bolt</span></td>
-                    <td class="pt-time">充电中</td>
-                    <td class="pt-event">充电中</td>
-                    <td class="pt-desc">电量 <strong>{{ selected.actual_energy ?? '--' }} kWh</strong>&nbsp;·&nbsp;时长 <strong>{{ fmtDuration(selected.charge_duration_seconds) }}</strong></td>
-                  </tr>
-                  <tr>
-                    <td class="pt-icon" :class="stopIconClass(selected)"><span class="material-icons">{{ stopIcon(selected) }}</span></td>
-                    <td class="pt-time">{{ fmtDateTime(selected.stop_time) }}</td>
-                    <td class="pt-event" :class="stopEventClass(selected)">{{ stopEventLabel(selected) }}</td>
-                    <td class="pt-desc" :class="stopDescClass(selected)">{{ stopDesc(selected) }}</td>
+                  <tr v-for="item in processEvents" :key="item.key">
+                    <td class="pt-icon" :class="item.iconClass"><span class="material-icons">{{ item.icon }}</span></td>
+                    <td class="pt-time">{{ item.time }}</td>
+                    <td class="pt-event" :class="item.eventClass">{{ item.label }}</td>
+                    <td class="pt-desc" :class="item.descClass">{{ item.description }}</td>
                   </tr>
                   <tr v-if="selected.detail_generated_at">
                     <td class="pt-icon done"><span class="material-icons">description</span></td>
@@ -376,6 +364,80 @@ const chargeFeeRatio = computed(() => {
   return Math.round((charge / total) * 100)
 })
 const serviceFeeRatio = computed(() => 100 - chargeFeeRatio.value)
+
+const processEvents = computed(() => {
+  const timeline = Array.isArray(selected.value?.timeline) ? selected.value.timeline : []
+  if (timeline.length) {
+    return timeline.map((event, index) => ({
+      key: `${event.event_type}-${event.request_id}-${event.id || index}`,
+      time: fmtDateTime(event.at),
+      label: event.label || event.event_type,
+      description: event.description || processEventDescription(event),
+      icon: processIcon(event.event_type),
+      iconClass: processIconClass(event.event_type),
+      eventClass: event.event_type === 'FAULT_INTERRUPTED' ? 'pt-event-fault' : '',
+      descClass: event.event_type === 'FAULT_INTERRUPTED' ? 'pt-desc-fault' : '',
+    }))
+  }
+  return [
+    {
+      key: 'started',
+      time: fmtDateTime(selected.value?.start_time),
+      label: '开始充电',
+      description: `充电桩 ${selected.value?.station_code || '--'} 开始为车辆充电`,
+      icon: 'play_circle_filled',
+      iconClass: '',
+      eventClass: '',
+      descClass: '',
+    },
+    {
+      key: 'charging',
+      time: '充电中',
+      label: '充电中',
+      description: `电量 ${selected.value?.actual_energy ?? '--'} kWh · 时长 ${fmtDuration(selected.value?.charge_duration_seconds)}`,
+      icon: 'offline_bolt',
+      iconClass: 'charging',
+      eventClass: '',
+      descClass: '',
+    },
+    {
+      key: 'stopped',
+      time: fmtDateTime(selected.value?.stop_time),
+      label: stopEventLabel(selected.value),
+      description: stopDesc(selected.value),
+      icon: stopIcon(selected.value),
+      iconClass: stopIconClass(selected.value),
+      eventClass: stopEventClass(selected.value),
+      descClass: stopDescClass(selected.value),
+    },
+  ]
+})
+
+function processEventDescription(event) {
+  if (event.station_code && event.queue_position) return `${event.station_code} · 队列第 ${event.queue_position} 位`
+  if (event.station_code) return event.station_code
+  return ''
+}
+
+function processIcon(eventType) {
+  if (eventType === 'REQUEST_SUBMITTED') return 'assignment_turned_in'
+  if (eventType === 'WAITING_AREA_ENTERED') return 'pending_actions'
+  if (eventType === 'ASSIGNED_TO_STATION') return 'alt_route'
+  if (eventType === 'CHARGING_STARTED') return 'offline_bolt'
+  if (eventType === 'FAULT_INTERRUPTED') return 'error'
+  if (eventType === 'FAULT_REQUEUED') return 'sync_problem'
+  if (eventType === 'CHARGING_COMPLETED') return 'check_circle'
+  if (eventType === 'CHARGING_COMPLETED_EARLY') return 'stop_circle'
+  return 'radio_button_checked'
+}
+
+function processIconClass(eventType) {
+  if (eventType === 'CHARGING_STARTED') return 'charging'
+  if (eventType === 'FAULT_INTERRUPTED') return 'fault'
+  if (eventType === 'FAULT_REQUEUED') return 'warning'
+  if (eventType === 'CHARGING_COMPLETED') return 'done'
+  return ''
+}
 
 // ---- Chart ----
 const chartArea = ref(null)
@@ -755,6 +817,7 @@ onMounted(loadBills)
 .pt-icon.charging { color: #059669; }
 .pt-icon.done { color: #059669; font-weight: 700; }
 .pt-icon.fault { color: #ef4444; }
+.pt-icon.warning { color: #d97706; }
 .pt-icon.cancelled { color: #6b7280; }
 .pt-event-fault { color: #ef4444 !important; }
 .pt-desc-fault { color: #ef4444; }

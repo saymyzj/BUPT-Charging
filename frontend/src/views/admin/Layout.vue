@@ -45,6 +45,10 @@
     </aside>
 
     <main class="admin-main">
+      <div v-if="acceptance.enabled" class="acceptance-clock">
+        验收模式 · 当前模拟时间 {{ acceptance.clock }} · {{ acceptance.statusText }}
+        <router-link to="/acceptance" target="_blank">打开验收控制台</router-link>
+      </div>
       <router-view />
     </main>
   </div>
@@ -53,12 +57,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getProfile, getStations } from '@/api/charging'
+import { getAcceptanceState, getProfile, getStations } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { clearAuthSession } from '@/utils/authSession'
 
 const router = useRouter()
 const username = ref('admin')
+const acceptance = ref({ enabled: false, clock: '--', statusText: '未启用' })
 
 const menuItems = [
   { path: '/admin/overview', label: '总览', icon: 'grid_view' },
@@ -102,9 +107,24 @@ async function loadProfile() {
   }
 }
 
+async function loadAcceptanceState() {
+  try {
+    const data = unwrapResponseData(await getAcceptanceState())
+    acceptance.value = {
+      enabled: !!data.enabled,
+      clock: (data.simulation_time || '').slice(11, 19),
+      statusText: ({ IDLE: '未启用', PAUSED: '暂停中', RUNNING: '执行中', COMPLETED: '已完成' }[data.status] || data.status || '--'),
+    }
+  } catch (_) {
+    /* silent */
+  }
+}
+
 onMounted(() => {
   loadProfile()
   loadSidebarStatus()
+  loadAcceptanceState()
+  setInterval(loadAcceptanceState, 3000)
 })
 </script>
 
@@ -270,6 +290,23 @@ onMounted(() => {
   height: 100%;
   background: #f4f7f6;
 }
+
+.acceptance-clock {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #ecfdf3;
+  color: #047857;
+  border-bottom: 1px solid #bbf7d0;
+  font-size: 13px;
+  font-weight: 800;
+}
+.acceptance-clock a { color: #065f46; text-decoration: underline; }
 
 @media (max-width: 900px) {
   .admin-shell {

@@ -5,7 +5,9 @@ import json
 from flask import Blueprint, current_app, request
 
 from app.enums import DispatchMode, FaultDispatchMode
+from app.services.acceptance_service import acceptance_enabled, acceptance_time, record_manual_event
 from app.services.queue_model import (
+    fault_queue_candidates,
     handle_station_fault,
     handle_station_recover,
     handle_station_shutdown,
@@ -57,7 +59,40 @@ def _charging_queue_len() -> int:
 
 
 def _should_advance_runtime() -> bool:
-    return not bool(current_app.config.get("TESTING"))
+    return not bool(current_app.config.get("TESTING")) and not acceptance_enabled()
+
+
+def _poll_scheduler_time():
+    return acceptance_time() if acceptance_enabled() else None
+
+
+def _advance_runtime_for_read() -> None:
+    if acceptance_enabled():
+        run_dispatch_scheduler(event_time=acceptance_time())
+    elif _should_advance_runtime():
+        run_dispatch_scheduler()
+
+
+def _admin_operation_time(data, key: str):
+    if acceptance_enabled():
+        return acceptance_time((data or {}).get(key))
+    return (data or {}).get(key)
+
+
+def _record_acceptance_station_event(event_type: str, station_code: str, raw_text: str, result=None) -> None:
+    if not acceptance_enabled():
+        return
+    record_manual_event(
+        {
+            "at": acceptance_time(),
+            "event_type": event_type,
+            "station_code": station_code,
+            "value": 0,
+            "raw_text": raw_text,
+        },
+        status="EXECUTED",
+        result=result or {},
+    )
 
 
 def _iso_string(value):
@@ -176,8 +211,7 @@ def update_dispatch_mode():
 @require_admin
 def list_stations():
     include_user = not bool(current_app.config.get("TESTING"))
-    if _should_advance_runtime():
-        run_dispatch_scheduler()
+    _advance_runtime_for_read()
     rows = query_db(
         """
         SELECT
@@ -227,8 +261,7 @@ def list_stations():
 @require_admin
 def get_station_queue(station_code):
     include_user = not bool(current_app.config.get("TESTING"))
-    if _should_advance_runtime():
-        run_dispatch_scheduler()
+    _advance_runtime_for_read()
     station = query_db(
         """
         SELECT id, station_code
@@ -295,8 +328,7 @@ def get_station_queue(station_code):
 @admin_bp.route("/waiting-area", methods=["GET"])
 @require_admin
 def get_waiting_area():
-    if _should_advance_runtime():
-        run_dispatch_scheduler()
+    _advance_runtime_for_read()
 
     capacity = _system_config_int(
         "waiting_area_capacity",
@@ -323,11 +355,10 @@ def get_waiting_area():
         JOIN user u ON u.id = cr.user_id
         LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
         WHERE cr.request_status = 'WAITING_AREA'
+          AND cr.waiting_area_order > 0
         ORDER BY
             cr.charge_mode,
-            CASE WHEN cr.waiting_area_order = 0 THEN 0 ELSE 1 END,
-            COALESCE(cr.waiting_area_order, 999999),
-            CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER),
+            cr.waiting_area_order,
             cr.id
         """
     )
@@ -352,6 +383,32 @@ def get_waiting_area():
                 "source_queue_number": row["source_queue_number"],
                 "effective_queue_number": row["source_queue_number"] or row["queue_number"],
                 "is_fault_followup": bool(row["fault_source_request_id"]),
+                "is_fault_queue": False,
+                "queue_context": "WAITING_AREA",
+                "waiting_area_order": row["waiting_area_order"],
+                "request_time": _iso_string(row["request_time"]),
+                "estimated_wait_seconds": row["estimated_wait_seconds"],
+                "estimated_start_time": _iso_string(row["estimated_start_time"]),
+                "estimated_finish_time": _iso_string(row["estimated_finish_time"]),
+            }
+        )
+
+    fault_rows = []
+    for row in fault_queue_candidates():
+        fault_rows.append(
+            {
+                "request_id": row["request_id"],
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "battery_capacity": float(row["battery_capacity"]),
+                "charge_mode": row["charge_mode"],
+                "request_energy": float(row["request_energy"]),
+                "queue_number": row["queue_number"],
+                "source_queue_number": row["source_queue_number"],
+                "effective_queue_number": row["effective_queue_number"],
+                "is_fault_followup": bool(row["source_queue_number"]),
+                "is_fault_queue": True,
+                "queue_context": "FAULT_QUEUE",
                 "waiting_area_order": row["waiting_area_order"],
                 "request_time": _iso_string(row["request_time"]),
                 "estimated_wait_seconds": row["estimated_wait_seconds"],
@@ -366,6 +423,8 @@ def get_waiting_area():
             "total_waiting": len(payload_rows),
             "fast_queue_count": fast_count,
             "slow_queue_count": slow_count,
+            "fault_queue_count": len(fault_rows),
+            "fault_queue": fault_rows,
             "rows": payload_rows,
         }
     )
@@ -397,9 +456,10 @@ def shutdown_station(station_code):
 @require_admin
 def mark_station_fault(station_code):
     data = request.get_json(silent=True) or {}
-    result = handle_station_fault(station_code, data.get("fault_time"))
+    result = handle_station_fault(station_code, _admin_operation_time(data, "fault_time"))
     if result is None:
         return error_response(1002, "charging station not found")
+    _record_acceptance_station_event("FAULT", station_code, f"手动故障 {station_code}", result)
     return success_response(result)
 
 
@@ -407,9 +467,10 @@ def mark_station_fault(station_code):
 @require_admin
 def recover_station(station_code):
     data = request.get_json(silent=True) or {}
-    result = handle_station_recover(station_code, data.get("recover_time"))
+    result = handle_station_recover(station_code, _admin_operation_time(data, "recover_time"))
     if result is None:
         return error_response(1002, "charging station not found")
+    _record_acceptance_station_event("RECOVER", station_code, f"手动恢复 {station_code}", result)
     return success_response(result)
 
 

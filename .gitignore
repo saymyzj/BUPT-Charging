@@ -14,6 +14,9 @@ backend/*.db
 backend/*.db-journal
 backend/*.db-wal
 backend/*.db-shm
+backend/*.db.legacy-*.bak
 backend/*.sqlite
 backend/*.sqlite3
+backend/.env
+backend/logs/test/
 tmp/
