@@ -66,25 +66,45 @@
           </div>
         </div>
         <div class="queue-columns">
-          <article v-for="station in visibleStations" :key="station.station_code" class="queue-col">
+          <article
+            v-for="station in visibleStations"
+            :key="station.station_code"
+            class="queue-col"
+            :class="{ fault: station.station_status === 'FAULT' }"
+          >
             <div class="queue-title">
               <span>{{ station.station_code }} 队列</span>
-              <button @click="viewQueue(station.station_code)">详情</button>
+              <em>{{ stationQueueRows(station.station_code).length }} 辆</em>
             </div>
             <div v-if="stationQueueRows(station.station_code).length" class="queue-lines">
-              <div
-                v-for="(row, index) in stationQueueRows(station.station_code)"
-                :key="row.request_id || row.queue_number || index"
-                class="queue-line"
-              >
-                <span class="queue-no">{{ index + 1 }}</span>
-                <span class="chip" :class="{ active: isChargingRow(station, row, index) }">
-                  {{ userShort(row) }}
-                </span>
-                <span class="q-status" :class="{ active: isChargingRow(station, row, index) }">
-                  {{ isChargingRow(station, row, index) ? '充电中' : '等待中' }}
-                </span>
-              </div>
+              <template v-for="(row, index) in stationQueueRows(station.station_code)" :key="row.request_id || row.queue_number || index">
+                <div
+                  class="queue-line"
+                  :class="{ active: isQueueRowExpanded(station.station_code, row, index) }"
+                  @click="toggleQueueRow(station.station_code, row, index)"
+                >
+                  <span class="queue-no">{{ index + 1 }}</span>
+                  <span class="chip" :class="{ active: isChargingRow(station, row, index) }">
+                    {{ userShort(row) }}
+                  </span>
+                  <span class="q-status" :class="{ active: isChargingRow(station, row, index) }">
+                    {{ isChargingRow(station, row, index) ? '充电中' : '等待中' }}
+                  </span>
+                  <i class="material-icons queue-toggle-icon">
+                    {{ isQueueRowExpanded(station.station_code, row, index) ? 'expand_less' : 'expand_more' }}
+                  </i>
+                </div>
+                <div
+                  v-if="isQueueRowExpanded(station.station_code, row, index)"
+                  class="queue-detail-row"
+                  :class="{ active: isChargingRow(station, row, index) }"
+                >
+                  <strong>{{ userShort(row) }}</strong>
+                  <span>ID {{ row.user_id || '--' }}</span>
+                  <span>{{ Number(row.request_energy || 0).toFixed(2) }} kWh</span>
+                  <em>{{ queueInlineText(station, row, index) }}</em>
+                </div>
+              </template>
             </div>
             <div v-else class="queue-empty">队列为空</div>
           </article>
@@ -237,45 +257,55 @@
       </article>
     </section>
 
-    <section v-if="faultQueueRows.length" class="fault-queue-section">
-      <div class="table-title">故障队列</div>
+    <section class="fault-queue-section" :class="{ empty: !faultQueueRows.length }">
+      <div class="fault-queue-head">
+        <div class="table-title fault-title">
+          <div>
+            <span>故障队列</span>
+            <small>故障桩中断后的车辆会在这里按优先级重新调度</small>
+          </div>
+          <em>{{ faultQueueRows.length }} 辆优先重调度</em>
+        </div>
+        <div class="fault-summary">
+          <div class="fault-summary-item">
+            <strong>{{ faultQueueRows.length }}</strong>
+            <span>故障车辆</span>
+          </div>
+          <div class="fault-summary-item">
+            <strong>{{ faultQueueRows.filter(row => row.is_fault_followup).length }}</strong>
+            <span>中断续充</span>
+          </div>
+          <div class="fault-summary-item">
+            <strong>{{ faultQueueRows.filter(row => row.charge_mode === 'FAST').length }}</strong>
+            <span>快充</span>
+          </div>
+          <div class="fault-summary-item">
+            <strong>{{ faultQueueRows.filter(row => row.charge_mode === 'SLOW').length }}</strong>
+            <span>慢充</span>
+          </div>
+        </div>
+      </div>
       <div class="fault-queue-list">
         <article v-for="row in faultQueueRows" :key="row.request_id" class="fault-queue-item" :class="modeClass(row.charge_mode)">
-          <span class="fault-rank">{{ queueNumberText(row) }}</span>
-          <strong>{{ row.username || row.user_id || row.request_id }}</strong>
-          <em>{{ modeText(row.charge_mode) }} {{ Number(row.request_energy || 0).toFixed(2) }} kWh</em>
-          <small>{{ row.is_fault_followup ? '故障中断续充' : '故障桩等待车辆' }}</small>
+          <div class="fault-rank">{{ queueNumberText(row) }}</div>
+          <div class="fault-main">
+            <div class="fault-topline">
+              <strong>{{ row.username || row.user_id || row.request_id }}</strong>
+              <span class="fault-mode" :class="modeClass(row.charge_mode)">{{ modeText(row.charge_mode) }}</span>
+            </div>
+            <div class="fault-subline">
+              <span>ID {{ row.user_id || '--' }}</span>
+              <span>{{ Number(row.request_energy || 0).toFixed(2) }} kWh</span>
+              <span>{{ row.is_fault_followup ? '故障中断续充' : '故障桩等待车辆' }}</span>
+            </div>
+          </div>
         </article>
+        <div v-if="!faultQueueRows.length" class="fault-empty">
+          <strong>当前无故障队列车辆</strong>
+          <span>若充电桩故障，受影响车辆会在这里按优先级集中展示。</span>
+        </div>
       </div>
     </section>
-
-    <div class="modal-overlay" v-if="showModal" @click.self="showModal = false">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h3>{{ modalCode }} 桩队列</h3>
-          <button @click="showModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="queueLoading" class="loading-text">加载中...</div>
-          <table v-else-if="queueData.length">
-            <thead>
-              <tr><th>用户</th><th>用户 ID</th><th>电池容量</th><th>请求电量</th><th>排队号</th><th>状态与预计</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="(q, index) in queueData" :key="q.request_id || q.queue_number">
-                <td>{{ q.username || '--' }}</td>
-                <td>{{ q.user_id || '--' }}</td>
-                <td>{{ Number(q.battery_capacity || 0).toFixed(2) }} kWh</td>
-                <td>{{ Number(q.request_energy || 0).toFixed(2) }} kWh</td>
-                <td><strong>{{ queueNumberText(q) }}</strong></td>
-                <td>{{ queueTimeText(q, index) }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="empty-modal">队列为空</div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -287,13 +317,10 @@ import { CHARGE_MODE_TEXT, STATION_STATUS_TEXT } from '@/constants/enums'
 
 const stations = ref([])
 const loading = ref(false)
-const showModal = ref(false)
-const modalCode = ref('')
-const queueData = ref([])
-const queueLoading = ref(false)
 const currentStation = ref(null)
 const currentFinishTime = ref(null)
 const stationQueues = ref({})
+const expandedQueueRows = ref({})
 const waitingSummary = ref({ fast_queue_count: 0, slow_queue_count: 0, total_waiting: 0, capacity: 0 })
 const waitingAreaRows = ref([])
 const faultQueueRows = ref([])
@@ -487,6 +514,19 @@ function stationQueueRows(code) {
   return stationQueues.value[code] || []
 }
 
+function queueRowKey(code, row, index) {
+  return row?.request_id || row?.queue_number || `${code}-${index}`
+}
+
+function isQueueRowExpanded(code, row, index) {
+  return expandedQueueRows.value[queueRowKey(code, row, index)] === true
+}
+
+function toggleQueueRow(code, row, index) {
+  const key = queueRowKey(code, row, index)
+  expandedQueueRows.value = { ...expandedQueueRows.value, [key]: !isQueueRowExpanded(code, row, index) }
+}
+
 function isChargingRow(station, row, index) {
   return row?.request_status === 'CHARGING' || (index === 0 && Boolean(station?.current_request_id))
 }
@@ -533,6 +573,13 @@ function queueNumberText(row) {
     return `${row.queue_number}（源${row.source_queue_number}）`
   }
   return row.queue_number || '--'
+}
+
+function queueInlineText(station, row, index) {
+  if (isChargingRow(station, row, index)) return '正在服务'
+  const frontCount = Math.max(0, index)
+  const mode = modeText(row?.charge_mode || station?.charge_mode)
+  return `前方 ${frontCount} 辆 · ${mode}`
 }
 
 async function viewQueue(code) {
@@ -777,7 +824,7 @@ onUnmounted(() => {
 }
 .kpi:nth-child(1) .kpi-body strong,
 .kpi:nth-child(5) .kpi-body strong {
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .kpi-icon {
@@ -802,7 +849,7 @@ onUnmounted(() => {
 .kpi-body strong {
   display: block;
   margin-top: 4px;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1;
   font-weight: 850;
 }
@@ -921,6 +968,7 @@ i.gray { background: #98a2b3; }
   position: relative;
   height: 132px;
   margin: 0 2px 6px;
+  overflow: hidden;
 }
 
 .main-road {
@@ -1066,6 +1114,17 @@ i.gray { background: #98a2b3; }
   color: #101828;
 }
 
+.table-title em {
+  font-style: normal;
+  color: #047857;
+  background: #ecfdf3;
+  border: 1px solid #cdeee0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .run-pill {
   height: 20px;
   flex-shrink: 0;
@@ -1190,10 +1249,22 @@ i.gray { background: #98a2b3; }
 }
 
 .queue-col {
-  padding-top: 2px;
-  border: 0;
-  background: transparent;
-  border-radius: 0;
+  padding: 10px;
+  border: 1px solid #e5ece8;
+  background: #fff;
+  border-radius: 12px;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+}
+
+.queue-col:hover {
+  border-color: #bdebd6;
+  box-shadow: 0 8px 18px rgba(16,24,40,.045);
+  transform: translateY(-1px);
+}
+
+.queue-col.fault {
+  border-color: #fecdd3;
+  background: #fff7f7;
 }
 
 .queue-title {
@@ -1203,7 +1274,7 @@ i.gray { background: #98a2b3; }
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 850;
-  min-height: 24px;
+  min-height: 26px;
   gap: 8px;
 }
 
@@ -1214,27 +1285,47 @@ i.gray { background: #98a2b3; }
   white-space: nowrap;
 }
 
-.queue-title button {
-  height: 24px;
-  padding: 0 9px;
-  font-size: 11px;
+.queue-title em {
+  margin-left: auto;
+  font-style: normal;
+  color: #047857;
+  background: #ecfdf3;
+  border: 1px solid #cdeee0;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.queue-title .material-icons {
+  font-size: 17px;
+  color: #667085;
 }
 
 .queue-lines {
   display: grid;
   gap: 4px;
-  max-height: 74px;
+  max-height: none;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .queue-line {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 48px;
+  grid-template-columns: 16px minmax(0, 1fr) 48px 16px;
   align-items: center;
   gap: 6px;
   min-height: 22px;
   font-size: 11px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 8px;
+  transition: background .15s, box-shadow .15s;
+}
+
+.queue-line:hover,
+.queue-line.active {
+  background: #f8fafc;
 }
 
 .queue-no {
@@ -1280,6 +1371,11 @@ i.gray { background: #98a2b3; }
   font-weight: 800;
 }
 
+.queue-toggle-icon {
+  color: #98a2b3;
+  font-size: 16px;
+}
+
 .queue-empty,
 .empty-modal,
 .loading-text {
@@ -1287,6 +1383,41 @@ i.gray { background: #98a2b3; }
   color: #98a2b3;
   text-align: center;
   font-size: 13px;
+}
+
+.queue-detail-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #edf2ef;
+  border-radius: 10px;
+  background: #fbfefc;
+}
+
+.queue-detail-row.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.queue-detail-row strong {
+  color: #101828;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-detail-row span,
+.queue-detail-row em {
+  font-size: 11px;
+  color: #667085;
+  font-style: normal;
+}
+
+.queue-detail-row em {
+  color: #047857;
+  font-weight: 800;
 }
 
 .row-fault td {
@@ -1595,44 +1726,269 @@ i.gray { background: #98a2b3; }
   background: linear-gradient(180deg, #fff 0%, #fff7f8 100%);
 }
 
+.fault-queue-head {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #f6d5db;
+}
+
+.fault-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fault-title > div {
+  display: grid;
+  gap: 4px;
+}
+
+.fault-title span {
+  font-size: 16px;
+  font-weight: 850;
+  color: #101828;
+}
+
+.fault-title small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #be123c;
+}
+
+.fault-title em {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #be123c;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fault-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fault-summary-item {
+  padding: 10px 12px;
+  border: 1px solid #ffd7dd;
+  border-radius: 12px;
+  background: rgba(255,255,255,.9);
+}
+
+.fault-summary-item strong {
+  display: block;
+  color: #be123c;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.fault-summary-item span {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 11px;
+}
+
 .fault-queue-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  padding: 16px;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.fault-queue-section.empty .fault-queue-list {
+  grid-template-columns: 1fr;
 }
 
 .fault-queue-item {
   display: grid;
-  grid-template-columns: 54px 1fr;
-  gap: 5px 12px;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid #ffe4e6;
-  border-radius: 14px;
-  background: #fff7f8;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: stretch;
+  padding: 13px 14px;
+  border: 1px solid #ffd7dd;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(255,247,248,.95) 100%);
+  box-shadow: 0 10px 24px rgba(16,24,40,.045);
+  position: relative;
+  overflow: hidden;
 }
 
 .fault-rank {
   grid-row: 1 / span 3;
   display: grid;
   place-items: center;
-  min-height: 44px;
-  border-radius: 12px;
+  min-height: 100%;
+  border-radius: 14px;
   background: #ffe4e6;
   color: #be123c;
   font-weight: 900;
+  font-size: 18px;
+  letter-spacing: .2px;
 }
 
-.fault-queue-item strong {
+.fault-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  align-content: center;
+}
+
+.fault-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fault-topline strong {
+  font-size: 15px;
   color: #101828;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.fault-queue-item em,
-.fault-queue-item small {
+.fault-mode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.fault-mode.fast {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.fault-mode.slow {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.fault-mode.pending {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.fault-subline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   color: #667085;
-  font-style: normal;
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.fault-subline span {
+  position: relative;
+}
+
+.fault-subline span + span::before {
+  content: "·";
+  position: absolute;
+  left: -9px;
+  color: #d0d5dd;
+}
+
+.fault-queue-item.fast {
+  border-color: #bfdbfe;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(239,246,255,.95) 100%);
+}
+
+.fault-queue-item.slow {
+  border-color: #fed7aa;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(255,247,237,.95) 100%);
+}
+
+.fault-queue-item.pending {
+  border-color: #ddd6fe;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(245,243,255,.95) 100%);
+}
+
+.fault-empty {
+  padding: 28px 18px;
+  border: 1px dashed #fecdd3;
+  border-radius: 14px;
+  background: #fff7f8;
+  color: #9f1239;
+  display: grid;
+  gap: 6px;
+}
+
+.fault-empty strong {
+  font-size: 14px;
+  color: #be123c;
+}
+
+.fault-empty span {
+  font-size: 12px;
+  color: #9f1239;
+  line-height: 1.6;
+}
+
+@media (max-width: 1200px) {
+  .fault-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .fault-queue-head {
+    padding: 14px 14px 10px;
+  }
+
+  .fault-title {
+    flex-direction: column;
+  }
+
+  .fault-title em {
+    min-width: 0;
+    align-self: flex-start;
+  }
+
+  .fault-queue-list {
+    padding: 12px 12px 14px;
+  }
+
+  .fault-queue-item {
+    grid-template-columns: 54px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .fault-rank {
+    font-size: 16px;
+  }
+
+  .fault-topline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .side-icon.pulse {
@@ -1802,7 +2158,7 @@ td strong {
 
 .donut span {
   margin-top: 4px;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 950;
   color: #101828;
 }

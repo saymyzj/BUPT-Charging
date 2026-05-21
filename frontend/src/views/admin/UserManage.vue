@@ -1,28 +1,25 @@
 <template>
-  <div class="page">
+  <div class="page user-manage-page">
     <div class="page-head">
-      <h1>用户管理</h1>
-      <p>查看用户列表、详情，维护车辆电池容量</p>
-    </div>
-
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-left">
+      <div>
+        <h1>用户管理</h1>
+        <p>集中查看账号、车辆容量与充电历史，支持直接展开多名用户明细。</p>
+      </div>
+      <div class="head-tools">
         <div class="search-box">
           <span class="material-icons">search</span>
           <input type="text" v-model="searchQuery" placeholder="搜索用户ID / 用户名" />
         </div>
+        <button class="btn-refresh" :disabled="loading" @click="loadUsers">
+          <span class="material-icons">refresh</span>刷新
+        </button>
       </div>
-      <button class="btn-refresh" :disabled="loading" @click="loadUsers">
-        <span class="material-icons">refresh</span>刷新
-      </button>
     </div>
 
     <!-- Loading -->
     <div v-if="loading" class="loading-state">加载中…</div>
 
     <template v-else-if="users.length">
-      <!-- KPI Cards -->
       <div class="kpi-row">
         <div class="kpi-card">
           <div class="kpi-left">
@@ -59,11 +56,13 @@
         </div>
       </div>
 
-      <!-- Table Panel -->
       <div class="panel">
         <div class="panel-head">
-          <h2>用户列表</h2>
-          <span class="panel-count">共 {{ filteredUsers.length }} 条</span>
+          <div>
+            <h2>用户列表</h2>
+            <p>点击详情展开历史详单，多个用户可同时对照。</p>
+          </div>
+          <span class="panel-count">显示 {{ filteredUsers.length }} / {{ users.length }} 条</span>
         </div>
         <div class="table-scroll">
           <table>
@@ -82,7 +81,15 @@
               <template v-for="u in filteredUsers" :key="u.user_id">
                 <tr>
                   <td><span class="uid mono">{{ u.user_id }}</span></td>
-                  <td>{{ u.username }}</td>
+                  <td>
+                    <div class="user-cell">
+                      <span class="avatar">{{ (u.username || 'U').slice(0, 1).toUpperCase() }}</span>
+                      <div>
+                        <strong>{{ u.username }}</strong>
+                        <small>{{ u.role === 'ADMIN' ? '系统管理员' : '普通用户' }}</small>
+                      </div>
+                    </div>
+                  </td>
                   <td class="mono">{{ capacityText(u) }}</td>
                   <td><span class="tag" :class="u.role === 'ADMIN' ? 'admin' : 'user'">{{ u.role }}</span></td>
                   <td>{{ fmtDate(u.created_at) }}</td>
@@ -91,7 +98,8 @@
                   </td>
                   <td>
                     <div class="op">
-                      <a @click="toggleDetail(u.user_id)" :class="{ 'op-loading': detailLoading[u.user_id] }">
+                      <a class="op-detail" @click="toggleDetail(u.user_id)" :class="{ 'op-loading': detailLoading[u.user_id] }">
+                        <span class="material-icons">{{ expandedDetails[u.user_id] ? 'expand_less' : 'expand_more' }}</span>
                         {{ expandedDetails[u.user_id] ? '收起' : '详情' }}
                       </a>
                       <a v-if="u.role !== 'ADMIN'" class="warn" @click="editCapacity(u)"
@@ -104,6 +112,16 @@
                 <tr v-if="expandedDetails[u.user_id]" class="detail-row">
                   <td colspan="7">
                     <div class="inline-detail">
+                      <div class="detail-head">
+                        <div class="user-cell large">
+                          <span class="avatar">{{ (expandedDetails[u.user_id].username || 'U').slice(0, 1).toUpperCase() }}</span>
+                          <div>
+                            <strong>{{ expandedDetails[u.user_id].username }}</strong>
+                            <small>{{ expandedDetails[u.user_id].role === 'ADMIN' ? '系统管理员账号' : '用户账号详情' }}</small>
+                          </div>
+                        </div>
+                        <span class="detail-count">历史详单 {{ detailRows(expandedDetails[u.user_id]).length }} 条</span>
+                      </div>
                       <div class="detail-grid">
                         <div class="dg-item"><span class="dg-key">用户ID</span><span class="dg-val mono">{{ expandedDetails[u.user_id].user_id }}</span></div>
                         <div class="dg-item"><span class="dg-key">用户名</span><span class="dg-val">{{ expandedDetails[u.user_id].username }}</span></div>
@@ -112,19 +130,18 @@
                       </div>
                       <div class="detail-history" v-if="detailRows(expandedDetails[u.user_id]).length">
                         <h4>历史详单</h4>
-                        <div class="table-scroll">
-                          <table class="t-sm">
-                            <thead><tr><th>详单ID</th><th>桩位</th><th>电量</th><th>总费用</th><th>终态</th></tr></thead>
-                            <tbody>
-                              <tr v-for="d in detailRows(expandedDetails[u.user_id])" :key="d.detail_id">
-                                <td class="mono">{{ d.detail_id }}</td>
-                                <td>{{ d.station_code }}</td>
-                                <td class="mono">{{ d.actual_energy }} kWh</td>
-                                <td class="mono">¥{{ (d.total_fee || 0).toFixed(2) }}</td>
-                                <td>{{ d.request_status }}</td>
-                              </tr>
-                            </tbody>
-                          </table>
+                        <div class="history-list">
+                          <article v-for="d in detailRows(expandedDetails[u.user_id])" :key="d.detail_id" class="history-card">
+                            <div>
+                              <span class="history-id mono">{{ d.detail_id }}</span>
+                              <strong>{{ d.station_code || '--' }}</strong>
+                            </div>
+                            <div class="history-metrics">
+                              <span>{{ d.actual_energy }} kWh</span>
+                              <span>¥{{ (d.total_fee || 0).toFixed(2) }}</span>
+                            </div>
+                            <em>{{ d.request_status || '已完成' }}</em>
+                          </article>
                         </div>
                       </div>
                       <div v-else class="empty-detail">暂无历史详单</div>
@@ -262,58 +279,65 @@ onMounted(loadUsers)
 </script>
 
 <style scoped>
-.page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
-.page-head { margin-bottom: 22px; }
-.page-head h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -.5px; color: #111827; }
-.page-head p { margin: 5px 0 0; font-size: 13px; color: #6b7280; }
+.page { max-width: 1320px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
+.user-manage-page { color: #101828; }
+.page-head {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid #e6f1ea;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4fbf7 100%);
+  box-shadow: 0 12px 30px rgba(16,24,40,.055);
+}
+.page-head h1 { margin: 0; font-size: 24px; font-weight: 900; color: #101828; }
+.page-head p { margin: 5px 0 0; font-size: 13px; color: #667085; line-height: 1.55; }
 .mono { font-family: "SF Mono", ui-monospace, Consolas, monospace; }
 
-/* Toolbar */
-.toolbar {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
-}
-.toolbar-left { display: flex; gap: 10px; align-items: center; }
+.head-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .search-box {
   width: 280px; height: 38px;
-  border: 1px solid #edf0f2; border-radius: 10px;
+  border: 1px solid #dce8e1; border-radius: 10px;
   background: #fff; display: flex; align-items: center;
   gap: 8px; padding: 0 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
 }
 .search-box .material-icons { font-size: 18px; color: #98a2b3; }
-.search-box input { border: none; outline: none; width: 100%; font-size: 13px; color: #344054; font-family: inherit; background: transparent; }
+.search-box input { border: none; outline: none; width: 100%; font-size: 14px; color: #344054; font-family: inherit; background: transparent; }
 .search-box input::placeholder { color: #98a2b3; }
 .btn-refresh {
   height: 38px; border-radius: 10px;
-  border: 1px solid #edf0f2; background: #fff;
+  border: 1px solid #dce8e1; background: #fff;
   padding: 0 16px; color: #344054; font-weight: 700;
   display: flex; align-items: center; gap: 6px;
-  cursor: pointer; font-family: inherit; font-size: 13px;
+  cursor: pointer; font-family: inherit; font-size: 14px;
 }
 .btn-refresh .material-icons { font-size: 16px; }
 .btn-refresh:hover { background: #f9fafb; border-color: #d0d5dd; }
 .btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
 
-.loading-state, .empty-state { color: #9ca3af; font-size: 14px; padding: 60px 0; text-align: center; }
+.loading-state, .empty-state { color: #9ca3af; font-size: 15px; padding: 60px 0; text-align: center; }
 
 /* KPI Cards */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .kpi-card {
-  min-height: 100px; padding: 18px;
-  border: 1px solid #f1f5f9; border-radius: 18px; background: white;
+  min-height: 86px; padding: 14px;
+  border: 1px solid #edf2ef; border-radius: 14px; background: white;
   display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
-  box-shadow: 0 10px 28px rgba(16,24,40,.06);
+  box-shadow: 0 8px 22px rgba(16,24,40,.045);
 }
 .kpi-left { min-width: 0; }
-.kpi-label { font-size: 13px; color: #667085; font-weight: 600; margin-bottom: 8px; }
-.kpi-val { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; letter-spacing: -.03em; }
-.kpi-sub { font-size: 11px; color: #98a2b3; margin-top: 6px; }
+.kpi-label { font-size: 12px; color: #667085; font-weight: 700; margin-bottom: 6px; }
+.kpi-val { font-size: 24px; font-weight: 900; color: #101828; line-height: 1; }
+.kpi-sub { font-size: 12px; color: #98a2b3; margin-top: 6px; }
 .kpi-icon {
   width: 46px; height: 46px; border-radius: 14px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.kpi-icon .material-icons { font-size: 22px; }
+.kpi-icon .material-icons { font-size: 23px; }
 .kpi-icon.green { background: #ecfdf5; color: #1f8f60; }
 .kpi-icon.gold { background: #fffbeb; color: #d8a23a; }
 .kpi-icon.blue { background: #eff6ff; color: #4f86f7; }
@@ -323,60 +347,91 @@ onMounted(loadUsers)
 
 /* Panel */
 .panel {
-  background: white; border: 1px solid #f1f5f9; border-radius: 18px;
-  overflow: hidden; box-shadow: 0 10px 28px rgba(16,24,40,.06);
+  background: white; border: 1px solid #edf2ef; border-radius: 16px;
+  overflow: hidden; box-shadow: 0 12px 30px rgba(16,24,40,.055);
 }
 .panel-head {
-  padding: 16px 20px; border-bottom: 1px solid #f1f5f9;
+  padding: 14px 18px; border-bottom: 1px solid #edf2ef;
   display: flex; align-items: center; justify-content: space-between;
+  background: #fbfefc;
 }
-.panel-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: #111827; }
-.panel-count { font-size: 12px; color: #98a2b3; }
+.panel-head h2 { margin: 0; font-size: 16px; font-weight: 900; color: #101828; }
+.panel-head p { margin: 3px 0 0; color: #667085; font-size: 12px; }
+.panel-count { font-size: 12px; color: #00895f; font-weight: 800; background: #ecfdf3; border: 1px solid #cdeee0; border-radius: 999px; padding: 4px 9px; }
 .table-scroll { overflow-x: auto; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; color: #344054; }
-thead { background: #f9fafb; }
-th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #98a2b3; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
-td { padding: 13px 16px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+thead { background: #f8faf9; }
+th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 800; color: #667085; letter-spacing: 0; border-bottom: 1px solid #edf2ef; white-space: nowrap; }
+td { padding: 11px 14px; border-bottom: 1px solid #edf2ef; white-space: nowrap; }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: #f9fafb; }
+tr:hover td { background: #fbfefc; }
 
 .uid { font-weight: 700; color: #111827; }
-.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.user-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.user-cell strong { display: block; color: #101828; font-size: 13px; font-weight: 850; }
+.user-cell small { display: block; margin-top: 2px; color: #98a2b3; font-size: 11px; }
+.user-cell.large .avatar { width: 42px; height: 42px; border-radius: 12px; font-size: 17px; }
+.user-cell.large strong { font-size: 15px; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #ecfdf3, #e0f2fe);
+  color: #047857; font-weight: 900; flex: 0 0 auto;
+}
+.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .tag.admin { background: #fffbeb; color: #b45309; }
 .tag.user { background: #ecfdf5; color: #059669; }
-.chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #f3f4f6; color: #6b7280; }
+.chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #f3f4f6; color: #6b7280; }
 .chip.active { background: #fef2f2; color: #ef4444; }
 
-.op { display: flex; gap: 12px; align-items: center; }
-.op a { color: #1f8f60; font-weight: 600; font-size: 12px; cursor: pointer; text-decoration: none; }
-.op a:hover { text-decoration: underline; }
+.op { display: flex; gap: 8px; align-items: center; }
+.op a { color: #047857; font-weight: 750; font-size: 13px; cursor: pointer; text-decoration: none; }
+.op a:hover { color: #065f46; }
+.op-detail { height: 28px; padding: 0 9px; border-radius: 8px; background: #ecfdf3; display: inline-flex; align-items: center; gap: 3px; }
+.op-detail .material-icons { font-size: 16px; }
 .op a.warn { color: #d97706; }
 .op a.muted { opacity: .4; pointer-events: none; }
-.op-na { font-size: 12px; color: #98a2b3; }
+.op-na { font-size: 13px; color: #98a2b3; }
 .op-loading { opacity: .5; }
 
 /* Detail row */
-.detail-row td { background: #f9fafb; padding: 0 !important; }
-.inline-detail { padding: 18px 20px 20px; border-top: 1px solid #f1f5f9; }
+.detail-row td { background: #f6fbf8; padding: 0 !important; }
+.inline-detail { padding: 18px 20px 20px; border-top: 1px solid #dff3e8; box-shadow: inset 3px 0 0 #10b981; }
+.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.detail-count { color: #047857; background: #ecfdf3; border: 1px solid #cdeee0; border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 850; }
 .detail-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
-  background: #f1f5f9; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden;
+  background: #e5ece8; border: 1px solid #e5ece8; border-radius: 12px; overflow: hidden;
 }
 .dg-item { display: flex; justify-content: space-between; padding: 12px 16px; background: white; }
-.dg-key { font-size: 13px; color: #667085; }
-.dg-val { font-size: 13px; font-weight: 700; color: #111827; }
+.dg-key { font-size: 14px; color: #667085; }
+.dg-val { font-size: 14px; font-weight: 700; color: #111827; }
 .detail-history { margin-top: 16px; }
-.detail-history h4 { font-size: 13px; font-weight: 700; margin: 0 0 10px; color: #344054; }
-.empty-detail { margin-top: 14px; color: #98a2b3; font-size: 12px; }
-
-.t-sm { width: 100%; border-collapse: collapse; font-size: 12px; }
-.t-sm th { text-align: left; padding: 8px 12px; color: #98a2b3; border-bottom: 1px solid #f1f5f9; font-weight: 600; font-size: 11px; }
-.t-sm td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #344054; }
+.detail-history h4 { font-size: 13px; font-weight: 900; margin: 0 0 8px; color: #344054; }
+.empty-detail { margin-top: 12px; color: #98a2b3; font-size: 12px; }
+.history-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.history-card {
+  min-height: 80px; padding: 10px; border: 1px solid #e5ece8; border-radius: 12px;
+  background: #fff; display: grid; gap: 10px; box-shadow: 0 4px 14px rgba(16,24,40,.035);
+}
+.history-card > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.history-id { color: #667085; font-size: 13px; }
+.history-card strong { color: #101828; }
+.history-metrics { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-metrics span { padding: 3px 7px; border-radius: 8px; background: #f8fafc; color: #475467; font-size: 12px; font-weight: 750; }
+.history-card em { justify-self: start; font-style: normal; color: #047857; background: #ecfdf3; border-radius: 999px; padding: 3px 7px; font-size: 11px; font-weight: 850; }
 
 .footer-row {
-  padding: 12px 20px; border-top: 1px solid #f1f5f9;
+  padding: 10px 18px; border-top: 1px solid #f1f5f9;
   display: flex; align-items: center; justify-content: space-between;
   font-size: 12px; color: #98a2b3;
+}
+
+@media (max-width: 980px) {
+  .page-head { align-items: stretch; flex-direction: column; }
+  .head-tools, .search-box { width: 100%; }
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-grid { grid-template-columns: 1fr; }
 }
 </style>

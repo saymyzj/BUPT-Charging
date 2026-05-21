@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAcceptanceState, getProfile, getStations } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
@@ -77,6 +77,8 @@ const uptime = ref('--')
 const onlineCount = ref(0)
 const totalCount = ref(0)
 const onlineRate = ref(0)
+let sidebarTimer = null
+let acceptanceTimer = null
 
 async function loadSidebarStatus() {
   try {
@@ -124,7 +126,13 @@ onMounted(() => {
   loadProfile()
   loadSidebarStatus()
   loadAcceptanceState()
-  setInterval(loadAcceptanceState, 3000)
+  sidebarTimer = window.setInterval(loadSidebarStatus, 5000)
+  acceptanceTimer = window.setInterval(loadAcceptanceState, 3000)
+})
+
+onUnmounted(() => {
+  if (sidebarTimer) window.clearInterval(sidebarTimer)
+  if (acceptanceTimer) window.clearInterval(acceptanceTimer)
 })
 </script>
 

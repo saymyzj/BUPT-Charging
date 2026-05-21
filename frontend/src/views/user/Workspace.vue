@@ -1,26 +1,28 @@
 <template>
   <main class="page workspace-page">
-    <section class="status-row" :class="{ 'status-amber': isWaiting && hasActive }">
+    <section class="status-row" :class="{ 'status-fault': isFaultQueue && hasActive, 'status-amber': !isFaultQueue && isWaiting && hasActive }">
       <div class="status-main">
-        <div class="status-bolt">{{ isWaiting && hasActive ? '⏳' : '⚡' }}</div>
+        <div class="status-bolt" :class="{ 'bolt-fault': isFaultQueue && hasActive, 'bolt-amber': !isFaultQueue && isWaiting && hasActive }">{{ isFaultQueue && hasActive ? '⚠️' : (isWaiting && hasActive ? '⏳' : '⚡') }}</div>
         <div>
-          <div class="status-title" :class="{ 'amber-text': isWaiting && hasActive }">
-            <template v-if="isFaultQueue && hasActive">故障队列优先重调度中</template>
+          <div class="status-title" :class="{ 'fault-text': isFaultQueue && hasActive, 'amber-text': !isFaultQueue && isWaiting && hasActive }">
+            <template v-if="isFaultQueue && hasActive">故障队列 · 优先重调度中</template>
             <template v-else-if="isWaiting && hasActive">等待系统分配中</template>
             <template v-else>当前状态：<strong>{{ hasActive ? statusText : '空闲' }}</strong></template>
           </div>
-          <div class="status-sub" :class="{ 'amber-text': isWaiting && hasActive }">
-            <template v-if="isFaultQueue && hasActive">当前位于故障队列，不占用公共等候区容量。</template>
+          <div class="status-sub" :class="{ 'fault-text': isFaultQueue && hasActive, 'amber-text': !isFaultQueue && isWaiting && hasActive }">
+            <template v-if="isFaultQueue && hasActive">您的请求因桩位故障已转入故障队列，系统将优先为您重新分配可用桩位，不占用公共等候区容量。</template>
             <template v-else-if="isWaiting && hasActive">系统正在计算最优充电策略，请将车辆驶入公共等候区。</template>
             <template v-else>{{ hasActive ? statusHeadline : '当前没有进行中的充电请求' }}</template>
           </div>
         </div>
       </div>
-      <div class="metric"><div class="metric-icon">👤</div><div><div class="metric-label">排队号</div><div class="metric-val">{{ queueNumberText(activeRequest) }}</div></div></div>
-      <div class="metric"><div class="metric-icon">🚗</div><div><div class="metric-label">前车数量</div><div class="metric-val">{{ frontVehicleCountText }} 辆</div></div></div>
-      <div class="metric"><div class="metric-icon">🕘</div><div><div class="metric-label">{{ durationMetricLabel }}</div><div class="metric-val">{{ durationMetricDisplay }}</div></div></div>
-      <div class="metric"><div class="metric-icon">⛽</div><div><div class="metric-label">正常桩</div><div class="metric-val"><span class="green">{{ runningStationCount }}</span> / {{ totalStationCount }}</div></div></div>
-      <div class="metric"><div class="metric-icon">🅿</div><div><div class="metric-label">空闲桩</div><div class="metric-val"><span class="green">{{ idleStationCount }}</span> / {{ totalStationCount }}</div></div></div>
+      <div class="metric-group">
+        <div class="metric"><div class="metric-label">排队号</div><div class="metric-val">{{ queueNumberText(activeRequest) }}</div></div>
+        <div class="metric"><div class="metric-label">前车数量</div><div class="metric-val">{{ frontVehicleCountText }} <small>辆</small></div></div>
+        <div class="metric"><div class="metric-label">{{ durationMetricLabel }}</div><div class="metric-val">{{ durationMetricDisplay }}</div></div>
+        <div class="metric"><div class="metric-label">正常桩</div><div class="metric-val"><span class="green">{{ runningStationCount }}</span> / {{ totalStationCount }}</div></div>
+        <div class="metric"><div class="metric-label">空闲桩</div><div class="metric-val"><span class="green">{{ idleStationCount }}</span> / {{ totalStationCount }}</div></div>
+      </div>
     </section>
 
     <section class="queue-zone">
@@ -37,7 +39,7 @@
         </div>
       </div>
 
-      <div class="dispatch-stage">
+      <div class="dispatch-stage" ref="dispatchStageRef">
         <div class="main-lane"></div>
         <div class="route-pulse"></div>
         <span class="entry-label">入口</span>
@@ -77,34 +79,36 @@
       <div class="panel">
         <h2 class="section-title">提交充电请求</h2>
         <p class="section-sub">填写请求电量，系统将自动分配充电桩。</p>
-        <div class="form-row">
-          <div>
-            <label>充电模式</label>
-            <select v-model="form.charge_mode" :disabled="hasActive || syncingActive">
-              <option value="FAST">⚡ 快充（30kW）</option>
-              <option value="SLOW">慢充（10kW）</option>
-            </select>
+        <div class="form-section">
+          <label class="form-label">充电模式</label>
+          <div class="mode-toggle">
+            <button class="mode-btn" :class="{ active: form.charge_mode === 'FAST' }" :disabled="hasActive || syncingActive" @click="form.charge_mode = 'FAST'">
+              <span class="mode-icon">⚡</span>
+              <span class="mode-info"><strong>快充</strong><small>30kW · 大功率</small></span>
+            </button>
+            <button class="mode-btn" :class="{ active: form.charge_mode === 'SLOW' }" :disabled="hasActive || syncingActive" @click="form.charge_mode = 'SLOW'">
+              <span class="mode-icon">🔋</span>
+              <span class="mode-info"><strong>慢充</strong><small>10kW · 经济实惠</small></span>
+            </button>
           </div>
-          <div>
-            <label>请求电量（kWh）
-              <span v-if="batteryCapacity" style="font-weight:400;color:#9ca3af;margin-left:6px;">最大 {{ batteryCapacity }} kWh</span>
-            </label>
-            <input type="number" v-model.number="form.request_energy"
+        </div>
+        <div class="form-section">
+          <label class="form-label">请求电量<span v-if="batteryCapacity" class="form-hint">电池容量 {{ batteryCapacity }} kWh</span></label>
+          <div class="energy-input-wrap">
+            <input type="number" class="energy-input" v-model.number="form.request_energy"
               :placeholder="batteryCapacity ? `1 ~ ${batteryCapacity}` : '1 ~ 电池容量'"
               :disabled="hasActive || syncingActive"
               :max="batteryCapacity || undefined" min="0.1" step="0.1">
-            <div v-if="energyOverCapacity" style="color:#ef4444;font-size:12px;margin-top:4px;">
-              ⚠ 超出电池容量（{{ batteryCapacity }} kWh），请重新输入
-            </div>
+            <span class="energy-unit">kWh</span>
           </div>
+          <div v-if="energyOverCapacity" class="energy-warn">⚠ 超出电池容量（{{ batteryCapacity }} kWh）</div>
         </div>
         <button class="submit" @click="submitRequest" :disabled="hasActive || syncingActive || submitting">
-          ✈ {{ hasActive ? '当前有进行中的请求' : syncingActive ? '同步中...' : submitting ? '提交中...' : '提交请求' }}
+          {{ hasActive ? '当前有进行中的请求' : syncingActive ? '同步中...' : submitting ? '提交中...' : '提交充电请求' }}
         </button>
         <div class="error-box" v-if="errMsg">{{ errMsg }}</div>
         <div class="notice" v-else>
-          <strong>系统自动调度</strong><br>
-          提交后，系统会根据当前队列、充电桩状态和最短完成时间策略自动分配桩位。您无需手动选择方案。
+          <strong>系统自动调度</strong> 提交后系统会根据队列、桩状态和最短完成时间策略自动分配桩位。
         </div>
       </div>
 
@@ -183,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { addAcceptanceEvent, createChargeRequest, getAcceptanceState, getActiveRequest, getProfile, getStationsOverview } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES } from '@/constants/enums'
@@ -206,7 +210,28 @@ let clockTimer = null
 const now = ref(new Date())
 const vehicleCode = ref('')
 
-const pileTargets = [212, 424, 636, 848, 1060]
+const dispatchStageRef = ref(null)
+const stageWidth = ref(0)
+
+const pileTargets = computed(() => {
+  const w = stageWidth.value
+  if (!w) return [212, 424, 636, 848, 1060]
+  const left = 170
+  const right = 150
+  const gap = 28
+  const rowWidth = w - left - right
+  const totalGap = gap * 4
+  const colWidth = (rowWidth - totalGap) / 5
+  return Array.from({ length: 5 }, (_, i) => {
+    return left + i * (colWidth + gap) + colWidth / 2
+  })
+})
+
+function measureStageWidth() {
+  if (dispatchStageRef.value) {
+    stageWidth.value = dispatchStageRef.value.offsetWidth
+  }
+}
 
 const hasActive = computed(() => {
   if (!currentReq.value) return false
@@ -386,12 +411,12 @@ const dispatchCars = computed(() => {
   if (status === REQUEST_STATUS.WAITING_AREA) {
     return []
   } else if (status === REQUEST_STATUS.QUEUED && activeIndex >= 0) {
-    cars.push({ id: 0, targetX: pileTargets[activeIndex], delay: 0, assigned: true, junction: true, targetCode: dispatchPiles.value[activeIndex]?.code || '' })
+    cars.push({ id: 0, targetX: pileTargets.value[activeIndex], delay: 0, assigned: true, junction: true, targetCode: dispatchPiles.value[activeIndex]?.code || '' })
   } else if (status === REQUEST_STATUS.CHARGING && activeIndex >= 0) {
-    cars.push({ id: 0, targetX: pileTargets[activeIndex], delay: 0, assigned: true, targetCode: dispatchPiles.value[activeIndex]?.code || '' })
+    cars.push({ id: 0, targetX: pileTargets.value[activeIndex], delay: 0, assigned: true, targetCode: dispatchPiles.value[activeIndex]?.code || '' })
   }
   otherQueuedIndexes.forEach((index, i) => {
-    cars.push({ id: i + 1, targetX: pileTargets[index], delay: (i + 1) * 2.6, assigned: true, targetCode: dispatchPiles.value[index]?.code || '' })
+    cars.push({ id: i + 1, targetX: pileTargets.value[index], delay: (i + 1) * 2.6, assigned: true, targetCode: dispatchPiles.value[index]?.code || '' })
   })
   return cars
 })
@@ -645,6 +670,8 @@ function isTypingTarget() {
   return Boolean(el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable))
 }
 
+let resizeObserver = null
+
 onMounted(() => {
   loadProfile()
   loadStationOverview()
@@ -654,6 +681,13 @@ onMounted(() => {
   clockTimer = setInterval(() => {
     syncAcceptanceClock()
   }, 30000)
+  nextTick(() => {
+    measureStageWidth()
+    if (dispatchStageRef.value && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => measureStageWidth())
+      resizeObserver.observe(dispatchStageRef.value)
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -661,6 +695,10 @@ onUnmounted(() => {
   if (clockTimer) {
     clearInterval(clockTimer)
     clockTimer = null
+  }
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
   }
 })
 </script>
@@ -672,8 +710,16 @@ onUnmounted(() => {
 }
 
 /* STATUS AMBER */
-.status-amber { border-color: #fde68a !important; background: linear-gradient(180deg, rgba(255,251,235,.98), rgba(255,253,243,.98)) !important; }
+.status-amber { border-color: #fde68a !important; background: linear-gradient(135deg, rgba(255,251,235,.85), rgba(255,253,243,.95)) !important; box-shadow: 0 4px 16px rgba(245,158,11,.08) !important; }
+.status-amber .metric { background: rgba(255,255,255,.6); }
 .amber-text { color: #92400e !important; }
+.bolt-amber { background: linear-gradient(135deg, #fbbf24, #f59e0b) !important; box-shadow: 0 8px 20px rgba(245,158,11,.2) !important; }
+
+/* STATUS FAULT */
+.status-fault { border-color: #fecaca !important; background: linear-gradient(135deg, rgba(254,242,242,.85), rgba(255,249,249,.95)) !important; box-shadow: 0 4px 16px rgba(239,68,68,.08) !important; }
+.status-fault .metric { background: rgba(255,255,255,.6); }
+.fault-text { color: #991b1b !important; }
+.bolt-fault { background: linear-gradient(135deg, #f87171, #ef4444) !important; box-shadow: 0 8px 20px rgba(239,68,68,.2) !important; }
 
 /* WAIT NOTICE — absolute overlay inside dispatch-stage */
 .wait-notice { position: absolute; z-index: 12; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 14px; padding: 14px 22px; border-radius: 16px; border: 1px solid #fde68a; background: rgba(255,251,235,.97); white-space: nowrap; box-shadow: 0 8px 28px rgba(0,0,0,.08); }
@@ -686,18 +732,18 @@ onUnmounted(() => {
 .pile-waiting-car::before { content: ""; position: absolute; left: 8px; top: 2px; width: 14px; height: 5px; background: rgba(79,70,229,.18); border-radius: 3px; }
 
 /* JUNCTION CAR (QUEUED — static at intersection) */
-.car.junction { animation: none !important; transform: translate(var(--target-x), 151px) !important; opacity: 1 !important; }
+.car.junction { animation: none !important; transform: translate(var(--target-x), 149px) !important; opacity: 1 !important; }
 .car.junction .car-body { border-color: rgba(79,70,229,.72); box-shadow: 0 10px 22px rgba(79,70,229,.18); animation: junctionPulse 2.2s ease-in-out infinite; }
 @keyframes junctionPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
 
 /* WAITING CAR (WAITING_AREA — horizontal only) */
 .car.waiting { animation: waitCar 9s ease-in-out infinite !important; }
 @keyframes waitCar {
-  0%   { transform: translate(-86px, 151px); opacity: 0; }
-  6%   { transform: translate(66px, 151px); opacity: 1; }
-  80%  { transform: translate(1300px, 151px); opacity: 1; }
+  0%   { transform: translate(-86px, 149px); opacity: 0; }
+  6%   { transform: translate(66px, 149px); opacity: 1; }
+  80%  { transform: translate(1300px, 149px); opacity: 1; }
   90%  { opacity: 0; }
-  100% { transform: translate(-86px, 151px); opacity: 0; }
+  100% { transform: translate(-86px, 149px); opacity: 0; }
 }
 
 .page { max-width: 1280px; margin: 0 auto; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif; }
@@ -714,7 +760,7 @@ onUnmounted(() => {
 .stat-label.blue::before { background: #3b82f6; }
 .stat-label.amber::before { background: #f59e0b; }
 .stat-label.gray::before { background: #9ca3af; }
-.stat-val { font-size: 26px; font-weight: 700; color: #111827; letter-spacing: -1px; }
+.stat-val { font-size: 20px; font-weight: 700; color: #111827; letter-spacing: -0.5px; }
 
 .status-strip { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border: 1px solid #e5e7eb; border-radius: 12px; background: white; margin-bottom: 16px; }
 .status-strip.active { border-color: #bfdbfe; background: #eff6ff; }
@@ -727,7 +773,7 @@ onUnmounted(() => {
 
 .queue-zone { padding: 24px 0 26px; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
 .queue-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
-.section-title { font-size: 22px; font-weight: 800; margin: 0 0 8px; color: #101828; }
+.section-title { font-size: 18px; font-weight: 800; margin: 0 0 8px; color: #101828; }
 .section-sub { color: #667085; font-size: 14px; margin: 0; line-height: 1.7; }
 .legend { display: flex; gap: 18px; color: #667085; font-size: 13px; white-space: nowrap; }
 .legend i { width: 8px; height: 8px; display: inline-block; border-radius: 3px; margin-right: 6px; }
@@ -1011,79 +1057,101 @@ onUnmounted(() => {
 }
 
 .status-row {
-  display: grid;
-  grid-template-columns: 1.35fr repeat(5, 1fr);
+  display: flex;
   align-items: center;
-  gap: 0;
-  padding: 22px 0 26px;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 24px;
+  padding: 20px 28px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(236,253,245,.6), rgba(255,255,255,.95));
+  border: 1px solid #d1fae5;
+  box-shadow: 0 4px 16px rgba(16,185,129,.06);
+  margin-bottom: 6px;
 }
 
 .status-main {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .status-bolt {
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #34d399, #047857);
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #34d399, #059669);
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 28px;
-  box-shadow: 0 18px 36px rgba(5, 150, 105, .22);
+  font-size: 22px;
+  box-shadow: 0 8px 20px rgba(5,150,105,.2);
+  flex-shrink: 0;
 }
 
 .status-title {
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
   color: #111827;
+  line-height: 1.3;
 }
 
 .status-title strong {
   color: #059669;
-  font-size: 20px;
-  margin-left: 6px;
+  font-size: 18px;
+  margin-left: 4px;
 }
 
 .status-sub {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #667085;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.metric-group {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin-left: auto;
+  background: rgba(0,0,0,.03);
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .metric {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  min-height: 64px;
-  border-left: 1px solid #e5e7eb;
+  padding: 10px 20px;
+  min-width: 88px;
+  background: rgba(255,255,255,.7);
 }
 
-.metric-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #ecfdf5;
-  display: grid;
-  place-items: center;
-  color: #059669;
-  font-size: 21px;
-}
+.metric:first-child { border-radius: 12px 0 0 12px; }
+.metric:last-child { border-radius: 0 12px 12px 0; }
 
 .metric-label {
   color: #667085;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .metric-val {
-  margin-top: 6px;
-  font-size: 21px;
+  margin-top: 4px;
+  font-size: 18px;
   font-weight: 800;
   color: #101828;
+  white-space: nowrap;
+}
+
+.metric-val small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #667085;
 }
 
 .metric-val .green {
@@ -1118,9 +1186,9 @@ onUnmounted(() => {
   position: absolute;
   width: 56px;
   height: 31px;
-  left: 0;
+  left: -28px;
   top: 0;
-  transform: translate(-100px, 151px);
+  transform: translate(-100px, 149px);
   opacity: 0;
   z-index: 8;
   animation: dispatchCar 13s cubic-bezier(.4,0,.2,1) infinite;
@@ -1218,14 +1286,11 @@ onUnmounted(() => {
   padding-right: 0;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 28px;
-  margin-top: 24px;
+.form-section {
+  margin-top: 20px;
 }
 
-.workspace-page label {
+.form-label {
   display: block;
   margin-bottom: 10px;
   color: #344054;
@@ -1233,69 +1298,166 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.workspace-page select,
-.workspace-page input {
+.form-hint {
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 2px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  transition: .2s;
+  text-align: left;
+}
+
+.mode-btn:hover:not(:disabled) {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.mode-btn.active {
+  border-color: #059669;
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+  box-shadow: 0 0 0 3px rgba(5,150,105,.1);
+}
+
+.mode-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.mode-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.mode-btn.active .mode-icon {
+  background: linear-gradient(135deg, #34d399, #059669);
+}
+
+.mode-info strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.mode-info small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.mode-btn.active .mode-info strong {
+  color: #047857;
+}
+
+.energy-input-wrap {
+  position: relative;
+}
+
+.energy-input {
   width: 100%;
-  height: 52px;
-  padding: 0 18px;
+  height: 48px;
+  padding: 0 60px 0 16px;
   border: 1px solid #d0d5dd;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   font: inherit;
+  font-size: 16px;
+  font-weight: 600;
   color: #344054;
   outline: none;
   transition: .18s;
 }
 
-.workspace-page select:focus,
-.workspace-page input:focus {
+.energy-input:focus {
   border-color: #059669;
-  box-shadow: 0 0 0 4px rgba(16,185,129,.1);
+  box-shadow: 0 0 0 3px rgba(16,185,129,.1);
 }
 
-.workspace-page select:disabled,
-.workspace-page input:disabled {
-  opacity: .55;
+.energy-input:disabled {
+  opacity: .5;
   cursor: not-allowed;
 }
 
+.energy-unit {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.energy-warn {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
 .submit {
-  margin-top: 24px;
-  height: 58px;
+  margin-top: 20px;
+  height: 48px;
   width: 100%;
   border: 0;
   border-radius: 12px;
   background: linear-gradient(135deg, #059669, #047857);
   color: #fff;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 14px 28px rgba(5,150,105,.18);
+  box-shadow: 0 8px 20px rgba(5,150,105,.16);
   transition: transform .18s, opacity .18s;
 }
 
 .submit:hover:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(5,150,105,.22);
 }
 
 .submit:disabled {
-  opacity: .48;
+  opacity: .45;
   cursor: not-allowed;
 }
 
 .notice {
-  margin-top: 26px;
-  padding: 16px 18px;
-  border: 1px solid #cfeee0;
-  border-radius: 12px;
-  background: #f1fbf6;
-  color: #344054;
-  line-height: 1.8;
-  font-size: 14px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid #d1fae5;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #475467;
+  line-height: 1.6;
+  font-size: 13px;
 }
 
 .notice strong {
   color: #059669;
+  font-weight: 700;
 }
 
 .empty {
@@ -1419,9 +1581,19 @@ onUnmounted(() => {
 
 .bottom {
   display: grid;
-  grid-template-columns: 1.35fr .9fr;
-  gap: 48px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, .8fr);
+  gap: 20px;
   padding: 26px 0 0;
+  align-items: start;
+}
+
+.bottom > div {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #e5ece8;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(16,24,40,.045);
 }
 
 .bottom .section-title span {
@@ -1431,7 +1603,8 @@ onUnmounted(() => {
 }
 
 .time-axis {
-  margin-top: 32px;
+  margin-top: 20px;
+  padding-bottom: 12px;
 }
 
 .axis-legend {
@@ -1459,6 +1632,7 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px #d9e2dd;
   overflow:visible;
   position:relative;
+  min-width:0;
 }
 
 .axis-bar::before,
@@ -1558,10 +1732,15 @@ onUnmounted(() => {
 }
 
 .formula {
-  margin-top:16px;
+  margin-top:18px;
   color:#667085;
-  font-size:14px;
-  text-align: right;
+  font-size:13px;
+  line-height:1.65;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid #edf2ef;
+  border-radius: 10px;
+  background: #f8faf9;
 }
 
 .now-marker {
@@ -1606,28 +1785,32 @@ onUnmounted(() => {
 }
 
 .fee-list {
-  margin-top: 26px;
-  display:grid;
-  grid-template-columns: repeat(3,1fr);
-  gap: 28px;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .fee {
-  display:grid;
-  grid-template-columns: 42px 1fr;
-  gap:14px;
-  align-items:start;
-  border-right:1px solid #e5e7eb;
-  padding-right:24px;
-}
-
-.fee:last-child {
-  border-right:0;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #edf2ef;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fbfefc;
 }
 
 .fee-icon {
-  font-size:32px;
-  color: #f59e0b;
+  font-size: 24px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #fef3c7;
 }
 
 .fee:nth-child(3) .fee-icon {
@@ -1635,15 +1818,18 @@ onUnmounted(() => {
 }
 
 .fee strong {
-  display:block;
-  margin-bottom:8px;
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 2px;
+  color: #111827;
 }
 
 .fee p {
-  margin:0;
-  color:#667085;
-  font-size:14px;
-  line-height:1.7;
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @keyframes pulseMove {
@@ -1654,13 +1840,13 @@ onUnmounted(() => {
 }
 
 @keyframes dispatchCar {
-  0% { transform: translate(-86px, 151px); opacity: 0; }
-  5% { transform: translate(66px, 151px); opacity: 1; }
-  42% { transform: translate(var(--target-x), 151px); opacity: 1; }
-  58% { transform: translate(var(--target-x), 104px); opacity: 1; }
-  72% { transform: translate(var(--target-x), 60px); opacity: 1; }
-  86% { transform: translate(var(--target-x), 60px); opacity: 1; }
-  100% { transform: translate(var(--target-x), 60px); opacity: 0; }
+  0%  { transform: translate(-86px, 149px); opacity: 0; }
+  5%  { transform: translate(66px, 149px); opacity: 1; }
+  40% { transform: translate(var(--target-x), 149px); opacity: 1; }
+  44% { transform: translate(var(--target-x), 149px); opacity: 1; }
+  62% { transform: translate(var(--target-x), 68px); opacity: 1; }
+  82% { transform: translate(var(--target-x), 68px); opacity: 1; }
+  100%{ transform: translate(var(--target-x), 68px); opacity: 0; }
 }
 
 @media (max-width: 980px) {
@@ -1670,8 +1856,9 @@ onUnmounted(() => {
   .dispatch-stage { height: 360px; }
   .pile-row { left: 28px; right: 28px; grid-template-columns: repeat(2, 1fr); }
   .main-lane, .entry-label, .exit-label, .vehicle, .lane-dot, .pulse-halo, .route-pulse, .car { display: none; }
-  .status-row, .main-grid, .bottom { grid-template-columns: 1fr; }
-  .metric { border-left: 0; border-top: 1px solid #e5e7eb; justify-content: flex-start; padding-top: 14px; }
+  .status-row { flex-direction: column; align-items: stretch; }
+  .metric-group { margin-left: 0; flex-wrap: wrap; }
+  .main-grid, .bottom { grid-template-columns: 1fr; }
   .panel { border-right: 0; border-bottom: 1px solid #e5e7eb; padding-right: 0; padding-bottom: 24px; }
   .fee-list { grid-template-columns: 1fr; }
   .fee { border-right: 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 18px; }

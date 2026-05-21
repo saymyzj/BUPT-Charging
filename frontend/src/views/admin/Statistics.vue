@@ -269,7 +269,7 @@ onMounted(loadData)
   color: #101828;
 }
 .page-head { margin-bottom: 18px; }
-.page-head h1 { margin: 0; font-size: 28px; font-weight: 850; letter-spacing: -.02em; }
+.page-head h1 { margin: 0; font-size: 22px; font-weight: 850; letter-spacing: -.02em; }
 .page-head p { margin: 8px 0 0; font-size: 15px; color: #667085; }
 
 /* Toolbar */
@@ -318,7 +318,7 @@ onMounted(loadData)
 }
 .kpi-left { min-width: 0; }
 .kpi-label { color: #98a2b3; font-size: 13px; font-weight: 700; }
-.kpi-val { margin-top: 9px; font-size: 28px; font-weight: 900; color: #101828; letter-spacing: -.03em; line-height: 1; }
+.kpi-val { margin-top: 9px; font-size: 22px; font-weight: 900; color: #101828; letter-spacing: -.03em; line-height: 1; }
 .kpi-unit { font-size: 14px; font-weight: 400; color: #98a2b3; margin-left: 2px; }
 .kpi-icon {
   width: 46px; height: 46px; border-radius: 16px;
@@ -409,7 +409,7 @@ onMounted(loadData)
   align-items: center; justify-content: center; text-align: center;
 }
 .donut-center strong { display: block; font-size: 13px; color: #667085; }
-.donut-center span { display: block; font-size: 26px; font-weight: 900; margin-top: 6px; }
+.donut-center span { display: block; font-size: 20px; font-weight: 900; margin-top: 6px; }
 .legend { display: grid; gap: 10px; margin-top: 8px; }
 .legend-row { display: flex; justify-content: space-between; gap: 16px; color: #344054; font-size: 13px; }
 .legend-left { display: flex; align-items: center; gap: 8px; }

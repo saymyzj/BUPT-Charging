@@ -22,43 +22,27 @@
     <template v-if="req">
 
       <!-- Status Row -->
-      <div class="status-row" :class="{ 'status-amber': isWaiting }">
+      <div class="status-row" :class="{ 'status-fault': isFaultQueue, 'status-amber': !isFaultQueue && isWaiting }">
         <div class="status-main">
-          <div class="status-bolt">{{ isWaiting ? '⏳' : '⚡' }}</div>
+          <div class="status-bolt" :class="{ 'bolt-fault': isFaultQueue, 'bolt-amber': !isFaultQueue && isWaiting }">{{ isFaultQueue ? '⚠️' : (isWaiting ? '⏳' : '⚡') }}</div>
           <div>
-            <div class="status-title" :class="{ 'amber-text': isWaiting }">
-              <template v-if="isWaiting">等待系统分配中</template>
+            <div class="status-title" :class="{ 'fault-text': isFaultQueue, 'amber-text': !isFaultQueue && isWaiting }">
+              <template v-if="isFaultQueue">故障队列 · 优先重调度中</template>
+              <template v-else-if="isWaiting">等待系统分配中</template>
               <template v-else>当前位置：<strong>{{ locationText }}</strong></template>
             </div>
-            <div class="status-sub" :class="{ 'amber-text': isWaiting }">
-              <template v-if="isWaiting">系统正在计算最优充电策略，请将车辆驶入公共等候区。</template>
+            <div class="status-sub" :class="{ 'fault-text': isFaultQueue, 'amber-text': !isFaultQueue && isWaiting }">
+              <template v-if="isFaultQueue">您的请求因桩位故障已转入故障队列，系统将优先为您重新分配可用桩位。</template>
+              <template v-else-if="isWaiting">系统正在计算最优充电策略，请将车辆驶入公共等候区。</template>
               <template v-else>{{ reasonText }}</template>
             </div>
           </div>
         </div>
-        <div class="s-metric">
-          <div class="s-metric-icon">前车</div>
-          <div>
-            <div class="s-metric-val">{{ frontVehicleCountText }}</div>
-          </div>
-        </div>
-        <div class="s-metric">
-          <div class="s-metric-icon">已充</div>
-          <div>
-            <div class="s-metric-val green">{{ chargePercentText }}</div>
-          </div>
-        </div>
-        <div class="s-metric">
-          <div class="s-metric-icon">剩余</div>
-          <div>
-            <div class="s-metric-val">{{ remainingTimeText }}</div>
-          </div>
-        </div>
-        <div class="s-metric">
-          <div class="s-metric-icon">队列号</div>
-          <div>
-            <div class="s-metric-val">{{ queueNumberText(req) }}</div>
-          </div>
+        <div class="metric-group">
+          <div class="metric"><div class="metric-label">前车</div><div class="metric-val">{{ frontVehicleCountText }}</div></div>
+          <div class="metric"><div class="metric-label">已充</div><div class="metric-val green">{{ chargePercentText }}</div></div>
+          <div class="metric"><div class="metric-label">剩余</div><div class="metric-val">{{ remainingTimeText }}</div></div>
+          <div class="metric"><div class="metric-label">队列号</div><div class="metric-val">{{ queueNumberText(req) }}</div></div>
         </div>
       </div>
 
@@ -77,7 +61,7 @@
           </div>
         </div>
 
-        <div class="dispatch-stage">
+        <div class="dispatch-stage" ref="dispatchStageRef">
           <div class="main-lane"></div>
           <div class="route-pulse"></div>
           <span class="entry-label">入口</span>
@@ -253,7 +237,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { addAcceptanceEvent, getAcceptanceState, getActiveRequest, getProfile, updateChargeMode, updateRequestEnergy, cancelRequest, stopRequest, getStationsOverview } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { REQUEST_STATUS, REQUEST_STATUS_TEXT, CHARGE_MODE_TEXT, ACTIVE_STATUSES, HAS_DETAIL_STATUSES } from '@/constants/enums'
@@ -273,7 +257,25 @@ const faultHandoff = ref(loadFaultHandoff())
 const vehicleCode = ref('')
 const stationOverview = ref(null)
 const stationOverviewLoaded = ref(false)
-const pileTargets = [212, 424, 636, 848, 1060]
+const dispatchStageRef = ref(null)
+const stageWidth = ref(0)
+
+const pileTargets = computed(() => {
+  const w = stageWidth.value
+  if (!w) return [212, 424, 636, 848, 1060]
+  const left = 170
+  const right = 150
+  const gap = 28
+  const rowWidth = w - left - right
+  const totalGap = gap * 4
+  const colWidth = (rowWidth - totalGap) / 5
+  return Array.from({ length: 5 }, (_, i) => left + i * (colWidth + gap) + colWidth / 2)
+})
+
+function measureStageWidth() {
+  if (dispatchStageRef.value) stageWidth.value = dispatchStageRef.value.offsetWidth
+}
+
 let pollTimer = null
 
 const isFaultQueue = computed(() => Boolean(req.value?.is_fault_queue || req.value?.queue_context === 'FAULT_QUEUE'))
@@ -585,12 +587,12 @@ const dispatchCars = computed(() => {
   if (status === REQUEST_STATUS.WAITING_AREA) {
     return []
   } else if (status === REQUEST_STATUS.QUEUED && activeIndex >= 0) {
-    cars.push({ id: 0, targetX: pileTargets[activeIndex], delay: 0, assigned: true, junction: true })
+    cars.push({ id: 0, targetX: pileTargets.value[activeIndex], delay: 0, assigned: true, junction: true })
   } else if (status === REQUEST_STATUS.CHARGING && activeIndex >= 0) {
-    cars.push({ id: 0, targetX: pileTargets[activeIndex], delay: 0, assigned: true })
+    cars.push({ id: 0, targetX: pileTargets.value[activeIndex], delay: 0, assigned: true })
   }
   otherQueuedIndexes.forEach((index, i) => {
-    cars.push({ id: i + 1, targetX: pileTargets[index], delay: (i + 1) * 2.6, assigned: true })
+    cars.push({ id: i + 1, targetX: pileTargets.value[index], delay: (i + 1) * 2.6, assigned: true })
   })
   return cars
 })
@@ -881,8 +883,22 @@ async function refreshIfIdle() {
 function startPoll() { stopPoll(); pollTimer = setInterval(refreshIfIdle, 5000) }
 function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
-onMounted(async () => { loadProfile(); await refresh(); initialLoading.value = false; loadStationOverview(); startPoll() })
-onUnmounted(() => { stopPoll() })
+let resizeObserver = null
+
+onMounted(async () => {
+  loadProfile(); await refresh(); initialLoading.value = false; loadStationOverview(); startPoll()
+  nextTick(() => {
+    measureStageWidth()
+    if (dispatchStageRef.value && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => measureStageWidth())
+      resizeObserver.observe(dispatchStageRef.value)
+    }
+  })
+})
+onUnmounted(() => {
+  stopPoll()
+  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
+})
 </script>
 
 <style scoped>
@@ -897,7 +913,7 @@ onUnmounted(() => { stopPoll() })
 
 /* HERO */
 .page-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
-.page-hero h1 { margin: 0; font-size: 28px; font-weight: 850; line-height: 1.15; letter-spacing: -.4px; color: #101828; }
+.page-hero h1 { margin: 0; font-size: 22px; font-weight: 850; line-height: 1.15; letter-spacing: -.4px; color: #101828; }
 .page-hero p { margin: 8px 0 0; color: #667085; font-size: 14px; line-height: 1.7; }
 
 .live-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; color: #059669; font-size: 13px; font-weight: 750; background: rgba(5,150,105,.08); white-space: nowrap; }
@@ -921,7 +937,7 @@ onUnmounted(() => { stopPoll() })
 .banner-gray { border-color: #e5e7eb; background: linear-gradient(180deg, #f9fafb, #fff); }
 
 .banner-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.banner-icon { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 14px 26px rgba(5,150,105,.18); font-size: 26px; flex-shrink: 0; }
+.banner-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 10px 20px rgba(5,150,105,.16); font-size: 22px; flex-shrink: 0; }
 .banner-amber .banner-icon { background: linear-gradient(135deg, #fbbf24, #d97706); box-shadow: 0 14px 26px rgba(217,119,6,.18); }
 .banner-blue .banner-icon { background: linear-gradient(135deg, #60a5fa, #2563eb); box-shadow: 0 14px 26px rgba(37,99,235,.18); }
 .banner-gray .banner-icon { background: linear-gradient(135deg, #9ca3af, #6b7280); box-shadow: none; }
@@ -934,19 +950,31 @@ onUnmounted(() => { stopPoll() })
 .badge-gray.status-chip { color: #9ca3af; border-color: #e5e7eb; }
 
 /* STATUS ROW */
-.status-amber { border-color: #fde68a !important; background: linear-gradient(180deg, rgba(255,251,235,.98), rgba(255,253,243,.98)) !important; }
+.status-row { display: flex; align-items: center; gap: 24px; padding: 20px 28px; border-radius: 16px; background: linear-gradient(135deg, rgba(236,253,245,.6), rgba(255,255,255,.95)); border: 1px solid #d1fae5; box-shadow: 0 4px 16px rgba(16,185,129,.06); margin-bottom: 16px; }
+.status-main { display: flex; align-items: center; gap: 16px; flex-shrink: 0; min-width: 0; }
+.status-bolt { width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #34d399, #059669); display: grid; place-items: center; color: #fff; font-size: 22px; box-shadow: 0 8px 20px rgba(5,150,105,.2); flex-shrink: 0; }
+.status-title { font-size: 16px; font-weight: 700; color: #111827; line-height: 1.3; }
+.status-title strong { color: #059669; font-size: 18px; margin-left: 4px; }
+.status-sub { margin-top: 4px; color: #667085; font-size: 13px; line-height: 1.5; }
+.metric-group { display: flex; align-items: stretch; gap: 2px; margin-left: auto; background: rgba(0,0,0,.03); border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+.metric { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 20px; min-width: 80px; background: rgba(255,255,255,.7); }
+.metric:first-child { border-radius: 12px 0 0 12px; }
+.metric:last-child { border-radius: 0 12px 12px 0; }
+.metric-label { color: #667085; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.metric-val { margin-top: 4px; font-size: 18px; font-weight: 800; color: #101828; white-space: nowrap; }
+.metric-val.green { color: #059669; }
+
+/* STATUS AMBER */
+.status-amber { border-color: #fde68a !important; background: linear-gradient(135deg, rgba(255,251,235,.85), rgba(255,253,243,.95)) !important; box-shadow: 0 4px 16px rgba(245,158,11,.08) !important; }
+.status-amber .metric { background: rgba(255,255,255,.6); }
 .amber-text { color: #92400e !important; }
-.status-row { display: grid; grid-template-columns: 1.6fr repeat(4, 1fr); gap: 0; border: 1px solid #e5e7eb; border-radius: 20px; background: rgba(255,255,255,.98); box-shadow: 0 12px 30px rgba(16,24,40,.05); margin-bottom: 16px; overflow: hidden; }
-.status-main { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
-.status-bolt { font-size: 28px; flex-shrink: 0; }
-.status-title { font-size: 15px; color: #111827; font-weight: 600; }
-.status-title strong { color: #059669; font-size: 20px; margin-left: 6px; font-weight: 850; }
-.status-sub { margin-top: 6px; color: #667085; font-size: 13px; line-height: 1.55; }
-.s-metric { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 58px; border-left: 1px solid #e5e7eb; }
-.s-metric-icon { height: 36px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #059669; background: #ecfdf5; font-size: 13px; font-weight: 800; flex-shrink: 0; white-space: nowrap; }
-.s-metric-label { color: #667085; font-size: 13px; }
-.s-metric-val { margin-top: 4px; font-size: 20px; font-weight: 800; color: #101828; }
-.s-metric-val.green { color: #059669; }
+.bolt-amber { background: linear-gradient(135deg, #fbbf24, #f59e0b) !important; box-shadow: 0 8px 20px rgba(245,158,11,.2) !important; }
+
+/* STATUS FAULT */
+.status-fault { border-color: #fecaca !important; background: linear-gradient(135deg, rgba(254,242,242,.85), rgba(255,249,249,.95)) !important; box-shadow: 0 4px 16px rgba(239,68,68,.08) !important; }
+.status-fault .metric { background: rgba(255,255,255,.6); }
+.fault-text { color: #991b1b !important; }
+.bolt-fault { background: linear-gradient(135deg, #f87171, #ef4444) !important; box-shadow: 0 8px 20px rgba(239,68,68,.2) !important; }
 
 /* QUEUE ZONE */
 .queue-zone { padding: 22px 0 24px; }
@@ -989,7 +1017,7 @@ onUnmounted(() => { stopPoll() })
 .pile-status.mine::before { background: #4f46e5; }
 .pile-status.fault::before { background: #ef4444; }
 .pile-status.shutdown::before { background: #98a2b3; }
-.car { position: absolute; width: 56px; height: 31px; left: 0; top: 0; transform: translate(-100px, 151px); opacity: 0; z-index: 8; animation: dispatchCar 13s cubic-bezier(.4,0,.2,1) infinite; animation-delay: var(--delay); }
+.car { position: absolute; width: 56px; height: 31px; left: -28px; top: 0; transform: translate(-100px, 149px); opacity: 0; z-index: 8; animation: dispatchCar 13s cubic-bezier(.4,0,.2,1) infinite; animation-delay: var(--delay); }
 .car-body { position: absolute; inset: 5px 2px; background: linear-gradient(180deg, #fff, #dbeafe); border: 1px solid #94a3b8; border-radius: 16px 16px 10px 10px; box-shadow: 0 8px 16px rgba(15,23,42,.16); }
 .car.assigned .car-body { border-color: rgba(5,150,105,.72); box-shadow: 0 10px 22px rgba(5,150,105,.18); }
 .car-window { position: absolute; left: 17px; top: 2px; width: 19px; height: 9px; background: #bfdbfe; border-radius: 6px 6px 3px 3px; }
@@ -1007,29 +1035,29 @@ onUnmounted(() => { stopPoll() })
 .pile-waiting-car::before { content: ""; position: absolute; left: 8px; top: 2px; width: 14px; height: 5px; background: rgba(79,70,229,.18); border-radius: 3px; }
 
 /* JUNCTION CAR (QUEUED — static at intersection) */
-.car.junction { animation: none !important; transform: translate(var(--target-x), 151px) !important; opacity: 1 !important; }
+.car.junction { animation: none !important; transform: translate(var(--target-x), 149px) !important; opacity: 1 !important; }
 .car.junction .car-body { border-color: rgba(79,70,229,.72); box-shadow: 0 10px 22px rgba(79,70,229,.18); animation: junctionPulse 2.2s ease-in-out infinite; }
 @keyframes junctionPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
 
 /* WAITING CAR (WAITING_AREA — horizontal only, no branch) */
 .car.waiting { animation: waitCar 9s ease-in-out infinite !important; }
 @keyframes waitCar {
-  0%   { transform: translate(-86px, 151px); opacity: 0; }
-  6%   { transform: translate(66px, 151px); opacity: 1; }
-  80%  { transform: translate(1300px, 151px); opacity: 1; }
+  0%   { transform: translate(-86px, 149px); opacity: 0; }
+  6%   { transform: translate(66px, 149px); opacity: 1; }
+  80%  { transform: translate(1300px, 149px); opacity: 1; }
   90%  { opacity: 0; }
-  100% { transform: translate(-86px, 151px); opacity: 0; }
+  100% { transform: translate(-86px, 149px); opacity: 0; }
 }
 
 @keyframes pulseMove { 0% { transform: translateX(0); opacity: 0; } 12% { opacity: .22; } 88% { opacity: .22; } 100% { transform: translateX(1240px); opacity: 0; } }
 @keyframes dispatchCar {
-  0%  { transform: translate(-86px, 151px); opacity: 0; }
-  5%  { transform: translate(66px, 151px); opacity: 1; }
-  42% { transform: translate(var(--target-x), 151px); opacity: 1; }
-  58% { transform: translate(var(--target-x), 104px); opacity: 1; }
-  72% { transform: translate(var(--target-x), 60px); opacity: 1; }
-  86% { transform: translate(var(--target-x), 60px); opacity: 1; }
-  100% { transform: translate(var(--target-x), 60px); opacity: 0; }
+  0%  { transform: translate(-86px, 149px); opacity: 0; }
+  5%  { transform: translate(66px, 149px); opacity: 1; }
+  40% { transform: translate(var(--target-x), 149px); opacity: 1; }
+  44% { transform: translate(var(--target-x), 149px); opacity: 1; }
+  62% { transform: translate(var(--target-x), 68px); opacity: 1; }
+  82% { transform: translate(var(--target-x), 68px); opacity: 1; }
+  100%{ transform: translate(var(--target-x), 68px); opacity: 0; }
 }
 
 /* MAIN GRID */
@@ -1116,14 +1144,14 @@ onUnmounted(() => { stopPoll() })
   .footer-band { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 980px) {
-  .status-row { grid-template-columns: 1.4fr repeat(3, 1fr); }
-  .status-row .s-metric:last-child { display: none; }
+  .status-row { flex-wrap: wrap; }
+  .metric-group { margin-left: 0; flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
   .page { padding: 20px 16px; }
   .page-hero { flex-direction: column; align-items: flex-start; }
-  .status-row { grid-template-columns: 1fr; gap: 0; }
-  .s-metric { border-left: none; border-top: 1px solid #e5e7eb; justify-content: flex-start; padding: 12px 4px; }
+  .status-row { flex-direction: column; align-items: stretch; }
+  .metric-group { margin-left: 0; }
   .detail-summary { grid-template-columns: 1fr; }
   .footer-band { grid-template-columns: 1fr; }
   .action-row { flex-direction: column; }

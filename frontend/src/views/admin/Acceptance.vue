@@ -20,7 +20,7 @@
       </div>
       <div class="strip-item">
         <span class="strip-icon gray-bg"><span class="material-icons">schedule</span></span>
-        <div><span class="label">模拟时间</span><strong>{{ clock }}</strong></div>
+        <div><span class="label">模拟时间</span><strong>{{ clockText }}</strong></div>
       </div>
       <div class="strip-item">
         <span class="strip-icon ok-bg"><span class="material-icons">play_arrow</span></span>
@@ -63,55 +63,66 @@
       <div class="timeline-head">
         <div>
           <h2>模拟时间轴</h2>
-          <p>拖动时间只定位模拟时刻；执行动作会按该时刻写入真实业务状态。</p>
+          <p>拖动只改变模拟时刻；执行按钮会按当前时刻推进真实业务状态。</p>
         </div>
-        <div class="timeline-tools">
-          <label>起点 <input v-model="timelineStart" type="time" @change="normalizeTimelineBounds" /></label>
-          <label>终点 <input v-model="timelineEnd" type="time" @change="normalizeTimelineBounds" /></label>
-          <label>跳转 <input v-model="jumpTimeText" type="text" placeholder="08:20:30" /></label>
-          <button class="tool-btn compact" @click="jumpToSpecifiedTime"><span class="material-icons">my_location</span>跳转</button>
+        <div class="timeline-badges">
+          <span class="timeline-badge">当前 {{ timelineClockText }}</span>
+          <span v-if="nextPendingEvent" class="timeline-badge accent">下一事件 {{ formatClock(nextPendingEvent.clock || nextPendingEvent.at) }}</span>
+          <span v-else class="timeline-badge muted">没有待执行事件</span>
+        </div>
+      </div>
+      <div class="timeline-layout">
+        <div class="timeline-config">
+          <div class="timeline-tools">
+            <label>起点 <input v-model="timelineStart" type="time" @change="normalizeTimelineBounds" /></label>
+            <label>终点 <input v-model="timelineEnd" type="time" @change="normalizeTimelineBounds" /></label>
+            <label>跳转 <input v-model="jumpTimeText" type="text" placeholder="08:20:30" /></label>
+            <button class="tool-btn compact" @click="jumpToSpecifiedTime"><span class="material-icons">my_location</span>跳转</button>
+          </div>
           <div class="speed-group">
             <button v-for="speed in speeds" :key="speed" :class="{ active: playbackSpeed === speed }" @click="playbackSpeed = speed">{{ speed }}x</button>
           </div>
         </div>
-      </div>
-      <div class="timeline-row">
-        <span>{{ timelineStart }}</span>
-        <div class="timeline-frame">
-          <div class="timeline-fill" :style="{ width: `${timelineProgress}%` }"></div>
-          <button
-            v-for="mark in timelineMarks"
-            :key="mark.key"
-            class="timeline-mark"
-            :class="{ done: mark.done, failed: mark.failed }"
-            :style="{ left: `${mark.left}%` }"
-            :title="mark.title"
-            @click="jumpToEvent(mark.event)"
-          ></button>
-          <input
-            v-model.number="sliderSeconds"
-            type="range"
-            min="0"
-            :max="timelineDuration"
-            step="1"
-            @input="handleSliderInput"
-            @change="commitSliderTime"
-          />
+        <div class="timeline-stage">
+          <div class="timeline-row">
+            <span>{{ timelineStart }}</span>
+            <div class="timeline-frame">
+              <div class="timeline-fill" :style="{ width: `${timelineProgress}%` }"></div>
+              <button
+                v-for="mark in timelineMarks"
+                :key="mark.key"
+                class="timeline-mark"
+                :class="{ done: mark.done, failed: mark.failed }"
+                :style="{ left: `${mark.left}%` }"
+                :title="mark.title"
+                @click="jumpToEvent(mark.event)"
+              ></button>
+              <input
+                v-model.number="sliderSeconds"
+                type="range"
+                min="0"
+                :max="timelineDuration"
+                step="1"
+                @input="handleSliderInput"
+                @change="commitSliderTime"
+              />
+            </div>
+            <span>{{ timelineEnd }}</span>
+          </div>
+          <div class="timeline-meta">
+            <span>当前：{{ timelineClockText }}</span>
+            <span v-if="nextPendingEvent">下一事件：{{ formatClock(nextPendingEvent.clock || nextPendingEvent.at) }} · {{ eventTitle(nextPendingEvent) }}</span>
+            <span v-else>没有待执行事件</span>
+          </div>
         </div>
-        <span>{{ timelineEnd }}</span>
-      </div>
-      <div class="timeline-meta">
-        <span>当前：{{ timelineClock }}</span>
-        <span v-if="nextPendingEvent">下一事件：{{ nextPendingEvent.clock }} · {{ eventTitle(nextPendingEvent) }}</span>
-        <span v-else>没有待执行事件</span>
       </div>
       <div class="control-actions">
-        <button class="tool-btn" disabled title="验收执行不支持回溯；如需回看请使用快照历史"><span class="material-icons">keyboard_double_arrow_left</span>上一事件</button>
-        <button class="tool-btn" @click="jumpRelative(1)"><span class="material-icons">keyboard_double_arrow_right</span>下一事件</button>
-        <button class="tool-btn play" :disabled="isRunning" @click="startExecution"><span class="material-icons">play_arrow</span>开始执行</button>
-        <button class="tool-btn play" @click="executeUntilNext"><span class="material-icons">double_arrow</span>执行到下一事件</button>
-        <button class="tool-btn" @click="pauseExecution"><span class="material-icons">pause_circle</span>暂停执行</button>
-        <button class="tool-btn danger" @click="executeAll"><span class="material-icons">fast_forward</span>立即执行至最终态</button>
+        <button class="tool-btn primary" :disabled="playbackLocked || isRunning" @click="startExecution"><span class="material-icons">play_arrow</span>开始执行</button>
+        <button class="tool-btn secondary" :disabled="playbackLocked" @click="executeUntilNext"><span class="material-icons">double_arrow</span>执行到下一事件</button>
+        <button class="tool-btn danger primary" :disabled="playbackLocked" @click="executeAll"><span class="material-icons">fast_forward</span>立即执行至最终态</button>
+        <button class="tool-btn secondary" :disabled="playbackLocked" @click="jumpRelative(1)"><span class="material-icons">keyboard_double_arrow_right</span>下一事件</button>
+        <button class="tool-btn ghost" :disabled="playbackLocked" @click="pauseExecution"><span class="material-icons">pause_circle</span>暂停执行</button>
+        <button class="tool-btn ghost" disabled title="验收执行不支持回溯；如需回看请使用快照历史"><span class="material-icons">keyboard_double_arrow_left</span>上一事件</button>
       </div>
       <div v-if="snapshot?.integrity?.warnings?.length" class="integrity-box">
         <strong>正确性告警</strong>
@@ -143,7 +154,7 @@
             :title="eventTitle(event)"
             @click="selectEvent(event)"
           >
-            <span class="event-time">{{ event.clock }}</span>
+            <span class="event-time">{{ formatClock(event.clock || event.at) }}</span>
             <span class="event-main">{{ eventTitle(event) }}</span>
             <span class="event-status" :class="event.status">{{ event.status }}</span>
           </button>
@@ -153,7 +164,7 @@
       <div class="stations-card">
         <div class="card-head">
           <h3>当前状态总览</h3>
-          <span>{{ snapshot?.clock || '--' }}</span>
+          <span>{{ formatClock(snapshot?.clock) }}</span>
         </div>
         <div class="station-grid">
           <article v-for="station in snapshot?.stations || []" :key="station.station_code" class="station-tile" :class="station.station_status.toLowerCase()">
@@ -265,19 +276,19 @@
           :class="{ active: selectedSnapshotItem?.id === item.id, failed: item.snapshot?.integrity?.ok === false }"
           @click="selectSnapshot(item)"
         >
-          <span class="snapshot-clock">{{ item.clock }}</span>
+          <span class="snapshot-clock">{{ formatClock(item.clock) }}</span>
           <b>{{ phaseText(item.phase) }}</b>
           <small>{{ item.eventLabel }}</small>
           <em>等候区 {{ item.summary.waiting_area_count }}</em>
         </button>
       </div>
       <div class="snapshot-detail">
-        <div class="card-head"><h3>事件前后状态</h3><span>{{ selectedSnapshot?.clock || snapshot?.clock || '--' }}</span></div>
+        <div class="card-head"><h3>事件前后状态</h3><span>{{ formatClock(selectedSnapshot?.clock || snapshot?.clock) }}</span></div>
         <div class="compare-grid">
           <section v-for="board in snapshotCompareBoards" :key="board.title" class="snapshot-board">
             <div class="snapshot-board-head">
               <strong>{{ board.title }}</strong>
-              <span>{{ board.snapshot?.clock || '--' }}</span>
+              <span>{{ formatClock(board.snapshot?.clock) }}</span>
             </div>
             <div class="mini-stations">
               <article v-for="station in board.snapshot?.stations || []" :key="station.station_code" class="mini-station" :class="String(station.station_status || '').toLowerCase()">
@@ -329,7 +340,7 @@
         </thead>
         <tbody>
           <tr v-for="row in tableSnapshotRows" :key="row.id">
-            <td class="time-cell">{{ row.time }}</td>
+            <td class="time-cell">{{ formatClock(row.time) }}</td>
             <td class="event-cell">{{ row.event || '状态快照' }}</td>
             <td v-for="key in tableStationKeys" :key="key" class="station-cell">
               <div class="table-slot" :class="{ empty: !stationFor(row.snapshot, key)?.queue?.length, fault: stationFor(row.snapshot, key)?.station_status === 'FAULT' }">
@@ -425,8 +436,8 @@ const speeds = [1, 5, 10, 60]
 const tableStationKeys = ['FAST_01', 'FAST_02', 'FAST_03', 'SLOW_01', 'SLOW_02']
 
 const simulationTime = computed(() => state.value?.simulation_time || '2026-05-20T06:00:00')
-const clock = computed(() => simulationTime.value.slice(11, 19))
-const timelineClock = computed(() => isScrubbing.value || isRunning.value ? timeFromSeconds(sliderSeconds.value).slice(11, 19) : clock.value)
+const clockText = computed(() => formatClock(simulationTime.value))
+const timelineClockText = computed(() => formatClock(isScrubbing.value || isRunning.value ? timeFromSeconds(sliderSeconds.value) : simulationTime.value))
 const statusText = computed(() => ({ IDLE: '未启用', PAUSED: '暂停中', RUNNING: '执行中', COMPLETED: '已完成' }[state.value?.status] || state.value?.status || '--'))
 const timelineStartMinutes = computed(() => clockToMinuteOfDay(timelineStart.value, 6 * 60))
 const timelineEndMinutes = computed(() => clockToMinuteOfDay(timelineEnd.value, 11 * 60))
@@ -503,12 +514,13 @@ const timelineMarks = computed(() => events.value.map((event, index) => ({
   left: Math.max(0, Math.min(100, secondsFromTime(event.at) / timelineDuration.value * 100)),
   done: event.status === 'EXECUTED',
   failed: event.status === 'FAILED',
-  title: `${event.clock} ${eventTitle(event)} ${event.status}`,
+  title: `${formatClock(event.clock || event.at)} ${eventTitle(event)} ${event.status}`,
 })))
 const snapshotRows = computed(() => snapshots.value.map(item => ({
   ...item,
   eventLabel: item.snapshot?.events_at_time?.map(eventTitle).join('；') || item.event_id || '当前状态',
 })))
+const playbackLocked = computed(() => !nextPendingEvent.value)
 
 function clockToMinuteOfDay(value, fallback = 0) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
@@ -527,13 +539,31 @@ function clockToSecondOfDay(value, fallback = 0) {
   return hour * 3600 + minute * 60 + second
 }
 
+function formatClock(value, fallback = '--') {
+  const text = String(value || '').trim()
+  if (!text) return fallback
+  if (/^\d{1,2}:\d{2}$/.test(text)) {
+    const [hour, minute] = text.split(':')
+    return `${String(Number(hour)).padStart(2, '0')}:${minute}:00`
+  }
+  const short = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (short) {
+    const hour = String(Number(short[1])).padStart(2, '0')
+    const minute = String(Number(short[2])).padStart(2, '0')
+    const second = String(Number(short[3] || 0)).padStart(2, '0')
+    return `${hour}:${minute}:${second}`
+  }
+  if (text.includes('T') && text.length >= 19) return text.slice(11, 19)
+  return text
+}
+
 function minuteOfDayFromTime(value) {
   const text = (value || '2026-05-20T06:00:00').slice(11, 16)
   return clockToMinuteOfDay(text, timelineStartMinutes.value)
 }
 
 function secondOfDayFromTime(value) {
-  const text = (value || '2026-05-20T06:00:00').slice(11, 19)
+  const text = formatClock(value || '2026-05-20T06:00:00')
   return clockToSecondOfDay(text, timelineStartSeconds.value)
 }
 
@@ -619,7 +649,7 @@ async function commitSliderTime() {
   isScrubbing.value = false
   if (sliderSeconds.value < executedFloorSeconds.value) {
     sliderSeconds.value = executedFloorSeconds.value
-    pushActionLog(`不能拖回已执行事件之前；已定位到 ${timeFromSeconds(sliderSeconds.value).slice(11, 19)}`, 'info')
+    pushActionLog(`不能拖回已执行事件之前；已定位到 ${formatClock(timeFromSeconds(sliderSeconds.value))}`, 'info')
   }
   await setAcceptanceTime({ simulation_time: timeFromSeconds(sliderSeconds.value) })
   await setAcceptanceStatus({ status: 'PAUSED' })
@@ -672,7 +702,7 @@ async function disableMode() {
 
 async function executeCurrent() {
   const currentEvents = events.value.filter(event => event.status === 'PENDING' && event.at === simulationTime.value)
-  currentEvents.forEach(event => pushActionLog(`执行 ${event.clock} ${eventTitle(event)}`))
+  currentEvents.forEach(event => pushActionLog(`执行 ${formatClock(event.clock || event.at)} ${eventTitle(event)}`))
   await executeAcceptanceCurrent()
   runningEventId.value = ''
   await loadAll()
@@ -681,7 +711,7 @@ async function executeCurrent() {
 async function executeUntilNext() {
   const index = nextEventIndex(1)
   const target = index >= 0 ? events.value[index].at : simulationTime.value
-  if (index >= 0) pushActionLog(`推进至 ${events.value[index].clock} 后执行`)
+  if (index >= 0) pushActionLog(`推进至 ${formatClock(events.value[index].clock || events.value[index].at)} 后执行`)
   await executeAcceptanceUntil({ target_time: target })
   await loadAll()
 }
@@ -741,17 +771,17 @@ async function startExecution() {
     runningEventId.value = next.event_id
     if (demoNextEvent.value && canEnableDemo.value) {
       openEventPage(next)
-      pushActionLog(`已打开 ${next.clock} 的演示页面：${eventTitle(next)}`, 'info')
+      pushActionLog(`已打开 ${formatClock(next.clock || next.at)} 的演示页面：${eventTitle(next)}`, 'info')
     }
     const nextSecond = secondsFromTime(next.at)
     if (nextSecond <= localSecond) {
       const currentTarget = timeFromSeconds(Math.floor(localSecond))
       await setAcceptanceTime({ simulation_time: currentTarget })
-      pushActionLog(`补执行 ${next.clock} 至 ${currentTarget.slice(11, 19)} 的待执行事件`)
+      pushActionLog(`补执行 ${formatClock(next.clock || next.at)} 至 ${formatClock(currentTarget)} 的待执行事件`)
       await executeAcceptanceUntil({ target_time: currentTarget })
     } else {
       await setAcceptanceTime({ simulation_time: next.at })
-      pushActionLog(`到达 ${next.clock}，执行 ${eventTitle(next)}`)
+      pushActionLog(`到达 ${formatClock(next.clock || next.at)}，执行 ${eventTitle(next)}`)
       await executeAcceptanceCurrent()
     }
     if (isRunning.value) {
@@ -948,26 +978,27 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .demo-toggle { height: 38px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #bdebd6; border-radius: 9px; background: #f0fdf8; color: var(--green-strong); font-size: 13px; font-weight: 850; }
 .demo-toggle input { accent-color: var(--green); }
 .demo-toggle.disabled { opacity: .55; color: #64748b; border-color: var(--line); background: #f8fafc; }
-.status-strip, .control-panel, .event-card, .stations-card, .waiting-card, .upload-card, .events-editor, .history-list, .snapshot-detail, .table-card {
+.control-panel, .event-card, .stations-card, .waiting-card, .upload-card, .events-editor, .history-list, .snapshot-detail, .table-card {
   background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgba(15,23,42,.06);
 }
-.status-strip { display: grid; grid-template-columns: repeat(5, minmax(145px, 1fr)) minmax(300px, auto); gap: 1px; overflow: hidden; margin-bottom: 14px; border-color: #b7ebcf; }
-.strip-item { padding: 18px 18px; border-right: 1px solid #edf2f7; display: flex; align-items: center; gap: 12px; min-height: 72px; }
-.strip-icon { width: 42px; height: 42px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.status-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; overflow: visible; margin-bottom: 14px; background: transparent; border: 0; box-shadow: none; }
+.strip-item { padding: 14px 16px; border: 1px solid #e5ece8; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(16,24,40,.045); display: flex; align-items: center; gap: 12px; min-height: 68px; min-width: 0; }
+.strip-icon { width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.strip-icon .material-icons { font-size: 17px; }
 .strip-icon.ok-bg { background: var(--green-soft); color: var(--green); }
 .strip-icon.gray-bg { background: #f1f5f9; color: #64748b; }
-.label { display: block; color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 4px; }
-.strip-item strong { display: block; font-size: 20px; line-height: 1.1; font-weight: 900; }
+.label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; margin-bottom: 3px; }
+.strip-item strong { display: block; font-size: 17px; line-height: 1.1; font-weight: 900; overflow: hidden; text-overflow: ellipsis; }
 .ok { color: var(--green); }
 .bad { color: var(--red); }
 .muted { color: #98a2b3; }
-.quick-links { justify-content: space-around; gap: 18px; padding: 14px 18px; }
+.quick-links { grid-column: 1 / -1; display: flex; justify-content: space-evenly; gap: 20px; padding: 12px 16px; border: 1px solid #e5ece8; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(16,24,40,.035); }
 .quick-links a { color: #0f766e; text-decoration: none; font-size: 12px; font-weight: 850; display: grid; justify-items: center; gap: 5px; min-width: 52px; }
 .quick-links .material-icons { font-size: 21px; color: var(--green); }
 .account-strip {
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(260px, 340px) minmax(260px, 380px);
-  gap: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
   margin-bottom: 14px;
   padding: 18px 20px;
@@ -976,21 +1007,17 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(15,23,42,.05);
 }
+.account-strip > div:first-child { flex: 1 1 280px; min-width: 0; }
 .account-strip h2 { margin: 0; font-size: 16px; font-weight: 900; }
 .account-strip p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
-.account-links { grid-column: 1 / -1; display: flex; flex-wrap: nowrap; gap: 8px; overflow: hidden; justify-content: flex-start; padding-top: 2px; }
+.account-links { flex: 1 1 100%; order: 10; display: flex; flex-wrap: wrap; gap: 8px; overflow: hidden; justify-content: flex-start; padding-top: 2px; }
 .account-links a, .more-users { min-width: 72px; height: 34px; padding: 0 12px; border-radius: 7px; background: #f4fdf8; color: #00895f; font-size: 12px; font-weight: 900; text-decoration: none; border: 1px solid #d4f2e2; display: inline-flex; align-items: center; justify-content: center; }
 .more-users { min-width: 38px; cursor: pointer; }
 .control-panel { padding: 18px 20px; margin-bottom: 14px; }
-.timeline-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.timeline-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid #edf2ef; margin-bottom: 14px; }
 .timeline-head h2, .card-head h3, .upload-card h3 { margin: 0; font-size: 17px; font-weight: 900; }
 .timeline-head p, .upload-card p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-.timeline-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; max-width: 760px; }
-.timeline-tools label { height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: #475569; font-size: 12px; font-weight: 850; }
-.timeline-tools input[type='time'] { width: 92px; border: 0; outline: 0; background: transparent; color: var(--ink); font-weight: 900; font: inherit; }
 .tool-btn.compact { height: 34px; padding: 0 10px; }
-.speed-group button { height: 30px; min-width: 48px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font-weight: 850; color: #475569; }
-.speed-group .active { background: var(--green); color: white; border-color: var(--green); box-shadow: 0 8px 18px rgba(5,150,105,.2); }
 .timeline-row { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 10px; margin: 18px 0 8px; color: #475569; font-size: 13px; font-weight: 900; }
 .timeline-frame { position: relative; height: 34px; display: flex; align-items: center; }
 .timeline-frame::before { content: ""; position: absolute; left: 0; right: 0; top: 16px; height: 3px; border-radius: 999px; background: #cbd5e1; }
@@ -1006,10 +1033,10 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .action-log .run { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
 .action-log .info { background: #ecfdf3; color: #047857; border-color: #bbf7d0; }
 .tabs { margin: 14px 0 12px; }
-.tabs button { height: 40px; border: 1px solid var(--line); background: rgba(255,255,255,.92); border-radius: 9px; padding: 0 16px; display: flex; align-items: center; gap: 8px; font-weight: 850; color: #334155; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
+.tabs button { height: 38px; border: 1px solid var(--line); background: rgba(255,255,255,.92); border-radius: 10px; padding: 0 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 850; color: #334155; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
 .tabs button.active { background: var(--green-soft); color: var(--green-strong); border-color: #b7ebcf; }
 .tabs .material-icons { font-size: 18px; }
-.workspace-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr) 290px; gap: 14px; align-items: start; }
+.workspace-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.8fr) minmax(240px, .7fr); gap: 14px; align-items: start; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf2f7; }
 .card-head span { color: var(--muted); font-size: 12px; font-weight: 850; }
 .event-list { max-height: 560px; overflow: auto; padding: 8px; }
@@ -1046,7 +1073,7 @@ input[type='range'] { position: relative; z-index: 3; width: 100%; accent-color:
 .fault-queue-card span { color: #64748b; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .fault-queue-card em { margin-left: auto; font-style: normal; border-radius: 999px; padding: 2px 7px; color: #c2410c; background: #ffedd5; font-size: 10px; font-weight: 900; white-space: nowrap; }
 .empty { color: #98a2b3; text-align: center; padding: 24px 0; font-size: 13px; }
-.sample-grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 14px; align-items: start; }
+.sample-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px; align-items: start; }
 .upload-card { padding: 20px; display: grid; gap: 14px; min-height: 410px; align-content: start; }
 .upload-zone { height: 130px; border: 1px dashed #a7e0c7; border-radius: 10px; background: #fbfffd; display: grid; place-items: center; align-content: center; gap: 8px; color: #0f766e; text-align: center; cursor: pointer; }
 .upload-zone .material-icons { font-size: 36px; color: #34c88a; }
@@ -1163,16 +1190,48 @@ td { color: #344054; background: #fff; }
 .snapshot-board :deep(.mini-waiting b) { font-size: 12px; }
 .snapshot-board :deep(.mini-waiting div) { display: flex; flex-wrap: wrap; gap: 6px; }
 .snapshot-board :deep(.mini-waiting span) { padding: 4px 7px; border-radius: 8px; background: #f8fafc; color: #475467; font-size: 11px; font-weight: 700; }
+
+.timeline-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.timeline-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: #f8fafc; color: #475467; font-size: 12px; font-weight: 850; white-space: nowrap; }
+.timeline-badge.accent { background: #ecfdf3; color: #047857; }
+.timeline-badge.muted { background: #f2f4f7; color: #667085; }
+.timeline-layout { display: grid; gap: 12px; }
+.timeline-config { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #e5ece8; border-radius: 12px; background: #fcfefe; }
+.timeline-tools { display: grid; grid-template-columns: repeat(3, minmax(112px, 1fr)) auto; align-items: end; gap: 8px; min-width: 0; }
+.timeline-tools label { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 11px; color: #667085; font-weight: 850; white-space: nowrap; }
+.timeline-tools input { width: 100%; }
+.timeline-tools input[type='time'] { min-width: 100px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 900; padding: 0; letter-spacing: 0; }
+.timeline-tools input[type='text'] { min-width: 96px; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 900; padding: 0; }
+.timeline-tools input::placeholder { color: #98a2b3; font-weight: 700; }
+.speed-group { justify-self: end; display: inline-flex; gap: 6px; padding: 4px; border-radius: 12px; background: #ecfdf3; border: 1px solid #bbf7d0; }
+.speed-group button { min-width: 42px; height: 30px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #047857; font-size: 12px; font-weight: 850; }
+.speed-group button.active { background: #10b981; color: #fff; border-color: #10b981; box-shadow: 0 8px 18px rgba(16,185,129,.18); }
+.timeline-stage { display: grid; gap: 8px; padding: 12px 14px 14px; border: 1px solid #e5ece8; border-radius: 12px; background: #fff; }
+.control-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #edf2ef; }
+.control-actions .tool-btn { justify-content: center; width: 100%; height: 36px; font-size: 12px; border-radius: 10px; }
+.control-actions .tool-btn.primary { background: #f0fdf4; color: #047857; border-color: #bbf7d0; }
+.control-actions .tool-btn.secondary { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.control-actions .tool-btn.danger.primary { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.control-actions .tool-btn.ghost { background: #fff; color: #475467; }
+.control-actions .tool-btn:disabled { background: #f8fafc; color: #98a2b3; border-color: #e5e7eb; }
+.event-list, .waiting-list { scrollbar-width: thin; }
+.station-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
 @media (max-width: 1180px) {
-  .workspace-grid, .sample-grid, .snapshot-grid, .account-strip { grid-template-columns: 1fr; }
+  .workspace-grid, .sample-grid, .snapshot-grid { grid-template-columns: 1fr; }
   .compare-grid { grid-template-columns: 1fr; }
   .compare-grid::before { display: none; }
   .compare-grid .snapshot-board:first-child, .compare-grid .snapshot-board:last-child { grid-column: auto; }
   .status-strip { grid-template-columns: repeat(2, 1fr); }
+  .timeline-head { flex-direction: column; align-items: stretch; }
+  .timeline-badges { justify-content: flex-start; }
+  .timeline-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+  .timeline-tools label:last-of-type { grid-column: 1 / -1; }
+  .speed-group { justify-self: stretch; justify-content: center; }
+  .control-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .timeline-meta { display: grid; }
   .quick-links { justify-content: flex-start; }
   .account-links { justify-content: flex-start; }
-  .account-links { grid-column: auto; }
 }
 </style>
 

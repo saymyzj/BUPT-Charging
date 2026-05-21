@@ -1,1 +1,2 @@
 2026-05-21 02:02:08,932 WARNING app SQLite database was rebuilt from /Users/zhoujia/code/SE/ChargingPile/backend/charging_system.db because the existing schema was incompatible with V3; backup saved to /Users/zhoujia/code/SE/ChargingPile/backend/charging_system.db.legacy-20260521020208.bak.
+2026-05-21 14:18:38,215 WARNING app SQLite database was rebuilt from E:\bupt-charing\BUPT-Charging\backend\charging_system.db because the existing schema was incompatible with V3; backup saved to E:\bupt-charing\BUPT-Charging\backend\charging_system.db.legacy-20260521141838.bak.

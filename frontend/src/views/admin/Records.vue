@@ -90,52 +90,94 @@
         </div>
       </div>
 
-      <!-- Device table -->
-      <div class="panel">
-        <div class="table-wrap">
-          <table class="device-table">
-            <thead>
-              <tr>
-                <th>编号</th>
-                <th>模式</th>
-                <th>状态</th>
-                <th>当前服务</th>
-                <th class="center">队列长度</th>
-                <th class="center">累计次数</th>
-                <th>累计时长</th>
-                <th>累计电量</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody v-if="stations.length">
-              <tr v-for="s in stations" :key="s.station_code" :class="{ 'row-fault': s.station_status === 'FAULT' }">
-                <td class="td-code">{{ s.station_code }}</td>
-                <td class="td-mode">{{ CHARGE_MODE_TEXT[s.charge_mode] || s.charge_mode }}</td>
-                <td>
-                  <span v-if="s.station_status === 'RUNNING'" class="st-running">运行中</span>
-                  <span v-else-if="s.station_status === 'FAULT'" class="st-fault">故障</span>
-                  <span v-else class="st-idle">空闲</span>
-                </td>
-                <td :class="s.current_request_id ? 'td-serving' : 'td-free'">{{ currentServiceText(s) }}</td>
-                <td class="center mono">{{ s.queue_length ?? 0 }}</td>
-                <td class="center mono">{{ s.total_charge_count ?? 0 }}</td>
-                <td class="mono">{{ fmtDuration(s.total_charge_seconds) }}</td>
-                <td class="mono">{{ fmtEnergy(s.total_charge_energy) }}</td>
-                <td>
-                  <div class="action-cell">
-                    <button v-if="s.station_status === 'SHUTDOWN'" class="act-btn act-start" @click="doAction(s.station_code, 'start')">启动</button>
-                    <button v-if="s.station_status === 'RUNNING' && !s.current_request_id && (s.queue_length || 0) === 0" class="act-btn act-gray" @click="doAction(s.station_code, 'shutdown')">关闭</button>
-                    <button v-if="s.station_status === 'RUNNING'" class="act-btn act-red" @click="doAction(s.station_code, 'fault')">标记故障</button>
-                    <button v-if="s.station_status === 'FAULT'" class="act-btn act-blue" @click="doAction(s.station_code, 'recover')">恢复</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-            <tbody v-else>
-              <tr><td colspan="9" class="empty-row">暂无设备数据</td></tr>
-            </tbody>
-          </table>
+      <!-- Station cards -->
+      <div class="pile-section">
+        <div class="pile-section-head">
+          <h2>充电桩设备总览</h2>
+          <div class="pile-legend">
+            <span class="lg"><i class="lg-dot lg-green"></i>运行中</span>
+            <span class="lg"><i class="lg-dot lg-red"></i>故障</span>
+            <span class="lg"><i class="lg-dot lg-gray"></i>已关闭</span>
+          </div>
         </div>
+        <div class="pile-grid-wrap" v-if="stations.length">
+          <div class="pile-grid">
+            <article
+              v-for="s in stations"
+              :key="s.station_code"
+              class="pile-card"
+              :class="toneClass(s)"
+            >
+              <!-- Charger visual -->
+              <div class="pc-charger-wrap">
+                <div class="pc-charger" :class="toneClass(s)">
+                  <span class="material-icons pc-charger-icon">ev_station</span>
+                </div>
+                <span class="pc-status-dot" :class="toneClass(s)"></span>
+              </div>
+
+              <!-- Name + Mode + Status -->
+              <div class="pc-identity">
+                <strong class="pc-name">{{ s.station_code }}</strong>
+                <span class="pc-mode">{{ CHARGE_MODE_TEXT[s.charge_mode] || s.charge_mode }}</span>
+                <span class="pc-pill" :class="toneClass(s)">{{ statusLabel(s.station_status) }}</span>
+              </div>
+
+              <!-- Current service -->
+              <div class="pc-service" :class="{ active: s.current_request_id }">
+                <span class="material-icons pc-service-icon">{{ s.current_request_id ? 'person' : 'no_accounts' }}</span>
+                <span>{{ currentServiceText(s) }}</span>
+              </div>
+
+              <!-- Metrics -->
+              <div class="pc-metrics">
+                <div class="pc-m"><span>队列</span><strong>{{ s.queue_length ?? 0 }}</strong></div>
+                <div class="pc-m"><span>服务</span><strong>{{ s.total_charge_count ?? 0 }}<small>次</small></strong></div>
+                <div class="pc-m"><span>时长</span><strong>{{ fmtDuration(s.total_charge_seconds) }}</strong></div>
+                <div class="pc-m"><span>电量</span><strong>{{ fmtEnergy(s.total_charge_energy) }}</strong></div>
+              </div>
+
+              <!-- Actions -->
+              <div class="pc-actions">
+                <button v-if="s.station_status === 'SHUTDOWN'" class="act-btn act-start" @click="doAction(s.station_code, 'start')">
+                  <span class="material-icons">play_arrow</span>启动
+                </button>
+                <button v-if="s.station_status === 'RUNNING' && !s.current_request_id && (s.queue_length || 0) === 0" class="act-btn act-off" @click="doAction(s.station_code, 'shutdown')">
+                  <span class="material-icons">power_settings_new</span>关闭
+                </button>
+                <button v-if="s.station_status === 'RUNNING'" class="act-btn act-red" @click="doAction(s.station_code, 'fault')">
+                  <span class="material-icons">report_problem</span>标记故障
+                </button>
+                <button v-if="s.station_status === 'FAULT'" class="act-btn act-blue" @click="doAction(s.station_code, 'recover')">
+                  <span class="material-icons">healing</span>恢复
+                </button>
+              </div>
+
+              <!-- Expandable queue -->
+              <div class="pc-queue-toggle" @click="toggleQueue(s.station_code)">
+                <span>队列详情 ({{ stationQueueRows(s.station_code).length }})</span>
+                <span class="material-icons pc-toggle-icon">{{ expandedStations[s.station_code] ? 'expand_less' : 'expand_more' }}</span>
+              </div>
+              <div v-if="expandedStations[s.station_code]" class="pc-queue-list">
+                <template v-if="stationQueueRows(s.station_code).length">
+                  <div
+                    v-for="(row, idx) in stationQueueRows(s.station_code)"
+                    :key="row.request_id || idx"
+                    class="pq-row"
+                    :class="{ charging: isChargingRow(s, row, idx) }"
+                  >
+                    <span class="pq-no">{{ idx + 1 }}</span>
+                    <span class="pq-user">{{ userShort(row) }}</span>
+                    <span class="pq-energy">{{ Number(row.request_energy || 0).toFixed(1) }} kWh</span>
+                    <em class="pq-status">{{ isChargingRow(s, row, idx) ? '充电中' : '等待中' }}</em>
+                  </div>
+                </template>
+                <div v-else class="pq-empty">队列为空</div>
+              </div>
+            </article>
+          </div>
+        </div>
+        <div v-else class="empty-row">暂无设备数据</div>
       </div>
 
       <!-- Rules -->
@@ -193,7 +235,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { addAcceptanceEvent, getAcceptanceState, getStations, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
+import { addAcceptanceEvent, getAcceptanceState, getStations, getStationQueue, startStation, shutdownStation, faultStation, recoverStation } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { STATION_STATUS_TEXT, CHARGE_MODE_TEXT } from '@/constants/enums'
 import ActionDialog from '@/components/ActionDialog.vue'
@@ -203,6 +245,8 @@ const { dialog, openConfirm, openMessage, confirmDialog, cancelDialog } = useAct
 
 const stations = ref([])
 const loading = ref(false)
+const stationQueues = ref({})
+const expandedStations = ref({})
 
 const totalStations = computed(() => stations.value.length)
 const runningStations = computed(() => stations.value.filter((s) => s.station_status === 'RUNNING').length)
@@ -225,10 +269,41 @@ async function loadStations() {
     const res = await getStations()
     const data = unwrapResponseData(res)
     stations.value = Array.isArray(data) ? data : (data.stations || [])
+    await loadQueues()
   } catch (_) {
     stations.value = []
   }
   loading.value = false
+}
+
+async function loadQueues() {
+  const entries = await Promise.all(
+    stations.value.map((s) =>
+      getStationQueue(s.station_code)
+        .then((res) => {
+          const data = unwrapResponseData(res)
+          return [s.station_code, Array.isArray(data) ? data : (data.queue || [])]
+        })
+        .catch(() => [s.station_code, []])
+    )
+  )
+  stationQueues.value = Object.fromEntries(entries)
+}
+
+function stationQueueRows(code) {
+  return stationQueues.value[code] || []
+}
+
+function toggleQueue(code) {
+  expandedStations.value = { ...expandedStations.value, [code]: !expandedStations.value[code] }
+}
+
+function isChargingRow(station, row, index) {
+  return row?.request_status === 'CHARGING' || (index === 0 && Boolean(station?.current_request_id))
+}
+
+function userShort(row) {
+  return row?.username || row?.user_id || row?.request_id || '--'
 }
 
 const ACTION_LABELS = {
@@ -314,13 +389,25 @@ function fmtEnergy(value) {
   return `${Number(value || 0).toFixed(2)} kWh`
 }
 
+function toneClass(s) {
+  if (s.station_status === 'FAULT') return 'tone-red'
+  if (s.station_status === 'SHUTDOWN') return 'tone-gray'
+  return 'tone-green'
+}
+
+function statusLabel(status) {
+  if (status === 'RUNNING') return '运行中'
+  if (status === 'FAULT') return '故障'
+  return '已关闭'
+}
+
 onMounted(loadStations)
 </script>
 
 <style scoped>
 * { box-sizing: border-box; }
 .page {
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 36px 40px 52px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Microsoft YaHei", sans-serif;
@@ -331,17 +418,23 @@ onMounted(loadStations)
 /* Page header */
 .page-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 32px;
+  margin-bottom: 22px;
+  padding: 18px 20px;
+  border: 1px solid #e5ece8;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff 0%, #f4fbf7 100%);
+  box-shadow: 0 12px 30px rgba(16,24,40,.055);
 }
-.page-head h1 { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; color: #111827; margin: 0; }
-.page-head p { font-size: 13px; color: #6b7280; margin: 5px 0 0; }
+.page-head h1 { font-size: 24px; font-weight: 900; color: #101828; margin: 0; }
+.page-head p { font-size: 13px; color: #667085; margin: 6px 0 0; }
 
 .btn-refresh {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 16px; border-radius: 9px;
-  border: 1px solid #e5e7eb; background: #f9fafb;
+  height: 40px;
+  padding: 0 16px; border-radius: 10px;
+  border: 1px solid #dce8e1; background: #fff;
   font-size: 13px; font-weight: 700; color: #374151;
   cursor: pointer; transition: .15s; flex-shrink: 0;
 }
@@ -360,15 +453,15 @@ onMounted(loadStations)
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 28px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 .stat-card {
   background: #fff;
-  border: 1px solid #f1f5f9;
-  border-radius: 18px;
-  padding: 22px 20px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  border: 1px solid #edf2ef;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 22px rgba(16,24,40,.045);
 }
 .sc-head {
   display: flex;
@@ -377,7 +470,7 @@ onMounted(loadStations)
   margin-bottom: 10px;
 }
 .sc-icon {
-  width: 40px; height: 40px; border-radius: 50%;
+  width: 40px; height: 40px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .sc-icon .material-icons { font-size: 20px; }
@@ -386,8 +479,8 @@ onMounted(loadStations)
 .si-red     { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
 .si-gray    { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
 .sc-right { text-align: right; }
-.sc-label { font-size: 11px; color: #9ca3af; font-weight: 700; margin-bottom: 4px; }
-.sc-num { font-size: 24px; font-weight: 900; color: #111827; font-variant-numeric: tabular-nums; line-height: 1; }
+.sc-label { font-size: 12px; color: #667085; font-weight: 700; margin-bottom: 6px; }
+.sc-num { font-size: 20px; font-weight: 900; color: #111827; font-variant-numeric: tabular-nums; line-height: 1; }
 .sc-num.red { color: #dc2626; }
 .sc-unit { font-size: 11px; font-weight: 700; color: #9ca3af; margin-left: 3px; }
 .sc-bar-meta {
@@ -403,70 +496,192 @@ onMounted(loadStations)
 .fi-red     { background: #ef4444; }
 .fi-gray    { background: #94a3b8; }
 
-/* Panel / Table */
-.panel {
+/* Pile section */
+.pile-section {
   background: #fff;
-  border: 1px solid #f1f5f9;
-  border-radius: 18px;
+  border: 1px solid #edf2ef;
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(16,24,40,.055);
+  margin-bottom: 22px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,.05);
-  margin-bottom: 28px;
 }
-.table-wrap { overflow-x: auto; }
-.device-table {
-  width: 100%; border-collapse: collapse;
-  text-align: left; font-size: 13px; min-width: 1000px;
+.pile-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px; border-bottom: 1px solid #edf0ee;
 }
-.device-table thead th {
-  padding: 16px 24px;
-  font-size: 12px; font-weight: 500; color: #9ca3af;
-  border-bottom: 1px solid #f1f5f9; white-space: nowrap;
-}
-.device-table tbody tr {
-  border-bottom: 1px solid #f9fafb; transition: background .12s;
-}
-.device-table tbody tr:last-child { border-bottom: none; }
-.device-table tbody tr:hover { background: rgba(249,250,251,.6); }
-.device-table tbody tr.row-fault { background: rgba(254,242,242,.18); }
-.device-table td { padding: 18px 24px; color: #374151; vertical-align: middle; }
-.td-code { font-weight: 800; color: #111827; font-size: 14px; }
-.td-mode { font-weight: 500; }
-.td-serving { font-weight: 600; color: #111827; }
-.td-free    { color: #6b7280; font-weight: 500; }
-.center { text-align: center; }
-.mono   { font-family: "SF Mono", Consolas, monospace; color: #6b7280; white-space: nowrap; }
+.pile-section-head h2 { margin: 0; font-size: 16px; font-weight: 900; color: #101828; }
+.pile-legend { display: flex; gap: 16px; }
+.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #667085; font-weight: 600; }
+.lg-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.lg-green { background: #10b981; }
+.lg-red { background: #ef4444; }
+.lg-gray { background: #b0b8c4; }
 
-/* Status labels */
-.st-running { font-weight: 700; color: #10b981; font-size: 13px; }
-.st-idle    { font-weight: 700; color: #9ca3af; font-size: 13px; }
-.st-fault {
-  display: inline-flex; align-items: center;
-  padding: 3px 9px; border-radius: 5px;
-  background: #fef2f2; color: #ef4444;
-  font-weight: 700; font-size: 12px;
-  border: 1px solid #fecaca;
+/* Grid layout filling container */
+.pile-grid-wrap { padding: 20px 22px; }
+.pile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
+
+/* Individual station card */
+.pile-card {
+  background: #fff;
+  border: 1.5px solid #e0ece5;
+  border-radius: 16px;
+  padding: 20px 16px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+  position: relative;
+}
+.pile-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(16,24,40,.08);
+}
+.pile-card.tone-green { border-color: #c6f0da; }
+.pile-card.tone-green:hover { border-color: #6ee7a8; }
+.pile-card.tone-red {
+  border-color: #fecdd3;
+  background: linear-gradient(180deg, #fff 60%, #fff5f5 100%);
+}
+.pile-card.tone-red:hover { border-color: #f87171; }
+.pile-card.tone-gray {
+  border-color: #e5e7eb;
+  background: #fafbfc;
+  opacity: .7;
+}
+.pile-card.tone-gray:hover { opacity: .9; border-color: #d1d5db; }
+
+/* Charger icon visual */
+.pc-charger-wrap { position: relative; }
+.pc-charger {
+  width: 56px; height: 56px; border-radius: 16px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  box-shadow: 0 6px 16px rgba(16,185,129,.12);
+}
+.pc-charger.tone-red {
+  background: linear-gradient(135deg, #fef2f2, #fecdd3);
+  box-shadow: 0 6px 16px rgba(239,68,68,.12);
+}
+.pc-charger.tone-gray {
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  box-shadow: 0 6px 16px rgba(107,114,128,.08);
+}
+.pc-charger-icon { font-size: 26px; color: #059669; }
+.tone-red .pc-charger-icon { color: #ef4444; }
+.tone-gray .pc-charger-icon { color: #9ca3af; }
+
+.pc-status-dot {
+  position: absolute; bottom: -2px; right: -2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2.5px solid #fff;
+}
+.pc-status-dot.tone-green { background: #10b981; animation: pulse-green 2s ease-in-out infinite; }
+.pc-status-dot.tone-red { background: #ef4444; animation: pulse-red 1.5s ease-in-out infinite; }
+.pc-status-dot.tone-gray { background: #b0b8c4; }
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,.4); }
+  50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.4); }
+  50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+}
+
+/* Identity */
+.pc-identity { text-align: center; }
+.pc-name { display: block; font-size: 15px; font-weight: 900; color: #101828; margin-bottom: 2px; }
+.pc-mode { display: block; font-size: 11px; font-weight: 800; color: #047857; margin-bottom: 6px; }
+.pc-pill {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
+  border-radius: 999px; font-size: 11px; font-weight: 850;
+}
+.pc-pill.tone-green { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+.pc-pill.tone-red { color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; }
+.pc-pill.tone-gray { color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb; }
+
+/* Service */
+.pc-service {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 8px 10px; border-radius: 10px;
+  background: #f8faf9; border: 1px solid #edf2ef;
+  font-size: 12px; color: #9ca3af; font-weight: 600;
+}
+.pc-service.active { color: #101828; background: #f0fdf4; border-color: #bbf7d0; font-weight: 700; }
+.pc-service-icon { font-size: 16px; }
+
+/* Metrics 2×2 grid */
+.pc-metrics {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  width: 100%; background: #edf2ef; border: 1px solid #edf2ef;
+  border-radius: 10px; overflow: hidden;
+}
+.pc-m { background: #fff; padding: 8px 10px; text-align: center; }
+.pc-m span { display: block; font-size: 10px; color: #98a2b3; font-weight: 700; margin-bottom: 2px; }
+.pc-m strong { font-size: 13px; font-weight: 900; color: #101828; font-variant-numeric: tabular-nums; }
+.pc-m strong small { font-size: 10px; font-weight: 600; color: #98a2b3; margin-left: 1px; }
 
 /* Action buttons */
-.action-cell { display: flex; gap: 18px; align-items: center; }
+.pc-actions { display: flex; gap: 6px; width: 100%; flex-wrap: wrap; }
 .act-btn {
-  background: none; border: none; cursor: pointer;
-  font-size: 13px; font-weight: 700; padding: 0; transition: color .12s;
+  border: 1px solid transparent; cursor: pointer;
+  border-radius: 8px; height: 32px; padding: 0 10px;
+  font-size: 11px; font-weight: 800; transition: .15s;
   font-family: inherit;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  flex: 1;
 }
-.act-start { color: #10b981; }
-.act-start:hover { color: #059669; }
-.act-gray  { color: #9ca3af; }
-.act-gray:hover  { color: #374151; }
-.act-red   { color: #f87171; }
-.act-red:hover   { color: #dc2626; }
-.act-blue  { color: #60a5fa; }
-.act-blue:hover  { color: #2563eb; }
+.act-btn .material-icons { font-size: 15px; }
+.act-start { color: #047857; background: #ecfdf3; border-color: #bbf7d0; }
+.act-start:hover { background: #d1fae5; }
+.act-off   { color: #475467; background: #f8fafc; border-color: #e5e7eb; }
+.act-off:hover   { background: #eef2f6; }
+.act-red   { color: #dc2626; background: #fff1f2; border-color: #fecdd3; }
+.act-red:hover   { background: #ffe4e6; }
+.act-blue  { color: #2563eb; background: #eff6ff; border-color: #bfdbfe; }
+.act-blue:hover  { background: #dbeafe; }
 
 .empty-row { padding: 60px 24px; text-align: center; color: #9ca3af; font-size: 14px; }
 
+/* Queue toggle & list */
+.pc-queue-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 6px 10px; border-radius: 8px;
+  background: #f8faf9; border: 1px solid #edf2ef;
+  cursor: pointer; transition: background .15s;
+  font-size: 12px; font-weight: 700; color: #667085;
+  user-select: none;
+}
+.pc-queue-toggle:hover { background: #f0fdf4; border-color: #bbf7d0; color: #047857; }
+.pc-toggle-icon { font-size: 18px; transition: transform .2s; }
+
+.pc-queue-list {
+  width: 100%; display: grid; gap: 4px;
+  animation: fadeIn .18s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.pq-row {
+  display: grid; grid-template-columns: 20px minmax(0,1fr) auto auto;
+  align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid #edf2ef; background: #fff;
+  font-size: 12px; transition: background .12s;
+}
+.pq-row:hover { background: #f8faf9; }
+.pq-row.charging { background: #eff6ff; border-color: #bfdbfe; }
+.pq-no { font-size: 10px; font-weight: 900; color: #9ca3af; text-align: center; }
+.pq-user { font-weight: 700; color: #101828; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pq-energy { font-size: 11px; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pq-status { font-style: normal; font-size: 11px; font-weight: 800; color: #9ca3af; white-space: nowrap; }
+.pq-row.charging .pq-status { color: #2563eb; }
+.pq-empty { padding: 12px; text-align: center; color: #d1d5db; font-size: 12px; }
+
 /* Rules */
-.rules-section { }
+.rules-section { padding: 18px 20px; border: 1px solid #edf2ef; border-radius: 16px; background: #fff; box-shadow: 0 10px 26px rgba(16,24,40,.045); }
 .rules-title { font-size: 16px; font-weight: 800; color: #111827; margin: 0 0 16px; }
 .rules-grid {
   display: grid;

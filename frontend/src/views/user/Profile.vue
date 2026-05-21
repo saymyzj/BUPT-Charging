@@ -410,7 +410,7 @@ onMounted(async () => {
 }
 
 .hero { margin-bottom: 16px; }
-.hero h1 { margin: 0; font-size: 28px; font-weight: 850; line-height: 1.15; }
+.hero h1 { margin: 0; font-size: 22px; font-weight: 850; line-height: 1.15; }
 .hero p { margin: 8px 0 0; color: #667085; font-size: 14px; }
 
 .panel {
@@ -516,7 +516,7 @@ onMounted(async () => {
 }
 .summary-icon svg { width: 22px; height: 22px; }
 .summary-label { color: #667085; font-size: 13px; font-weight: 750; margin-bottom: 4px; }
-.summary-value { font-size: 22px; font-weight: 850; white-space: nowrap; }
+.summary-value { font-size: 18px; font-weight: 850; white-space: nowrap; }
 .summary-value .unit { font-size: 13px; font-weight: 600; color: #667085; }
 .summary-note { color: #667085; font-size: 12px; }
 .spark-chart { display: flex; gap: 6px; margin-top: 10px; }
@@ -555,7 +555,7 @@ onMounted(async () => {
   display: flex; justify-content: space-between;
   align-items: flex-start; gap: 20px; margin-bottom: 22px;
 }
-.ledger h2 { margin: 0; font-size: 22px; font-weight: 850; line-height: 1.2; }
+.ledger h2 { margin: 0; font-size: 18px; font-weight: 850; line-height: 1.2; }
 .ledger p { margin: 8px 0 0; color: #667085; font-size: 14px; }
 .link-green { display: inline-flex; align-items: center; gap: 7px; color: #059669; font-size: 13px; font-weight: 850; text-decoration: none; white-space: nowrap; }
 .link-green:hover { text-decoration: underline; }

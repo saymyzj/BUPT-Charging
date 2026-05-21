@@ -140,7 +140,7 @@ textarea {
 .page-head h1 {
   margin: 0 !important;
   color: var(--text) !important;
-  font-size: 26px !important;
+  font-size: 24px !important;
   font-weight: 800 !important;
   letter-spacing: 0 !important;
 }
@@ -148,8 +148,8 @@ textarea {
 .page-head p {
   margin: 7px 0 0 !important;
   color: var(--muted) !important;
-  font-size: 14px !important;
-  line-height: 1.7;
+  font-size: 13px !important;
+  line-height: 1.65;
 }
 
 .card,
@@ -180,7 +180,7 @@ table.t {
 }
 
 .card-head h3 {
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 800 !important;
 }
 
