@@ -39,6 +39,7 @@ export const stopRequest = (data) => request({ url: '/api/request/stop', method:
 // 查询详单
 export const getRequestDetail = (requestId) => request({ url: `/api/request/detail/${requestId}`, method: 'get' })
 export const getRequestDetails = () => request({ url: '/api/request/details', method: 'get' })
+export const payRequestDetail = (requestId) => request({ url: `/api/request/detail/${requestId}/pay`, method: 'post' })
 
 // ======================
 // 7.2 管理端接口
@@ -63,6 +64,12 @@ export const recoverStation = (stationCode) => request({ url: `/api/admin/statio
 export const getUsers = (params) => request({ url: '/api/admin/users', method: 'get', params })
 export const getUserDetail = (userId) => request({ url: `/api/admin/users/${userId}`, method: 'get' })
 export const updateBatteryCapacity = (userId, data) => request({ url: `/api/admin/users/${userId}/battery-capacity`, method: 'put', data })
+export const exportAllUserDetailsXlsxUrl = '/api/admin/users/details/export.xlsx'
+export const exportAllUserDetailsXlsx = () => request({
+  url: exportAllUserDetailsXlsxUrl,
+  method: 'get',
+  responseType: 'blob',
+})
 
 // 报表统计
 export const getReports = (granularity) => request({ url: '/api/admin/reports', method: 'get', params: { granularity } })

@@ -13,6 +13,9 @@
         <button class="btn-refresh" :disabled="loading" @click="loadUsers">
           <span class="material-icons">refresh</span>刷新
         </button>
+        <button class="btn-export" @click="exportAllDetails">
+          <span class="material-icons">download</span>导出所有用户详单
+        </button>
       </div>
     </div>
 
@@ -166,7 +169,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
+import { exportAllUserDetailsXlsx, getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import ActionDialog from '@/components/ActionDialog.vue'
 import { useActionDialog } from '@/composables/useActionDialog'
@@ -232,6 +235,20 @@ async function toggleDetail(userId) {
 
 function detailRows(detail) {
   return detail?.historical_details || detail?.details || []
+}
+
+async function exportAllDetails() {
+  const res = await exportAllUserDetailsXlsx()
+  const blob = res instanceof Blob ? res : res?.data
+  if (!blob) return
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'all-user-request-details.xlsx'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 async function editCapacity(u) {
@@ -308,16 +325,20 @@ onMounted(loadUsers)
 .search-box .material-icons { font-size: 18px; color: #98a2b3; }
 .search-box input { border: none; outline: none; width: 100%; font-size: 14px; color: #344054; font-family: inherit; background: transparent; }
 .search-box input::placeholder { color: #98a2b3; }
-.btn-refresh {
+.btn-refresh,
+.btn-export {
   height: 38px; border-radius: 10px;
   border: 1px solid #dce8e1; background: #fff;
   padding: 0 16px; color: #344054; font-weight: 700;
   display: flex; align-items: center; gap: 6px;
   cursor: pointer; font-family: inherit; font-size: 14px;
 }
-.btn-refresh .material-icons { font-size: 16px; }
-.btn-refresh:hover { background: #f9fafb; border-color: #d0d5dd; }
+.btn-refresh .material-icons,
+.btn-export .material-icons { font-size: 16px; }
+.btn-refresh:hover,
+.btn-export:hover { background: #f9fafb; border-color: #d0d5dd; }
 .btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
+.btn-export { color: #047857; border-color: #bdebd6; background: #f0fdf8; }
 
 .loading-state, .empty-state { color: #9ca3af; font-size: 15px; padding: 60px 0; text-align: center; }
 

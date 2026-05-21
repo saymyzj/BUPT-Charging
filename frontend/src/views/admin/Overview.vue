@@ -155,6 +155,47 @@
           </div>
         </section>
 
+        <section class="fault-area" :class="{ empty: !faultQueueRows.length }">
+          <div class="fault-area-head">
+            <div>
+              <h2><span class="fault-dot"></span>故障队列 <span class="fault-count-badge" v-if="faultQueueRows.length">{{ faultQueueRows.length }}</span></h2>
+              <p>故障桩中断后的车辆按优先级在此等待重新调度，不占用等候区容量</p>
+            </div>
+            <div class="fault-legend">
+              <span><i class="red"></i>故障车辆 {{ faultQueueRows.length }}</span>
+              <span><i class="blue"></i>快充 {{ faultQueueRows.filter(r => r.charge_mode === 'FAST').length }}</span>
+              <span><i class="orange"></i>慢充 {{ faultQueueRows.filter(r => r.charge_mode === 'SLOW').length }}</span>
+              <span><i class="purple"></i>续充 {{ faultQueueRows.filter(r => r.is_fault_followup).length }}</span>
+            </div>
+          </div>
+          <div class="fault-area-body">
+            <div class="fault-lane"></div>
+            <div class="fault-grid" v-if="faultQueueRows.length">
+              <div
+                v-for="row in faultQueueRows"
+                :key="row.request_id"
+                class="fault-slot"
+                :class="modeClass(row.charge_mode)"
+              >
+                <div class="fault-slot-rank">{{ row.user_id || row.vehicle_code || '--' }}</div>
+                <div class="fault-slot-info">
+                  <strong>{{ row.username || row.request_id }}</strong>
+                  <small>{{ queueNumberText(row) }} · {{ Number(row.request_energy || 0).toFixed(1) }} kWh · {{ row.is_fault_followup ? '续充' : '等待' }}</small>
+                </div>
+                <span class="fault-slot-mode" :class="modeClass(row.charge_mode)">{{ modeText(row.charge_mode) }}</span>
+              </div>
+            </div>
+            <div v-else class="fault-area-empty">
+              <span class="material-icons">verified</span>
+              <strong>当前无故障车辆</strong>
+              <span>若充电桩发生故障，受影响的车辆将在此处集中展示</span>
+            </div>
+          </div>
+          <div class="fault-footnote">
+            <span>故障队列独立于等候区，优先级高于普通排队车辆</span>
+          </div>
+        </section>
+
       </div>
 
       <aside class="side-status">
@@ -180,46 +221,6 @@
         </div>
       </aside>
     </section>
-    <section class="fault-area" :class="{ empty: !faultQueueRows.length }">
-          <div class="fault-area-head">
-            <div>
-              <h2><span class="fault-dot"></span>故障队列 <span class="fault-count-badge" v-if="faultQueueRows.length">{{ faultQueueRows.length }}</span></h2>
-              <p>故障桩中断后的车辆按优先级在此等待重新调度，不占用等候区容量</p>
-            </div>
-            <div class="fault-legend">
-              <span><i class="red"></i>故障车辆 {{ faultQueueRows.length }}</span>
-              <span><i class="blue"></i>快充 {{ faultQueueRows.filter(r => r.charge_mode === 'FAST').length }}</span>
-              <span><i class="orange"></i>慢充 {{ faultQueueRows.filter(r => r.charge_mode === 'SLOW').length }}</span>
-              <span><i class="purple"></i>续充 {{ faultQueueRows.filter(r => r.is_fault_followup).length }}</span>
-            </div>
-          </div>
-          <div class="fault-area-body">
-            <div class="fault-lane"></div>
-            <div class="fault-grid" v-if="faultQueueRows.length">
-              <div
-                v-for="row in faultQueueRows"
-                :key="row.request_id"
-                class="fault-slot"
-                :class="modeClass(row.charge_mode)"
-              >
-                <div class="fault-slot-rank">{{ queueNumberText(row) }}</div>
-                <div class="fault-slot-info">
-                  <strong>{{ row.username || row.user_id || row.request_id }}</strong>
-                  <small>{{ Number(row.request_energy || 0).toFixed(1) }} kWh · {{ row.is_fault_followup ? '续充' : '等待' }}</small>
-                </div>
-                <span class="fault-slot-mode" :class="modeClass(row.charge_mode)">{{ modeText(row.charge_mode) }}</span>
-              </div>
-            </div>
-            <div v-else class="fault-area-empty">
-              <span class="material-icons">verified</span>
-              <strong>当前无故障车辆</strong>
-              <span>若充电桩发生故障，受影响的车辆将在此处集中展示</span>
-            </div>
-          </div>
-          <div class="fault-footnote">
-            <span>故障队列独立于等候区，优先级高于普通排队车辆</span>
-          </div>
-      </section>
 
     <section class="table-section">
       <div class="table-title">充电桩运行状态</div>
@@ -672,6 +673,8 @@ onUnmounted(() => {
   padding: 22px 28px 30px;
   color: #101828;
   background: #eef2f0;
+  display: flex;
+  flex-direction: column;
 }
 
 .overview-top {
@@ -900,6 +903,14 @@ onUnmounted(() => {
 .section,
 .wait-area,
 .table-section {
+  order: 5;
+}
+
+.charts {
+  order: 6;
+}
+
+.table-section {
   margin-bottom: 16px;
 }
 
@@ -939,6 +950,7 @@ i.red { background: #ef4444; }
 i.gray { background: #98a2b3; }
 
 .queue-section {
+  order: 2;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -1419,15 +1431,20 @@ i.gray { background: #98a2b3; }
 }
 
 .overview-split {
+  order: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 16px;
+  gap: 14px;
   align-items: start;
   margin-bottom: 16px;
 }
 .split-main {
   display: grid;
-  gap: 16px;
+  gap: 10px;
+}
+
+.wait-area {
+  order: 1;
 }
 
 .wait-legend {
@@ -1664,6 +1681,8 @@ i.gray { background: #98a2b3; }
 }
 
 .fault-area {
+  order: 2;
+  margin-bottom: 0;
   border: 1px solid #fecdd3;
   border-radius: 16px;
   background: #fff;
@@ -1778,7 +1797,7 @@ i.gray { background: #98a2b3; }
 }
 .fault-slot {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 64px 1fr auto;
   gap: 0 12px;
   align-items: center;
   padding: 12px 14px;
@@ -1793,7 +1812,7 @@ i.gray { background: #98a2b3; }
   transform: translateY(-1px);
 }
 .fault-slot-rank {
-  width: 44px;
+  width: 60px;
   height: 44px;
   display: grid;
   place-items: center;
@@ -1801,7 +1820,7 @@ i.gray { background: #98a2b3; }
   background: #fef2f2;
   color: #dc2626;
   font-weight: 900;
-  font-size: 16px;
+  font-size: 15px;
 }
 .fault-slot-info {
   display: grid;

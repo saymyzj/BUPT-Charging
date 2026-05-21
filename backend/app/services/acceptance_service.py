@@ -7,7 +7,7 @@ import re
 from io import BytesIO
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from flask import current_app
@@ -171,7 +171,7 @@ def _ensure_vehicle_user(vehicle_code: str) -> int:
         execute_db(
             """
             INSERT INTO user (user_id, username, password_hash, battery_capacity, role)
-            VALUES (?, ?, ?, 80.0, 'USER')
+            VALUES (?, ?, ?, 100.0, 'USER')
             """,
             [vehicle_code, username, hash_password("123456")],
         )
@@ -270,7 +270,7 @@ def _clear_all_runtime_data() -> None:
 
 def configure_acceptance_scenario() -> None:
     set_dispatch_mode("NORMAL")
-    set_fault_dispatch_mode("PRIORITY")
+    set_fault_dispatch_mode("TIME_ORDER")
     for index in range(1, 4):
         execute_db(
             """
@@ -293,7 +293,7 @@ def configure_acceptance_scenario() -> None:
         "waiting_area_capacity": 10,
         "charging_queue_len": 3,
         "dispatch_mode": "NORMAL",
-        "fault_dispatch_mode": "PRIORITY",
+        "fault_dispatch_mode": "TIME_ORDER",
     }
     for key, value in config_values.items():
         _config_set(key, value)
@@ -327,13 +327,13 @@ def disable_acceptance() -> dict:
     return acceptance_state()
 
 
-def initialize_acceptance_database(user_count: int = 10) -> dict:
+def initialize_acceptance_database(user_count: int = 22) -> dict:
     _clear_all_runtime_data()
     configure_acceptance_scenario()
     execute_db(
         """
         INSERT INTO user (user_id, username, password_hash, battery_capacity, role)
-        VALUES ('ADMIN', 'admin', ?, 80.0, 'ADMIN')
+        VALUES ('ADMIN', 'admin', ?, 100.0, 'ADMIN')
         """,
         [hash_password("123456")],
     )
@@ -344,7 +344,7 @@ def initialize_acceptance_database(user_count: int = 10) -> dict:
         execute_db(
             """
             INSERT INTO user (user_id, username, password_hash, battery_capacity, role)
-            VALUES (?, ?, ?, 80.0, 'USER')
+            VALUES (?, ?, ?, 100.0, 'USER')
             """,
             [vehicle_code, username, hash_password("123456")],
         )
@@ -487,9 +487,10 @@ def parse_xlsx_file(file_storage) -> dict:
         raise RuntimeError("openpyxl is not installed; cannot parse xlsx acceptance sample")
 
     filename = Path(file_storage.filename or "acceptance.xlsx").name
-    with NamedTemporaryFile(suffix=".xlsx", delete=True) as temp:
-        file_storage.save(temp.name)
-        wb = load_workbook(temp.name, data_only=True)
+    with TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / filename
+        file_storage.save(temp_path)
+        wb = load_workbook(temp_path, data_only=True)
     ws = wb["需填写sheet"] if "需填写sheet" in wb.sheetnames else wb[wb.sheetnames[0]]
 
     events = []
@@ -534,7 +535,7 @@ def parse_xlsx_file(file_storage) -> dict:
             "waiting_area_capacity": 10,
             "charging_queue_len": 3,
             "dispatch_mode": "NORMAL",
-            "fault_dispatch_mode": "PRIORITY",
+            "fault_dispatch_mode": "TIME_ORDER",
             "start_time": "06:00:00",
             "end_time": "11:00:00",
         },

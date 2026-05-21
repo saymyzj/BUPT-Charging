@@ -13,41 +13,10 @@
       </div>
     </header>
 
-    <section class="status-strip">
-      <div class="strip-item">
-        <span class="strip-icon ok-bg"><span class="material-icons">verified_user</span></span>
-        <div><span class="label">验收模式</span><strong :class="state?.enabled ? 'ok' : 'muted'">{{ state?.enabled ? '已启用' : '未启用' }}</strong></div>
-      </div>
-      <div class="strip-item">
-        <span class="strip-icon gray-bg"><span class="material-icons">schedule</span></span>
-        <div><span class="label">模拟时间</span><strong>{{ clockText }}</strong></div>
-      </div>
-      <div class="strip-item">
-        <span class="strip-icon ok-bg"><span class="material-icons">play_arrow</span></span>
-        <div><span class="label">执行状态</span><strong>{{ statusText }}</strong></div>
-      </div>
-      <div class="strip-item">
-        <span class="strip-icon gray-bg"><span class="material-icons">flag</span></span>
-        <div><span class="label">事件</span><strong>{{ state?.event_counts?.EXECUTED || 0 }}/{{ state?.event_counts?.TOTAL || 0 }}</strong></div>
-      </div>
-      <div class="strip-item">
-        <span class="strip-icon ok-bg"><span class="material-icons">hub</span></span>
-        <div><span class="label">正确性</span><strong :class="snapshot?.integrity?.ok === false ? 'bad' : 'ok'">{{ snapshot?.integrity?.ok === false ? '有异常' : '通过' }}</strong></div>
-      </div>
-      <div class="quick-links">
-        <router-link to="/admin/overview" target="_blank"><span class="material-icons">dashboard</span>管理总览</router-link>
-        <router-link to="/admin/records" target="_blank"><span class="material-icons">settings_input_component</span>设备控制</router-link>
-        <router-link to="/admin/statistics" target="_blank"><span class="material-icons">monitoring</span>报表统计</router-link>
-        <router-link to="/login" target="_blank"><span class="material-icons">login</span>登录页</router-link>
-      </div>
-    </section>
-
     <section class="account-strip">
       <div>
         <h2>验收账号入口</h2>
-        <p>初始化或确认样例后生成账号。用户账号密码统一为 123456，可一键打开独立工作台。</p>
       </div>
-      <button class="tool-btn strong" @click="openAllUserWorkspaces"><span class="material-icons">groups</span>打开所有用户工作台</button>
       <label class="demo-toggle" :class="{ disabled: !canEnableDemo }">
         <input v-model="demoNextEvent" type="checkbox" :disabled="!canEnableDemo" />
         <span>下个事件演示</span>
@@ -55,7 +24,7 @@
       <div class="account-links">
         <a v-if="adminEntry" :href="adminEntry.url" target="_blank">admin</a>
         <a v-for="user in visibleUserEntries" :key="user.user_id" :href="user.url" target="_blank">{{ user.username }}</a>
-        <button v-if="hiddenUserCount > 0" class="more-users" @click="openAllUserWorkspaces">...</button>
+        <button v-if="hiddenUserCount > 0" class="more-users" @click="showAllAccounts = true">...</button>
       </div>
     </section>
 
@@ -79,14 +48,36 @@
         <div class="timeline-config-grid">
           <div class="timeline-config-item">
             <span class="timeline-config-label">起点时刻</span>
-            <div class="timeline-config-value"><strong><input v-model="timelineStart" type="text" placeholder="06:00:00" @change="normalizeTimelineBounds" /></strong><span class="timeline-config-badge">今天</span></div>
+            <div class="timeline-config-value">
+              <input
+                v-model="timelineStart"
+                class="time-bound-input"
+                type="text"
+                placeholder="06:00:00"
+                @focus="isEditingTimelineBounds = true"
+                @blur="finishTimelineBoundsEdit"
+                @keyup.enter="finishTimelineBoundsEdit"
+              />
+              <span class="timeline-config-badge">今天</span>
+            </div>
           </div>
           <div class="timeline-config-item">
             <span class="timeline-config-label">终点时刻</span>
-            <div class="timeline-config-value"><strong><input v-model="timelineEnd" type="text" placeholder="11:00:00" @change="normalizeTimelineBounds" /></strong><span class="timeline-config-badge">今天</span></div>
+            <div class="timeline-config-value">
+              <input
+                v-model="timelineEnd"
+                class="time-bound-input"
+                type="text"
+                placeholder="11:00:00"
+                @focus="isEditingTimelineBounds = true"
+                @blur="finishTimelineBoundsEdit"
+                @keyup.enter="finishTimelineBoundsEdit"
+              />
+              <span class="timeline-config-badge">今天</span>
+            </div>
           </div>
           <div class="timeline-config-item">
-            <span class="timeline-config-label">跳转间隔</span>
+            <span class="timeline-config-label">跳转时间</span>
             <div class="timeline-config-value">
               <div class="jump-input-row"><input v-model="jumpTimeText" type="text" placeholder="08:00:00" /><button class="jump-confirm" @click="jumpToSpecifiedTime"><span class="material-icons">my_location</span>跳转</button></div>
             </div>
@@ -139,7 +130,7 @@
             class="timeline-slider"
             v-model.number="sliderSeconds"
             type="range"
-            min="0"
+            :min="minimumSliderSeconds"
             :max="timelineDuration"
             step="1"
             @input="handleSliderInput"
@@ -157,35 +148,17 @@
       <div class="execution-card">
         <div class="control-actions-head"><span class="section-chip"><span class="material-icons">bolt</span>执行控制</span></div>
         <div class="control-actions-grid">
-          <button class="action-tile" disabled title="验收执行不支持回溯；如需回看请使用快照历史">
-            <span class="material-icons">skip_previous</span>
-            <strong>上一事件</strong>
-            <small>返回到上一个已执行事件</small>
+          <button class="action-tile primary" @click="toggleExecution">
+            <span class="material-icons">{{ isRunning ? 'pause' : 'play_arrow' }}</span>
+            <strong>{{ isRunning ? '暂停执行' : '开始执行' }}</strong>
           </button>
-          <button class="action-tile" :disabled="!hasPendingEvent" @click="executeUntilNext">
-            <span class="material-icons">double_arrow</span>
-            <strong>执行到下一事件</strong>
-            <small>推进到下一个待执行事件时刻</small>
-          </button>
-          <button class="action-tile primary" :disabled="isRunning" @click="startExecution">
-            <span class="material-icons">play_arrow</span>
-            <strong>开始执行</strong>
-            <small>从当前时刻开始执行</small>
-          </button>
-          <button class="action-tile" @click="pauseExecution">
-            <span class="material-icons">pause</span>
-            <strong>暂停执行</strong>
-            <small>暂停当前正在执行的事件</small>
-          </button>
-          <button class="action-tile" :disabled="!hasPendingEvent" @click="jumpRelative(1)">
-            <span class="material-icons">keyboard_double_arrow_right</span>
+          <button class="action-tile" :disabled="!hasPendingEvent || isRunning" @click="executeUntilNext">
+            <span class="material-icons">skip_next</span>
             <strong>下一事件</strong>
-            <small>查看下一个待执行事件详情</small>
           </button>
-          <button class="action-tile danger" @click="executeAll">
+          <button class="action-tile danger" :disabled="isRunning" @click="executeAll">
             <span class="material-icons">flag</span>
             <strong>立即执行至最终态</strong>
-            <small>跳过所有中间事件直接执行到结束时刻</small>
           </button>
         </div>
         <div class="control-hint">
@@ -494,6 +467,8 @@ const isScrubbing = ref(false)
 const runningEventId = ref('')
 const actionLog = ref([])
 const demoNextEvent = ref(false)
+const showAllAccounts = ref(false)
+const isEditingTimelineBounds = ref(false)
 const hoverTime = ref('')
 const hoverLeft = ref('0px')
 const hoverNearestIdx = ref(-1)
@@ -525,7 +500,7 @@ const userEntries = computed(() => (state.value?.accounts?.users || []).map(user
   ...user,
   url: `/user/workspace?token=${encodeURIComponent(user.token)}`,
 })))
-const visibleUserEntries = computed(() => userEntries.value.slice(0, 7))
+const visibleUserEntries = computed(() => showAllAccounts.value ? userEntries.value : userEntries.value.slice(0, 7))
 const hiddenUserCount = computed(() => Math.max(0, userEntries.value.length - visibleUserEntries.value.length))
 const canEnableDemo = computed(() => events.value.some(event => event.source === 'XLSX'))
 const tableRows = computed(() => {
@@ -581,6 +556,7 @@ const executedFloorSeconds = computed(() => {
   const executed = events.value.filter(event => event.status === 'EXECUTED').map(event => secondsFromTime(event.at))
   return executed.length ? Math.max(...executed) : 0
 })
+const minimumSliderSeconds = computed(() => Math.max(executedFloorSeconds.value, secondsFromTime(simulationTime.value)))
 const timelineMarks = computed(() => events.value.map((event, index) => ({
   key: `${event.event_id}-${index}`,
   event,
@@ -722,9 +698,15 @@ function normalizeTimelineBounds() {
   sliderSeconds.value = secondsFromTime(simulationTime.value)
 }
 
+function finishTimelineBoundsEdit() {
+  isEditingTimelineBounds.value = false
+  normalizeTimelineBounds()
+}
+
 async function loadState() {
   const data = unwrapResponseData(await getAcceptanceState())
   state.value = data
+  if (!isEditingTimelineBounds.value) expandTimelineToInclude(data.simulation_time)
   if (!isScrubbing.value) {
     sliderSeconds.value = secondsFromTime(data.simulation_time)
   }
@@ -776,8 +758,8 @@ function handleSliderInput() {
 async function commitSliderTime() {
   isRunning.value = false
   isScrubbing.value = false
-  if (sliderSeconds.value < executedFloorSeconds.value) {
-    sliderSeconds.value = executedFloorSeconds.value
+  if (sliderSeconds.value < minimumSliderSeconds.value) {
+    sliderSeconds.value = minimumSliderSeconds.value
     pushActionLog(`不能拖回已执行事件之前；已定位到 ${formatClock(timeFromSeconds(sliderSeconds.value))}`, 'info')
   }
   await setAcceptanceTime({ simulation_time: timeFromSeconds(sliderSeconds.value) })
@@ -817,7 +799,7 @@ async function jumpRelative(direction) {
 
 async function initializeDatabase() {
   isRunning.value = false
-  await initializeAcceptanceDatabase({ user_count: 10 })
+  await initializeAcceptanceDatabase({ user_count: 22 })
   parsed.value = null
   editableEvents.value = []
   await loadAll()
@@ -847,7 +829,8 @@ async function executeUntilNext() {
 
 async function executeAll() {
   isRunning.value = false
-  await executeAcceptanceAll()
+  const data = unwrapResponseData(await executeAcceptanceAll())
+  expandTimelineToInclude(data.simulation_time)
   await loadAll()
 }
 
@@ -855,6 +838,14 @@ async function pauseExecution() {
   isRunning.value = false
   await setAcceptanceStatus({ status: 'PAUSED' })
   await loadState()
+}
+
+function toggleExecution() {
+  if (isRunning.value) {
+    pauseExecution()
+    return
+  }
+  startExecution()
 }
 
 function sleep(ms) {
@@ -899,8 +890,12 @@ async function startExecution() {
     }
     runningEventId.value = next.event_id
     if (demoNextEvent.value && canEnableDemo.value) {
+      await setAcceptanceStatus({ status: 'PAUSED' })
       openEventPage(next)
-      pushActionLog(`已打开 ${formatClock(next.clock || next.at)} 的演示页面：${eventTitle(next)}`, 'info')
+      pushActionLog(`演示 ${formatClock(next.clock || next.at)}：已暂停并打开对应页面`, 'info')
+      await sleep(2200)
+      if (!isRunning.value) break
+      await setAcceptanceStatus({ status: 'RUNNING' })
     }
     const nextSecond = secondsFromTime(next.at)
     if (nextSecond <= localSecond) {
@@ -1010,6 +1005,31 @@ function applyScenarioTimeline(scenario, scenarioEvents = []) {
     }
   }
   normalizeTimelineBounds()
+  expandTimelineToIncludeEvents(scenarioEvents)
+}
+
+function expandTimelineToInclude(value) {
+  if (!value) return
+  const targetSeconds = secondOfDayFromTime(value)
+  if (targetSeconds > timelineEndSeconds.value) {
+    const padded = Math.min(23 * 3600 + 59 * 60 + 59, targetSeconds + 30 * 60)
+    timelineEnd.value = secondOfDayToClock(padded)
+  }
+  if (targetSeconds < timelineStartSeconds.value) {
+    timelineStart.value = secondOfDayToClock(targetSeconds)
+  }
+}
+
+function expandTimelineToIncludeEvents(eventList = []) {
+  eventList.forEach(event => expandTimelineToInclude(event.at || event.event_time))
+}
+
+function secondOfDayToClock(seconds) {
+  const clamped = Math.max(0, Math.min(23 * 3600 + 59 * 60 + 59, Math.floor(Number(seconds) || 0)))
+  const hour = String(Math.floor(clamped / 3600)).padStart(2, '0')
+  const minute = String(Math.floor((clamped % 3600) / 60)).padStart(2, '0')
+  const second = String(clamped % 60).padStart(2, '0')
+  return `${hour}:${minute}:${second}`
 }
 
 function stationFor(snapshotValue, stationCode) {
@@ -1069,15 +1089,16 @@ onUnmounted(() => {
   --line: #e5eaf0;
   max-width: 1500px;
   margin: 0 auto;
-  padding: 22px 28px 34px;
+  padding: 18px 24px 28px;
   color: var(--ink);
+  font-size: 13px;
   background:
     radial-gradient(circle at 4% 0%, rgba(16, 185, 129, .08), transparent 26%),
     linear-gradient(180deg, #fbfefd 0%, #f8fafc 100%);
 }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 18px; }
-.page-head h1 { margin: 0; font-size: 25px; line-height: 1.15; font-weight: 900; letter-spacing: 0; }
-.page-head p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.page-head h1 { margin: 0; font-size: 23px; line-height: 1.15; font-weight: 900; letter-spacing: 0; }
+.page-head p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
 .head-actions, .quick-links, .tabs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 button, a { font: inherit; }
 .primary-btn, .ghost-btn, .tool-btn {
@@ -1146,55 +1167,55 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .account-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  margin-bottom: 14px;
-  padding: 18px 20px;
+  margin-bottom: 12px;
+  padding: 12px 16px;
   background: rgba(255,255,255,.92);
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(15,23,42,.05);
 }
 .account-strip > div:first-child { flex: 1 1 280px; min-width: 0; }
-.account-strip h2 { margin: 0; font-size: 16px; font-weight: 900; }
+.account-strip h2 { margin: 0; font-size: 15px; font-weight: 900; }
 .account-strip p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .account-links { flex: 1 1 100%; order: 10; display: flex; flex-wrap: wrap; gap: 8px; overflow: hidden; justify-content: flex-start; padding-top: 2px; }
-.account-links a, .more-users { min-width: 72px; height: 34px; padding: 0 12px; border-radius: 7px; background: #f4fdf8; color: #00895f; font-size: 12px; font-weight: 900; text-decoration: none; border: 1px solid #d4f2e2; display: inline-flex; align-items: center; justify-content: center; }
+.account-links a, .more-users { min-width: 66px; height: 30px; padding: 0 10px; border-radius: 7px; background: #f4fdf8; color: #00895f; font-size: 12px; font-weight: 900; text-decoration: none; border: 1px solid #d4f2e2; display: inline-flex; align-items: center; justify-content: center; }
 .more-users { min-width: 38px; cursor: pointer; }
-.timeline-panel { padding: 28px 28px 18px; border-radius: 14px; border: 1px solid #e6edf3; background: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.08); display: grid; gap: 18px; margin-bottom: 14px; }
+.timeline-panel { padding: 14px 18px 12px; border-radius: 14px; border: 1px solid #e6edf3; background: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.08); display: grid; gap: 10px; margin-bottom: 10px; }
 .timeline-head--hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 0; border: 0; }
 .timeline-title { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
-.timeline-title-icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #35d391, #07945e); box-shadow: inset 0 -6px 12px rgba(0,0,0,.12), 0 10px 20px rgba(16,185,129,.22); }
-.timeline-title-icon .material-icons { font-size: 28px; }
-.timeline-head--hero h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.15; font-weight: 900; color: #0f172a; }
-.timeline-head--hero p { margin: 0; color: #475569; font-size: 13px; font-weight: 650; }
-.timeline-stats { display: flex; gap: 14px; flex-wrap: wrap; }
-.timeline-stat { min-width: 140px; height: 62px; border: 1px solid #e6edf3; border-radius: 12px; background: linear-gradient(180deg, #fff, #fbfcfd); box-shadow: 0 6px 16px rgba(15,23,42,.04); display: grid; place-content: center; text-align: center; padding: 8px 14px; }
-.timeline-stat-label { color: #475569; font-size: 13px; font-weight: 760; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.timeline-title-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #35d391, #07945e); box-shadow: inset 0 -6px 12px rgba(0,0,0,.12), 0 8px 16px rgba(16,185,129,.18); }
+.timeline-title-icon .material-icons { font-size: 22px; }
+.timeline-head--hero h2 { margin: 0 0 4px; font-size: 18px; line-height: 1.15; font-weight: 900; color: #0f172a; }
+.timeline-head--hero p { margin: 0; color: #475569; font-size: 12px; font-weight: 650; }
+.timeline-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.timeline-stat { min-width: 118px; height: 50px; border: 1px solid #e6edf3; border-radius: 10px; background: linear-gradient(180deg, #fff, #fbfcfd); box-shadow: 0 4px 12px rgba(15,23,42,.035); display: grid; place-content: center; text-align: center; padding: 6px 10px; }
+.timeline-stat-label { color: #475569; font-size: 11px; font-weight: 760; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .timeline-stat-label .material-icons { font-size: 14px; color: #10b981; }
-.timeline-stat strong { color: #08a264; font-size: 22px; line-height: 1.2; font-weight: 900; }
+.timeline-stat strong { color: #08a264; font-size: 18px; line-height: 1.2; font-weight: 900; }
 .timeline-config-card, .timeline-board, .execution-card { border: 1px solid #e6edf3; border-radius: 14px; background: #fff; box-shadow: 0 8px 20px rgba(15,23,42,.035); }
-.timeline-config-card { padding: 20px 22px 18px; }
-.control-actions-head { display: flex; align-items: center; margin-bottom: 16px; }
-.section-chip { display: inline-flex; align-items: center; gap: 8px; color: #111827; font-size: 16px; font-weight: 900; }
-.section-chip .material-icons { color: #0aaa68; font-size: 20px; }
-.timeline-config-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.timeline-config-item { min-height: 80px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(180deg, #fff, #fcfdff); padding: 14px 16px; display: grid; align-content: center; gap: 8px; }
-.timeline-config-label { color: #475569; font-size: 13px; font-weight: 760; }
+.timeline-config-card { padding: 12px 14px; }
+.control-actions-head { display: flex; align-items: center; margin-bottom: 10px; }
+.section-chip { display: inline-flex; align-items: center; gap: 7px; color: #111827; font-size: 14px; font-weight: 900; }
+.section-chip .material-icons { color: #0aaa68; font-size: 18px; }
+.timeline-config-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.timeline-config-item { min-height: 58px; border: 1px solid #e2e8f0; border-radius: 10px; background: linear-gradient(180deg, #fff, #fcfdff); padding: 9px 11px; display: grid; align-content: center; gap: 6px; }
+.timeline-config-label { color: #475569; font-size: 12px; font-weight: 760; }
 .timeline-config-value { display: flex; align-items: center; gap: 10px; }
-.timeline-config-value strong { color: #0f172a; font-size: 18px; font-weight: 500; letter-spacing: 0; }
-.timeline-config-value input[type='time'], .timeline-config-value input[type='text'] { border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-size: 18px; font-weight: 900; padding: 0; width: 110px; }
-.timeline-config-badge { color: #334155; background: #f1f5f9; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 760; }
-.jump-input-row { height: 40px; display: grid; grid-template-columns: 1fr 80px; border: 1px solid #dfe7ef; border-radius: 10px; overflow: hidden; background: #fff; }
-.jump-input-row input { border: 0; outline: 0; padding: 0 12px; font-size: 16px; color: #0f172a; background: transparent; font-weight: 900; }
+.time-bound-input { width: 104px; height: 32px; border: 1px solid #cfe0d8; border-radius: 8px; outline: 0; background: #fff; color: #0f172a; font: inherit; font-size: 16px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
+.time-bound-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
+.timeline-config-badge { color: #334155; background: #f1f5f9; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 760; }
+.jump-input-row { height: 34px; display: grid; grid-template-columns: 1fr 72px; border: 1px solid #dfe7ef; border-radius: 9px; overflow: hidden; background: #fff; }
+.jump-input-row input { border: 0; outline: 0; padding: 0 10px; font-size: 15px; color: #0f172a; background: transparent; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
 .jump-confirm { border: 0; border-left: 1px solid #dfe7ef; background: #fff; color: #07945e; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 900; cursor: pointer; }
 .jump-confirm .material-icons { font-size: 16px; }
 .speed-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0; border-radius: 10px; border: 1px solid #dfe7ef; background: #fff; overflow: hidden; }
-.speed-group button { height: 38px; min-width: 0; border: 0; border-right: 1px solid #e5e7eb; border-radius: 0; background: #fff; color: #0f172a; font-size: 14px; font-weight: 900; cursor: pointer; }
+.speed-group button { height: 32px; min-width: 0; border: 0; border-right: 1px solid #e5e7eb; border-radius: 0; background: #fff; color: #0f172a; font-size: 13px; font-weight: 900; cursor: pointer; }
 .speed-group button:last-child { border-right: 0; }
 .speed-group button.active { color: #fff; background: linear-gradient(135deg, #35d391, #07945e); box-shadow: 0 6px 14px rgba(16,185,129,.22); }
-.timeline-board { padding: 24px 32px; }
-.timeline-track-container { position: relative; margin: 70px 0 50px; padding: 0 90px; min-height: 50px; }
+.timeline-board { padding: 12px 22px; }
+.timeline-track-container { position: relative; margin: 48px 0 34px; padding: 0 82px; min-height: 44px; }
 .end-label { position: absolute; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; z-index: 4; }
 .end-label.start { left: 0; }
 .end-label.end { right: 0; }
@@ -1240,15 +1261,15 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .timeline-mark.done { background: #10b981; box-shadow: 0 0 0 1px #34d399; }
 .timeline-mark.failed { background: #ef4444; box-shadow: 0 0 0 1px #f87171; }
 .timeline-slider { position: absolute; top: 0; left: 90px; right: 90px; bottom: 0; width: calc(100% - 180px); opacity: 0; cursor: crosshair; z-index: 11; }
-.timeline-foot { display: flex; justify-content: space-between; margin-top: 20px; padding: 12px 16px; background: #d1fae5; border-radius: 8px; opacity: .8; }
-.footer-item { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #059669; font-weight: 700; }
+.timeline-foot { display: flex; justify-content: space-between; margin-top: 10px; padding: 8px 12px; background: #d1fae5; border-radius: 8px; opacity: .8; }
+.footer-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #059669; font-weight: 700; }
 .footer-item .material-icons { font-size: 16px; }
 .footer-item.right { color: #64748b; }
-.execution-card { padding: 18px 22px; }
-.control-actions-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
-.action-tile { min-height: 90px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 10px; text-align: center; cursor: pointer; box-shadow: 0 6px 16px rgba(15,23,42,.03); transition: box-shadow .15s; gap: 4px; }
+.execution-card { padding: 12px 14px; }
+.control-actions-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.action-tile { min-height: 42px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; display: flex; flex-direction: row; align-items: center; justify-content: center; padding: 8px 10px; text-align: center; cursor: pointer; box-shadow: 0 4px 12px rgba(15,23,42,.025); transition: box-shadow .15s; gap: 6px; }
 .action-tile:hover:not(:disabled) { box-shadow: 0 8px 20px rgba(15,23,42,.08); }
-.action-tile .material-icons { font-size: 22px; color: #667085; }
+.action-tile .material-icons { font-size: 18px; color: #667085; }
 .action-tile strong { color: #0f172a; font-size: 13px; font-weight: 900; white-space: nowrap; }
 .action-tile small { color: #64748b; font-size: 11px; font-weight: 700; line-height: 1.4; }
 .action-tile.primary { color: #fff; border-color: #16b978; background: linear-gradient(135deg, #39d794, #07945e); box-shadow: 0 12px 24px rgba(16,185,129,.22); }
@@ -1258,7 +1279,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .action-tile.danger .material-icons, .action-tile.danger strong { color: #be123c; }
 .action-tile:disabled { background: #fafbfc; color: #94a3b8; cursor: not-allowed; }
 .action-tile:disabled strong, .action-tile:disabled small, .action-tile:disabled .material-icons { color: #94a3b8; }
-.control-hint { margin-top: 16px; min-height: 44px; border-radius: 8px; padding: 0 16px; display: flex; align-items: center; gap: 8px; background: #f4f7fb; color: #55709a; font-size: 13px; font-weight: 720; }
+.control-hint { margin-top: 10px; min-height: 32px; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; background: #f4f7fb; color: #55709a; font-size: 12px; font-weight: 720; }
 .control-hint .material-icons { color: #4f8ce8; font-size: 18px; }
 .card-head h3, .upload-card h3 { margin: 0; font-size: 17px; font-weight: 900; }
 .upload-card p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
@@ -1275,14 +1296,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .workspace-grid { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 2fr) minmax(220px, .7fr); gap: 14px; align-items: stretch; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf2f7; }
 .card-head span { color: var(--muted); font-size: 12px; font-weight: 850; }
-.event-list { max-height: 560px; overflow: auto; padding: 8px; }
-.event-row { width: 100%; display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 8px; align-items: start; border: 1px solid transparent; background: #fff; border-radius: 9px; padding: 10px 12px; text-align: left; cursor: pointer; }
+.event-list { max-height: 480px; overflow: auto; padding: 8px; }
+.event-row { width: 100%; display: grid; grid-template-columns: 68px minmax(0, 1fr) 70px; gap: 8px; align-items: center; border: 1px solid transparent; background: #fff; border-radius: 9px; padding: 9px 10px; text-align: left; cursor: pointer; }
 .event-row:hover, .event-row.current { background: #f0fdf4; border-color: #bbf7d0; }
 .event-row.executing { background: #eff6ff; border-color: #93c5fd; box-shadow: inset 3px 0 0 #2563eb; }
 .event-row.failed { background: #fff1f2; }
 .event-time { color: var(--green-strong); font-weight: 900; font-size: 13px; }
-.event-main { font-weight: 850; color: var(--ink); min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-.event-status { border-radius: 999px; padding: 3px 7px; font-size: 11px; font-weight: 800; background: #f2f4f7; color: #667085; }
+.event-main { font-weight: 850; color: var(--ink); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.event-status { border-radius: 999px; padding: 3px 7px; font-size: 10px; font-weight: 800; background: #f2f4f7; color: #667085; text-align: center; white-space: nowrap; }
 .event-status.EXECUTED { background: #dcfce7; color: #15803d; }
 .event-status.PENDING { background: #fef3c7; color: #b45309; }
 .event-status.FAILED { background: #ffe4e6; color: #be123c; }
@@ -1324,8 +1345,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .editor-head { color: #475569; font-size: 12px; font-weight: 900; border-bottom: 1px solid #edf2ef; background: #fbfcfd; }
 .editor-row { border-bottom: 1px solid #f1f5f3; }
 .editor-row input, .editor-row select { height: 32px; border: 1px solid #dfe8e3; border-radius: 7px; padding: 0 10px; background: #fff; font-weight: 720; color: var(--ink); }
-.snapshot-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: stretch; }
-.history-list { overflow: auto; }
+.snapshot-grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: stretch; max-height: 720px; }
+.history-list { overflow: auto; max-height: 720px; }
 .history-list .card-head { position: sticky; top: 0; z-index: 2; background: #fff; }
 .snapshot-row { width: 100%; display: grid; grid-template-columns: 82px 1fr auto; gap: 10px; align-items: center; border: 0; border-bottom: 1px solid #edf2ef; background: #fff; padding: 12px 16px; text-align: left; cursor: pointer; }
 .snapshot-row:hover, .snapshot-row.active { background: #f0fdf4; box-shadow: inset 3px 0 0 #10b981; }
@@ -1431,7 +1452,6 @@ td { color: #344054; background: #fff; }
 
 @media (max-width: 1280px) {
   .timeline-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .control-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 1180px) {
   .workspace-grid, .sample-grid, .snapshot-grid { grid-template-columns: 1fr; }
@@ -1452,4 +1472,3 @@ td { color: #344054; background: #fff; }
   .current-bubble { display: none; }
 }
 </style>
-

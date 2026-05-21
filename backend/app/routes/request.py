@@ -857,6 +857,8 @@ def list_request_details():
             rd.charge_fee,
             rd.service_fee,
             rd.total_fee,
+            rd.payment_status,
+            rd.paid_at,
             rd.request_status
         FROM request_detail rd
         JOIN charge_request cr ON cr.id = rd.request_id
@@ -879,9 +881,42 @@ def list_request_details():
                 "charge_fee": float(row["charge_fee"]),
                 "service_fee": float(row["service_fee"]),
                 "total_fee": float(row["total_fee"]),
+                "payment_status": row["payment_status"],
+                "paid_at": _iso_string(row["paid_at"]),
                 "request_status": row["request_status"],
                 "timeline": request_lifecycle(str(row["request_id"])),
             }
             for row in rows
         ]
     )
+
+
+@request_bp.route("/detail/<request_id>/pay", methods=["POST"])
+@require_auth
+def pay_request_detail(request_id):
+    current_user = get_current_user()
+    row = query_db(
+        """
+        SELECT rd.id
+        FROM request_detail rd
+        JOIN charge_request cr ON cr.id = rd.request_id
+        WHERE cr.request_id = ?
+          AND rd.user_id = ?
+        """,
+        [request_id, current_user["id"]],
+        one=True,
+    )
+    if not row:
+        return error_response(1002, "request detail not found")
+
+    execute_db(
+        """
+        UPDATE request_detail
+        SET payment_status = 'PAID',
+            paid_at = ?
+        WHERE id = ?
+        """,
+        [datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), row["id"]],
+    )
+    detail = ensure_request_detail(request_id)
+    return success_response({**detail, "request_id": request_id, "timeline": request_lifecycle(request_id)})

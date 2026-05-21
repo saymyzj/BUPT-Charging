@@ -332,7 +332,7 @@
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getRequestDetails } from '@/api/charging'
+import { getRequestDetails, payRequestDetail } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import { CHARGE_MODE_TEXT } from '@/constants/enums'
 
@@ -350,11 +350,26 @@ const paying = ref(false)
 const payMsg = ref('')
 
 async function handlePay() {
+  if (!selected.value?.request_id) return
   paying.value = true
   payMsg.value = ''
-  await new Promise(r => setTimeout(r, 800))
-  paying.value = false
-  payMsg.value = '暂未接入支付接口，请联系管理员完成支付。'
+  try {
+    const res = await payRequestDetail(selected.value.request_id)
+    const paid = unwrapResponseData(res)
+    const next = {
+      ...selected.value,
+      ...paid,
+      payment_status: 'PAID',
+      paid_at: paid?.paid_at || new Date().toISOString(),
+    }
+    selected.value = next
+    bills.value = bills.value.map(b => b.request_id === next.request_id ? { ...b, ...next } : b)
+    payMsg.value = '支付成功。'
+  } catch (e) {
+    payMsg.value = e?.response?.data?.message || '支付失败，请稍后重试。'
+  } finally {
+    paying.value = false
+  }
 }
 
 const chargeFeeRatio = computed(() => {

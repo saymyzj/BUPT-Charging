@@ -38,7 +38,7 @@ def get_state():
 def initialize():
     data = request.get_json(silent=True) or {}
     try:
-        return success_response(initialize_acceptance_database(int(data.get("user_count") or 10)))
+        return success_response(initialize_acceptance_database(int(data.get("user_count") or 22)))
     except Exception as exc:
         return error_response(1003, str(exc))
 

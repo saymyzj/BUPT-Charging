@@ -22,14 +22,14 @@ def _next_public_user_id() -> str:
         """
         SELECT user_id
         FROM user
-        WHERE user_id LIKE 'U%'
+        WHERE user_id LIKE 'V%'
         ORDER BY CAST(SUBSTR(user_id, 2) AS INTEGER) DESC
         LIMIT 1
         """,
         one=True,
     )
     next_number = 1 if not row else int(str(row["user_id"])[1:]) + 1
-    return f"U{next_number:03d}"
+    return f"V{next_number}"
 
 
 def _iso_string(value):

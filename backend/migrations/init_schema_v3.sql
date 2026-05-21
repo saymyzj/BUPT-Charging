@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS request_detail (
     charge_fee REAL NOT NULL DEFAULT 0.0,
     service_fee REAL NOT NULL DEFAULT 0.0,
     total_fee REAL NOT NULL DEFAULT 0.0,
+    payment_status TEXT NOT NULL DEFAULT 'UNPAID'
+        CHECK(payment_status IN ('UNPAID', 'PAID')),
+    paid_at TIMESTAMP,
     request_status TEXT NOT NULL
         CHECK(request_status IN ('COMPLETED', 'COMPLETED_EARLY', 'FAULT_INTERRUPTED')),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

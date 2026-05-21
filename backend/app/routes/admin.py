@@ -1,8 +1,9 @@
 """V3 admin routes."""
 
 import json
+from io import BytesIO
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, request, send_file
 
 from app.enums import DispatchMode, FaultDispatchMode
 from app.services.acceptance_service import acceptance_enabled, acceptance_time, record_manual_event
@@ -19,6 +20,11 @@ from app.services.queue_model import (
 from app.utils.auth import require_admin
 from app.utils.db import execute_db, query_db
 from app.utils.response import error_response, success_response
+
+try:
+    from openpyxl import Workbook
+except ImportError:  # pragma: no cover
+    Workbook = None
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -138,6 +144,8 @@ def _detail_summary(row):
         "charge_fee": float(row["charge_fee"]),
         "service_fee": float(row["service_fee"]),
         "total_fee": float(row["total_fee"]),
+        "payment_status": row["payment_status"] if "payment_status" in row.keys() else "UNPAID",
+        "paid_at": _iso_string(row["paid_at"]) if "paid_at" in row.keys() else None,
         "request_status": row["request_status"],
     }
 
@@ -530,6 +538,8 @@ def get_user_detail(user_id):
             rd.charge_fee,
             rd.service_fee,
             rd.total_fee,
+            rd.payment_status,
+            rd.paid_at,
             rd.request_status
         FROM request_detail rd
         WHERE rd.user_id = ?
@@ -542,6 +552,61 @@ def get_user_detail(user_id):
     payload["historical_details"] = details
     payload["details"] = details
     return success_response(payload)
+
+
+@admin_bp.route("/users/details/export.xlsx", methods=["GET"])
+@require_admin
+def export_user_details_xlsx():
+    if Workbook is None:
+        return error_response(1003, "openpyxl is not installed")
+
+    rows = query_db(
+        """
+        SELECT
+            u.user_id,
+            rd.station_code,
+            rd.start_time,
+            rd.stop_time,
+            rd.actual_energy,
+            rd.charge_fee,
+            rd.service_fee,
+            rd.total_fee
+        FROM request_detail rd
+        JOIN user u ON u.id = rd.user_id
+        ORDER BY u.user_id, rd.start_time, rd.id
+        """
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "用户详单"
+    headers = ["车号(用户ID)", "分配的桩号", "充电开始时间", "充电结束时间", "充电电量", "充电费", "服务费", "总费"]
+    ws.append(headers)
+    for row in rows:
+        ws.append(
+            [
+                row["user_id"],
+                row["station_code"],
+                _iso_string(row["start_time"]),
+                _iso_string(row["stop_time"]),
+                float(row["actual_energy"]),
+                float(row["charge_fee"]),
+                float(row["service_fee"]),
+                float(row["total_fee"]),
+            ]
+        )
+    for column in ws.columns:
+        width = max(len(str(cell.value or "")) for cell in column) + 2
+        ws.column_dimensions[column[0].column_letter].width = min(max(width, 12), 24)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="all-user-request-details.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @admin_bp.route("/users/<user_id>/battery-capacity", methods=["PUT"])

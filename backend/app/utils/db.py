@@ -50,6 +50,13 @@ V3_REQUIRED_COLUMNS = {
     'acceptance_snapshot': {'snapshot_time', 'snapshot_phase', 'snapshot_payload'},
 }
 
+V3_OPTIONAL_COLUMN_DEFS = {
+    'request_detail': {
+        'payment_status': "TEXT NOT NULL DEFAULT 'UNPAID'",
+        'paid_at': 'TIMESTAMP',
+    },
+}
+
 
 def _resolve_migrations_dir(database_path: str) -> Path:
     migrations_dir = Path(database_path).resolve().parent / 'migrations'
@@ -149,6 +156,7 @@ def _create_fresh_database(database_path: str, schema_path: Path, apply_runtime_
     try:
         with open(schema_path, 'r', encoding='utf-8') as f:
             db.executescript(f.read())
+        _ensure_optional_columns(db)
         if apply_runtime_config:
             _apply_runtime_config(db)
         db.commit()
@@ -200,6 +208,7 @@ def _initialize_database_file(database_path: str, apply_runtime_config: bool = F
                 )
             with open(schema_path, 'r', encoding='utf-8') as f:
                 db.executescript(f.read())
+            _ensure_optional_columns(db)
             if apply_runtime_config:
                 _apply_runtime_config(db)
             db.commit()
@@ -272,6 +281,18 @@ def _apply_runtime_config(db):
             """,
             (key, value),
         )
+
+
+def _ensure_optional_columns(db):
+    tables = _table_names(db)
+    for table_name, column_defs in V3_OPTIONAL_COLUMN_DEFS.items():
+        if table_name not in tables:
+            continue
+        columns = _table_columns(db, table_name)
+        for column_name, column_def in column_defs.items():
+            if column_name in columns:
+                continue
+            db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
 
 
 def get_db():
