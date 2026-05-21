@@ -117,11 +117,11 @@
         </div>
       </div>
       <div class="control-actions">
-        <button class="tool-btn primary" :disabled="playbackLocked || isRunning" @click="startExecution"><span class="material-icons">play_arrow</span>开始执行</button>
-        <button class="tool-btn secondary" :disabled="playbackLocked" @click="executeUntilNext"><span class="material-icons">double_arrow</span>执行到下一事件</button>
-        <button class="tool-btn danger primary" :disabled="playbackLocked" @click="executeAll"><span class="material-icons">fast_forward</span>立即执行至最终态</button>
-        <button class="tool-btn secondary" :disabled="playbackLocked" @click="jumpRelative(1)"><span class="material-icons">keyboard_double_arrow_right</span>下一事件</button>
-        <button class="tool-btn ghost" :disabled="playbackLocked" @click="pauseExecution"><span class="material-icons">pause_circle</span>暂停执行</button>
+        <button class="tool-btn primary" :disabled="isRunning" @click="startExecution"><span class="material-icons">play_arrow</span>开始执行</button>
+        <button class="tool-btn secondary" :disabled="!hasPendingEvent" @click="executeUntilNext"><span class="material-icons">double_arrow</span>执行到下一事件</button>
+        <button class="tool-btn danger primary" @click="executeAll"><span class="material-icons">fast_forward</span>立即执行至最终态</button>
+        <button class="tool-btn secondary" :disabled="!hasPendingEvent" @click="jumpRelative(1)"><span class="material-icons">keyboard_double_arrow_right</span>下一事件</button>
+        <button class="tool-btn ghost" @click="pauseExecution"><span class="material-icons">pause_circle</span>暂停执行</button>
         <button class="tool-btn ghost" disabled title="验收执行不支持回溯；如需回看请使用快照历史"><span class="material-icons">keyboard_double_arrow_left</span>上一事件</button>
       </div>
       <div v-if="snapshot?.integrity?.warnings?.length" class="integrity-box">
@@ -520,7 +520,7 @@ const snapshotRows = computed(() => snapshots.value.map(item => ({
   ...item,
   eventLabel: item.snapshot?.events_at_time?.map(eventTitle).join('；') || item.event_id || '当前状态',
 })))
-const playbackLocked = computed(() => !nextPendingEvent.value)
+const hasPendingEvent = computed(() => Boolean(nextPendingEvent.value))
 
 function clockToMinuteOfDay(value, fallback = 0) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
