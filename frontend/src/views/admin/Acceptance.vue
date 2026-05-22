@@ -8,8 +8,10 @@
       <div class="head-actions">
         <button class="ghost-btn" @click="loadAll"><span class="material-icons">refresh</span>刷新</button>
         <button class="ghost-btn" @click="initializeDatabase"><span class="material-icons">storage</span>初始化数据库</button>
-        <button v-if="state?.enabled" class="tool-btn danger" @click="disableMode"><span class="material-icons">power_settings_new</span>关闭验收模式</button>
-        <button class="primary-btn" @click="enableMode"><span class="material-icons">play_circle</span>启用验收模式</button>
+        <button class="mode-toggle-btn" :class="{ enabled: state?.enabled }" @click="toggleAcceptanceMode">
+          <span class="material-icons">{{ state?.enabled ? 'power_settings_new' : 'play_circle' }}</span>
+          {{ state?.enabled ? '关闭验收模式' : '启用验收模式' }}
+        </button>
       </div>
     </header>
 
@@ -183,7 +185,7 @@
     </div>
 
     <section v-if="activeTab === 'overview'" class="workspace-grid">
-      <div class="event-card">
+      <div class="event-card overview-event-card">
         <div class="card-head">
           <h3>执行事件队列</h3>
           <span>{{ events.length }} 条</span>
@@ -811,6 +813,14 @@ async function disableMode() {
   await loadAll()
 }
 
+async function toggleAcceptanceMode() {
+  if (state.value?.enabled) {
+    await disableMode()
+    return
+  }
+  await enableMode()
+}
+
 async function executeCurrent() {
   const currentEvents = events.value.filter(event => event.status === 'PENDING' && event.at === simulationTime.value)
   currentEvents.forEach(event => pushActionLog(`执行 ${formatClock(event.clock || event.at)} ${eventTitle(event)}`))
@@ -1118,6 +1128,26 @@ button, a { font: inherit; }
 }
 .primary-btn { background: linear-gradient(180deg, #0aa872, #00895f); border-color: #00895f; color: #fff; box-shadow: 0 12px 24px rgba(5,150,105,.22); }
 .primary-btn.full { width: 100%; }
+.mode-toggle-btn {
+  height: 38px;
+  border: 1px solid #00895f;
+  border-radius: 9px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: linear-gradient(180deg, #0aa872, #00895f);
+  color: #fff;
+  font-weight: 850;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(5,150,105,.22);
+}
+.mode-toggle-btn.enabled {
+  border-color: #e11d48;
+  background: linear-gradient(180deg, #fb7185, #e11d48);
+  box-shadow: 0 12px 24px rgba(225,29,72,.18);
+}
 .material-icons { font-size: 18px; line-height: 1; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 .ghost-btn:hover, .tool-btn:hover { border-color: #9ee6ca; color: var(--green-strong); }
@@ -1296,7 +1326,24 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .workspace-grid { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 2fr) minmax(220px, .7fr); gap: 14px; align-items: stretch; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf2f7; }
 .card-head span { color: var(--muted); font-size: 12px; font-weight: 850; }
+.overview-event-card {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+}
 .event-list { max-height: 480px; overflow: auto; padding: 8px; }
+.overview-event-card .event-list {
+  flex: 1 1 auto;
+  min-height: 260px;
+  height: clamp(260px, calc(100vh - 108px), 560px);
+  height: clamp(260px, calc(100dvh - 108px), 560px);
+  max-height: none;
+}
 .event-row { width: 100%; display: grid; grid-template-columns: 68px minmax(0, 1fr) 70px; gap: 8px; align-items: center; border: 1px solid transparent; background: #fff; border-radius: 9px; padding: 9px 10px; text-align: left; cursor: pointer; }
 .event-row:hover, .event-row.current { background: #f0fdf4; border-color: #bbf7d0; }
 .event-row.executing { background: #eff6ff; border-color: #93c5fd; box-shadow: inset 3px 0 0 #2563eb; }
@@ -1455,6 +1502,11 @@ td { color: #344054; background: #fff; }
 }
 @media (max-width: 1180px) {
   .workspace-grid, .sample-grid, .snapshot-grid { grid-template-columns: 1fr; }
+  .overview-event-card { position: static; max-height: none; }
+  .overview-event-card .event-list {
+    height: clamp(260px, 55vh, 520px);
+    height: clamp(260px, 55dvh, 520px);
+  }
   .compare-grid { grid-template-columns: 1fr; }
   .compare-grid::before { display: none; }
   .compare-grid .snapshot-board:first-child, .compare-grid .snapshot-board:last-child { grid-column: auto; }

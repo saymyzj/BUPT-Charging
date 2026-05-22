@@ -181,6 +181,7 @@ const loading = ref(false)
 const expandedDetails = ref({})
 const detailLoading = ref({})
 const searchQuery = ref('')
+const USER_LIST_PAGE_SIZE = 100
 
 const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -208,9 +209,22 @@ function capacityText(user) {
 async function loadUsers() {
   loading.value = true
   try {
-    const res = await getUsers()
+    const res = await getUsers({ page: 1, page_size: USER_LIST_PAGE_SIZE })
     const data = unwrapResponseData(res)
-    users.value = Array.isArray(data) ? data : (data.users || [])
+    let rows = Array.isArray(data) ? data : (data.users || [])
+    const total = Array.isArray(data) ? rows.length : Number(data.total || rows.length)
+    const pageSize = Array.isArray(data) ? rows.length : Number(data.page_size || USER_LIST_PAGE_SIZE)
+    const pageCount = pageSize > 0 ? Math.ceil(total / pageSize) : 1
+    if (pageCount > 1) {
+      const rest = []
+      for (let page = 2; page <= pageCount; page += 1) {
+        const pageRes = await getUsers({ page, page_size: pageSize })
+        const pageData = unwrapResponseData(pageRes)
+        rest.push(...(Array.isArray(pageData) ? pageData : (pageData.users || [])))
+      }
+      rows = rows.concat(rest)
+    }
+    users.value = rows
     expandedDetails.value = {}
   } catch (_) { /* silent */ }
   loading.value = false
