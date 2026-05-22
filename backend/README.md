@@ -75,10 +75,19 @@
 
 ```bash
 cd /Users/zhoujia/code/SE/ChargingPile/backend
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4.2 启动服务
+### 4.2 本地环境与配置文件
+
+- 推荐只使用 `backend/.venv` 作为后端本地虚拟环境目录。
+- `backend/venv` 属于历史或个人本地环境，可自行删除；`.gitignore` 已同时忽略 `.venv/` 和 `venv/`。
+- `.env.example` 只作为配置模板，不会被运行时自动当作真实配置。
+- 运行时读取的是系统环境变量；需要本地私有配置时，可复制为 `backend/.env` 并自行加载，`.env` 不入库。
+
+### 4.3 启动服务
 
 建议使用临时数据库启动：
 
@@ -91,7 +100,7 @@ DATABASE_PATH=/tmp/charging_fix_20260402.db python3 run.py
 
 - `http://127.0.0.1:8080`
 
-### 4.3 健康检查
+### 4.4 健康检查
 
 ```bash
 curl http://127.0.0.1:8080/health

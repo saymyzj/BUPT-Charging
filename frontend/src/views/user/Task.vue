@@ -41,7 +41,7 @@
         <div class="metric-group">
           <div class="metric"><div class="metric-label">前车</div><div class="metric-val">{{ frontVehicleCountText }}</div></div>
           <div class="metric"><div class="metric-label">已充</div><div class="metric-val green">{{ chargePercentText }}</div></div>
-          <div class="metric"><div class="metric-label">剩余</div><div class="metric-val">{{ remainingTimeText }}</div></div>
+          <div class="metric"><div class="metric-label">{{ remainingMetricLabel }}</div><div class="metric-val">{{ remainingTimeText }}</div></div>
           <div class="metric"><div class="metric-label">队列号</div><div class="metric-val">{{ queueNumberText(req) }}</div></div>
         </div>
       </div>
@@ -394,6 +394,12 @@ const remainingTimeText = computed(() => {
   return formatRequestRemainingText(req.value)
 })
 
+const remainingMetricLabel = computed(() => {
+  if (req.value?.request_status === REQUEST_STATUS.CHARGING) return '剩余'
+  if ([REQUEST_STATUS.WAITING_AREA, REQUEST_STATUS.QUEUED].includes(req.value?.request_status)) return '预计等待'
+  return '耗时'
+})
+
 const scheduleTimeLabel = computed(() => {
   return req.value?.request_status === REQUEST_STATUS.CHARGING ? '预计结束' : '预计开始'
 })
@@ -501,6 +507,7 @@ function timelineEventState(event, index, events) {
   }
   if (event.event_type === 'FAULT_INTERRUPTED') return 'done danger'
   if (event.event_type === 'FAULT_REQUEUED') return 'done warning'
+  if (event.event_type === 'REQUEST_MODE_CHANGED' || event.event_type === 'REQUEST_ENERGY_CHANGED') return 'done warning'
   return 'done'
 }
 

@@ -27,7 +27,7 @@
         <div class="kpi-card">
           <div class="kpi-left">
             <div class="kpi-label">用户总数</div>
-            <div class="kpi-val mono">{{ users.length }}</div>
+            <div class="kpi-val mono">{{ totalUsers || users.length }}</div>
           </div>
           <div class="kpi-icon green"><span class="material-icons">group</span></div>
         </div>
@@ -43,7 +43,7 @@
           <div class="kpi-left">
             <div class="kpi-label">USER 数</div>
             <div class="kpi-val mono">{{ userCount }}</div>
-            <div class="kpi-sub" v-if="users.length">占比 {{ (userCount / users.length * 100).toFixed(1) }}%</div>
+            <div class="kpi-sub" v-if="users.length">本页占比 {{ (userCount / users.length * 100).toFixed(1) }}%</div>
           </div>
           <div class="kpi-icon blue"><span class="material-icons">person</span></div>
         </div>
@@ -65,7 +65,17 @@
             <h2>用户列表</h2>
             <p>点击详情展开历史详单，多个用户可同时对照。</p>
           </div>
-          <span class="panel-count">显示 {{ filteredUsers.length }} / {{ users.length }} 条</span>
+          <div class="panel-tools">
+            <label>
+              每页
+              <select v-model="pageSize" @change="changePageSize">
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+                <option value="all">全部</option>
+              </select>
+            </label>
+            <span class="panel-count">显示 {{ filteredUsers.length }} / {{ totalUsers }} 条</span>
+          </div>
         </div>
         <div class="table-scroll">
           <table>
@@ -157,7 +167,12 @@
         </div>
         <div class="footer-row">
           <div>提示：容量修改与用户权限变更将记录在变更记录中。</div>
-          <span>共 {{ filteredUsers.length }} 条</span>
+          <div class="pager" v-if="pageSize !== 'all'">
+            <button :disabled="currentPage <= 1 || loading" @click="goPage(currentPage - 1)">上一页</button>
+            <span>第 {{ currentPage }} / {{ pageCount }} 页</span>
+            <button :disabled="currentPage >= pageCount || loading" @click="goPage(currentPage + 1)">下一页</button>
+          </div>
+          <span v-else>共 {{ filteredUsers.length }} 条</span>
         </div>
       </div>
     </template>
@@ -168,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { exportAllUserDetailsXlsx, getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import ActionDialog from '@/components/ActionDialog.vue'
@@ -181,7 +196,9 @@ const loading = ref(false)
 const expandedDetails = ref({})
 const detailLoading = ref({})
 const searchQuery = ref('')
-const USER_LIST_PAGE_SIZE = 100
+const currentPage = ref(1)
+const pageSize = ref(10)
+const totalUsers = ref(0)
 
 const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -192,6 +209,10 @@ const filteredUsers = computed(() => {
   )
 })
 
+const pageCount = computed(() => {
+  if (pageSize.value === 'all') return 1
+  return Math.max(1, Math.ceil(totalUsers.value / Number(pageSize.value || 10)))
+})
 const adminCount = computed(() => users.value.filter(u => u.role === 'ADMIN').length)
 const userCount = computed(() => users.value.filter(u => u.role !== 'ADMIN').length)
 const activeCount = computed(() => users.value.filter(u => u.has_active_request).length)
@@ -209,16 +230,18 @@ function capacityText(user) {
 async function loadUsers() {
   loading.value = true
   try {
-    const res = await getUsers({ page: 1, page_size: USER_LIST_PAGE_SIZE })
+    const requestedPageSize = pageSize.value === 'all' ? 100 : Number(pageSize.value)
+    const res = await getUsers({ page: pageSize.value === 'all' ? 1 : currentPage.value, page_size: requestedPageSize })
     const data = unwrapResponseData(res)
     let rows = Array.isArray(data) ? data : (data.users || [])
     const total = Array.isArray(data) ? rows.length : Number(data.total || rows.length)
-    const pageSize = Array.isArray(data) ? rows.length : Number(data.page_size || USER_LIST_PAGE_SIZE)
-    const pageCount = pageSize > 0 ? Math.ceil(total / pageSize) : 1
-    if (pageCount > 1) {
+    totalUsers.value = total
+    const loadedPageSize = Array.isArray(data) ? rows.length : Number(data.page_size || requestedPageSize)
+    const loadedPageCount = loadedPageSize > 0 ? Math.ceil(total / loadedPageSize) : 1
+    if (pageSize.value === 'all' && loadedPageCount > 1) {
       const rest = []
-      for (let page = 2; page <= pageCount; page += 1) {
-        const pageRes = await getUsers({ page, page_size: pageSize })
+      for (let page = 2; page <= loadedPageCount; page += 1) {
+        const pageRes = await getUsers({ page, page_size: loadedPageSize })
         const pageData = unwrapResponseData(pageRes)
         rest.push(...(Array.isArray(pageData) ? pageData : (pageData.users || [])))
       }
@@ -229,6 +252,20 @@ async function loadUsers() {
   } catch (_) { /* silent */ }
   loading.value = false
 }
+
+function changePageSize() {
+  currentPage.value = 1
+  loadUsers()
+}
+
+function goPage(page) {
+  currentPage.value = Math.max(1, Math.min(pageCount.value, Number(page) || 1))
+  loadUsers()
+}
+
+watch(searchQuery, () => {
+  currentPage.value = 1
+})
 
 async function toggleDetail(userId) {
   if (expandedDetails.value[userId]) {
@@ -392,6 +429,19 @@ onMounted(loadUsers)
 }
 .panel-head h2 { margin: 0; font-size: 16px; font-weight: 900; color: #101828; }
 .panel-head p { margin: 3px 0 0; color: #667085; font-size: 12px; }
+.panel-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.panel-tools label { display: inline-flex; align-items: center; gap: 6px; color: #667085; font-size: 12px; font-weight: 800; }
+.panel-tools select {
+  height: 30px;
+  border: 1px solid #dce8e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 8px;
+}
 .panel-count { font-size: 12px; color: #00895f; font-weight: 800; background: #ecfdf3; border: 1px solid #cdeee0; border-radius: 999px; padding: 4px 9px; }
 .table-scroll { overflow-x: auto; }
 
@@ -461,7 +511,23 @@ tr:hover td { background: #fbfefc; }
   padding: 10px 18px; border-top: 1px solid #f1f5f9;
   display: flex; align-items: center; justify-content: space-between;
   font-size: 12px; color: #98a2b3;
+  gap: 12px;
+  flex-wrap: wrap;
 }
+.pager { display: inline-flex; align-items: center; gap: 8px; color: #344054; font-weight: 800; }
+.pager button {
+  height: 28px;
+  border: 1px solid #dce8e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #047857;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.pager button:disabled { opacity: .45; cursor: not-allowed; }
 
 @media (max-width: 980px) {
   .page-head { align-items: stretch; flex-direction: column; }

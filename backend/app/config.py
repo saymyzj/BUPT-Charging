@@ -35,8 +35,8 @@ class Config:
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATABASE_PATH = (
-        os.environ.get("DB_PATH")
-        or os.environ.get("DATABASE_PATH")
+        os.environ.get("DATABASE_PATH")
+        or os.environ.get("DB_PATH")
         or os.path.join(BASE_DIR, "charging_system.db")
     )
     LOG_DIR = os.environ.get("LOG_DIR") or str(Path(BASE_DIR) / "logs")

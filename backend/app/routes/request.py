@@ -45,6 +45,20 @@ def _iso_string(value):
     return str(value).replace(" ", "T")
 
 
+def _route_now():
+    if acceptance_enabled():
+        return _parse_iso_datetime(acceptance_time())
+    return datetime.now()
+
+
+def _seconds_until(value, now_dt=None):
+    if not value:
+        return None
+    parsed = _parse_iso_datetime(value)
+    now_dt = now_dt or _route_now()
+    return max(0, int((parsed - now_dt).total_seconds()))
+
+
 def _next_request_id() -> str:
     row = query_db(
         """
@@ -224,7 +238,8 @@ def _front_waiting_count(req_row) -> int:
     if req_row["request_status"] != RequestStatus.WAITING_AREA.value or req_row["waiting_area_order"] is None:
         return 0
 
-    if int(req_row["waiting_area_order"] or 0) == 0:
+    if int(req_row["waiting_area_order"] or 0) <= 0:
+        current_order = int(req_row["waiting_area_order"] or 0)
         row = query_db(
             """
             SELECT COUNT(*) AS cnt
@@ -232,13 +247,21 @@ def _front_waiting_count(req_row) -> int:
             LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
             WHERE cr.charge_mode = ?
               AND cr.request_status = ?
-              AND cr.waiting_area_order = 0
-              AND CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER) <
-                  CAST(SUBSTR(?, 2) AS INTEGER)
+              AND cr.waiting_area_order <= 0
+              AND (
+                  cr.waiting_area_order > ?
+                  OR (
+                      cr.waiting_area_order = ?
+                      AND CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER) <
+                          CAST(SUBSTR(?, 2) AS INTEGER)
+                  )
+              )
             """,
             [
                 req_row["charge_mode"],
                 RequestStatus.WAITING_AREA.value,
+                current_order,
+                current_order,
                 req_row["source_queue_number"] or req_row["queue_number"],
             ],
             one=True,
@@ -283,10 +306,10 @@ def _serialize_status(req_row):
         "source_queue_number": req_row["source_queue_number"],
         "effective_queue_number": req_row["source_queue_number"] or req_row["queue_number"],
         "is_fault_followup": bool(req_row["fault_source_request_id"]),
-        "is_fault_queue": req_row["request_status"] == RequestStatus.WAITING_AREA.value and int(req_row["waiting_area_order"] or -1) == 0,
+        "is_fault_queue": req_row["request_status"] == RequestStatus.WAITING_AREA.value and int(req_row["waiting_area_order"] or 1) <= 0,
         "queue_context": (
             "FAULT_QUEUE"
-            if req_row["request_status"] == RequestStatus.WAITING_AREA.value and int(req_row["waiting_area_order"] or -1) == 0
+            if req_row["request_status"] == RequestStatus.WAITING_AREA.value and int(req_row["waiting_area_order"] or 1) <= 0
             else "WAITING_AREA"
             if req_row["request_status"] == RequestStatus.WAITING_AREA.value
             else "STATION_QUEUE"
@@ -325,6 +348,21 @@ def _serialize_status(req_row):
         prediction = predict_queued_request(req_row["request_id"])
         if prediction:
             payload.update(prediction)
+
+    if not current_app.config.get("TESTING"):
+        now_dt = _route_now()
+        payload["estimated_wait_remaining_seconds"] = (
+            _seconds_until(payload.get("estimated_start_time"), now_dt)
+            if payload["request_status"] in {RequestStatus.WAITING_AREA.value, RequestStatus.QUEUED.value}
+            else 0
+            if payload["request_status"] == RequestStatus.CHARGING.value
+            else None
+        )
+        payload["charge_remaining_seconds"] = (
+            _seconds_until(payload.get("estimated_finish_time"), now_dt)
+            if payload["request_status"] == RequestStatus.CHARGING.value
+            else None
+        )
     return payload
 
 
@@ -571,7 +609,24 @@ def update_request_mode():
         """,
         [charge_mode, new_queue_number, new_order, req_row["id"]],
     )
-    dispatch_result = _run_request_scheduler(event_time=_operation_time(data, req_row["request_time"]))
+    operation_time = _operation_time(data, req_row["request_time"])
+    log_request_lifecycle(
+        str(req_row["request_id"]),
+        "REQUEST_MODE_CHANGED",
+        event_time=operation_time,
+        queue_number=new_queue_number,
+        charge_mode=charge_mode,
+        description=f"充电模式由 {req_row['charge_mode']} 修改为 {charge_mode}，重新排队",
+    )
+    log_request_lifecycle(
+        str(req_row["request_id"]),
+        "WAITING_AREA_ENTERED",
+        event_time=operation_time,
+        queue_number=new_queue_number,
+        charge_mode=charge_mode,
+        description="修改模式后进入等候区队尾",
+    )
+    dispatch_result = _run_request_scheduler(event_time=operation_time)
     _record_acceptance_action(
         {
             "event_type": "CHANGE",
@@ -613,6 +668,16 @@ def update_request_energy():
         """,
         [request_energy, req_row["id"]],
     )
+    operation_time = _operation_time(data, req_row["request_time"])
+    log_request_lifecycle(
+        str(req_row["request_id"]),
+        "REQUEST_ENERGY_CHANGED",
+        event_time=operation_time,
+        queue_number=req_row["queue_number"],
+        charge_mode=req_row["charge_mode"],
+        request_energy=request_energy,
+        description=f"请求电量由 {float(req_row['request_energy']):g} kWh 修改为 {request_energy:g} kWh",
+    )
     response_data = {
         "request_id": req_row["request_id"],
         "queue_number": req_row["queue_number"],
@@ -620,7 +685,7 @@ def update_request_energy():
         "request_status": RequestStatus.WAITING_AREA.value,
         "front_waiting_count": _front_waiting_count(req_row),
     }
-    dispatch_result = _run_request_scheduler(event_time=_operation_time(data, req_row["request_time"]))
+    dispatch_result = _run_request_scheduler(event_time=operation_time)
     _record_acceptance_action(
         {
             "event_type": "CHANGE",

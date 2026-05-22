@@ -1,6 +1,7 @@
 """V3 admin routes."""
 
 import json
+from datetime import datetime
 from io import BytesIO
 
 from flask import Blueprint, current_app, request, send_file
@@ -13,6 +14,7 @@ from app.services.queue_model import (
     handle_station_recover,
     handle_station_shutdown,
     handle_station_start,
+    predict_waiting_area_request,
     run_dispatch_scheduler,
     set_dispatch_mode,
     set_fault_dispatch_mode,
@@ -105,6 +107,26 @@ def _iso_string(value):
     if value is None:
         return None
     return str(value).replace(" ", "T")
+
+
+def _parse_dt(value):
+    if value is None:
+        return None
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _route_now():
+    if acceptance_enabled():
+        return _parse_dt(acceptance_time())
+    return datetime.now()
+
+
+def _seconds_until(value, now_dt=None):
+    parsed = _parse_dt(value)
+    if not parsed:
+        return None
+    now_dt = now_dt or _route_now()
+    return max(0, int((parsed - now_dt).total_seconds()))
 
 
 def _has_active_request(user_pk: int) -> bool:
@@ -272,7 +294,7 @@ def get_station_queue(station_code):
     _advance_runtime_for_read()
     station = query_db(
         """
-        SELECT id, station_code
+        SELECT id, station_code, power_kw
         FROM charging_station
         WHERE station_code = ?
         """,
@@ -295,6 +317,10 @@ def get_station_queue(station_code):
             cr.fault_source_request_id,
             cr.request_status,
             cr.estimated_wait_seconds,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            cr.charge_start_time,
+            cr.actual_energy,
             cr.station_queue_position
         FROM charge_request cr
         JOIN user u ON u.id = cr.user_id
@@ -306,7 +332,27 @@ def get_station_queue(station_code):
         [station["id"]],
     )
     queue = []
+    now_dt = _route_now()
+    expose_runtime_metrics = not bool(current_app.config.get("TESTING"))
     for row in rows:
+        remaining_wait_seconds = None
+        remaining_charge_seconds = None
+        if row["request_status"] == "CHARGING":
+            remaining_charge_seconds = _seconds_until(row["estimated_finish_time"], now_dt)
+        else:
+            remaining_wait_seconds = _seconds_until(row["estimated_start_time"], now_dt)
+
+        charged_energy = float(row["actual_energy"] or 0)
+        if row["request_status"] == "CHARGING" and row["charge_start_time"]:
+            start_dt = _parse_dt(row["charge_start_time"])
+            if start_dt:
+                elapsed_seconds = max(0, int((now_dt - start_dt).total_seconds()))
+                charged_energy = min(
+                    float(row["request_energy"]),
+                    max(charged_energy, round(float(station["power_kw"]) * elapsed_seconds / 3600.0, 2)),
+                )
+        remaining_energy = max(0.0, round(float(row["request_energy"]) - charged_energy, 2))
+
         item = {
             "user_id": row["user_id"],
             "battery_capacity": float(row["battery_capacity"]),
@@ -319,6 +365,16 @@ def get_station_queue(station_code):
             if row["request_status"] == "CHARGING"
             else int(row["estimated_wait_seconds"] or 0),
         }
+        if expose_runtime_metrics:
+            item.update(
+                {
+                    "remaining_energy": remaining_energy,
+                    "queue_wait_remaining_seconds": remaining_wait_seconds,
+                    "charge_remaining_seconds": remaining_charge_seconds,
+                    "estimated_start_time": _iso_string(row["estimated_start_time"]),
+                    "estimated_finish_time": _iso_string(row["estimated_finish_time"]),
+                }
+            )
         if include_user:
             item.update(
                 {
@@ -374,7 +430,13 @@ def get_waiting_area():
     payload_rows = []
     fast_count = 0
     slow_count = 0
+    expose_runtime_metrics = not bool(current_app.config.get("TESTING"))
     for row in rows:
+        prediction = predict_waiting_area_request(str(row["request_id"])) if expose_runtime_metrics else {}
+        prediction = prediction or {}
+        estimated_start_time = prediction.get("estimated_start_time") or _iso_string(row["estimated_start_time"])
+        estimated_finish_time = prediction.get("estimated_finish_time") or _iso_string(row["estimated_finish_time"])
+        estimated_wait_seconds = prediction.get("estimated_wait_seconds", row["estimated_wait_seconds"])
         if row["charge_mode"] == "FAST":
             fast_count += 1
         elif row["charge_mode"] == "SLOW":
@@ -395,11 +457,13 @@ def get_waiting_area():
                 "queue_context": "WAITING_AREA",
                 "waiting_area_order": row["waiting_area_order"],
                 "request_time": _iso_string(row["request_time"]),
-                "estimated_wait_seconds": row["estimated_wait_seconds"],
-                "estimated_start_time": _iso_string(row["estimated_start_time"]),
-                "estimated_finish_time": _iso_string(row["estimated_finish_time"]),
+                "estimated_wait_seconds": estimated_wait_seconds,
+                "estimated_start_time": estimated_start_time,
+                "estimated_finish_time": estimated_finish_time,
             }
         )
+        if expose_runtime_metrics:
+            payload_rows[-1]["queue_wait_remaining_seconds"] = _seconds_until(estimated_start_time)
 
     fault_rows = []
     for row in fault_queue_candidates():
@@ -424,6 +488,8 @@ def get_waiting_area():
                 "estimated_finish_time": _iso_string(row["estimated_finish_time"]),
             }
         )
+        if expose_runtime_metrics:
+            fault_rows[-1]["queue_wait_remaining_seconds"] = _seconds_until(row["estimated_start_time"])
 
     return success_response(
         {

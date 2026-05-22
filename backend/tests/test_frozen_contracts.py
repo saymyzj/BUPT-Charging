@@ -17,6 +17,7 @@ from app.routes.batch_simulate import batch_bp
 from app.routes.health import health_bp
 from app.routes.request import request_bp
 from app.routes.stations import stations_bp
+from app.services.acceptance_service import execute_until, list_events, replace_events
 from app.services.queue_model import enqueue_request, run_normal_scheduler
 from app.utils.auth import hash_password
 from app.utils.db import execute_db, init_db, query_db
@@ -459,6 +460,222 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(status4["estimated_start_time"], "2026-04-19T10:40:00")
         self.assertEqual(status4["estimated_finish_time"], "2026-04-19T11:00:00")
 
+    def test_normal_scheduler_keeps_mode_head_waiting_when_shortest_station_is_full(self):
+        with self.app.app_context():
+            execute_db("UPDATE charging_station SET queue_capacity = 3")
+            execute_db(
+                """
+                UPDATE charging_station
+                SET station_status = 'SHUTDOWN'
+                WHERE station_code IN ('FAST_02', 'FAST_03')
+                """
+            )
+            station_ids = {
+                row["station_code"]: row["id"]
+                for row in query_db("SELECT id, station_code FROM charging_station")
+            }
+
+            def create_vehicle(user_id: str) -> int:
+                return int(
+                    execute_db(
+                        """
+                        INSERT INTO user (user_id, username, password_hash, battery_capacity, role)
+                        VALUES (?, ?, 'hash', 100.0, 'USER')
+                        """,
+                        [user_id, user_id.lower()],
+                    )
+                )
+
+            def create_request(
+                request_id: str,
+                user_pk: int,
+                charge_mode: str,
+                queue_number: str,
+                energy: float,
+                status: str,
+                request_time: str,
+                station_code: str | None = None,
+                position: int | None = None,
+                waiting_order: int | None = None,
+                estimated_start_time: str | None = None,
+                estimated_finish_time: str | None = None,
+                charge_start_time: str | None = None,
+            ) -> int:
+                return int(
+                    execute_db(
+                        """
+                        INSERT INTO charge_request (
+                            request_id, user_id, charge_mode, request_energy, request_status,
+                            queue_number, waiting_area_order, station_id, station_queue_position,
+                            request_time, estimated_start_time, estimated_finish_time, charge_start_time
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        [
+                            request_id,
+                            user_pk,
+                            charge_mode,
+                            energy,
+                            status,
+                            queue_number,
+                            waiting_order,
+                            station_ids[station_code] if station_code else None,
+                            position,
+                            request_time,
+                            estimated_start_time,
+                            estimated_finish_time,
+                            charge_start_time,
+                        ],
+                    )
+                )
+
+            users = {
+                code: create_vehicle(code)
+                for code in ("V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V10")
+            }
+            create_request(
+                "REQT02",
+                users["V02"],
+                "SLOW",
+                "T2",
+                70.0,
+                "CHARGING",
+                "2026-04-19T05:00:00",
+                "SLOW_01",
+                1,
+                estimated_start_time="2026-04-19T10:00:00",
+                estimated_finish_time="2026-04-19T16:00:00",
+                charge_start_time="2026-04-19T09:00:00",
+            )
+            create_request(
+                "REQT03",
+                users["V03"],
+                "SLOW",
+                "T3",
+                50.0,
+                "QUEUED",
+                "2026-04-19T05:01:00",
+                "SLOW_01",
+                2,
+                estimated_start_time="2026-04-19T16:00:00",
+                estimated_finish_time="2026-04-19T21:00:00",
+            )
+            create_request(
+                "REQT04",
+                users["V04"],
+                "SLOW",
+                "T4",
+                30.0,
+                "CHARGING",
+                "2026-04-19T05:02:00",
+                "SLOW_02",
+                1,
+                estimated_start_time="2026-04-19T10:00:00",
+                estimated_finish_time="2026-04-19T12:00:00",
+                charge_start_time="2026-04-19T09:00:00",
+            )
+            create_request(
+                "REQT05",
+                users["V05"],
+                "SLOW",
+                "T5",
+                40.0,
+                "QUEUED",
+                "2026-04-19T05:03:00",
+                "SLOW_02",
+                2,
+                estimated_start_time="2026-04-19T12:00:00",
+                estimated_finish_time="2026-04-19T16:00:00",
+            )
+            create_request(
+                "REQT06",
+                users["V06"],
+                "SLOW",
+                "T6",
+                30.0,
+                "QUEUED",
+                "2026-04-19T05:04:00",
+                "SLOW_02",
+                3,
+                estimated_start_time="2026-04-19T16:00:00",
+                estimated_finish_time="2026-04-19T19:00:00",
+            )
+            create_request(
+                "REQT07",
+                users["V07"],
+                "SLOW",
+                "T7",
+                50.0,
+                "WAITING_AREA",
+                "2026-04-19T10:00:00",
+                waiting_order=1,
+            )
+            create_request(
+                "REQF08",
+                users["V08"],
+                "FAST",
+                "F8",
+                10.0,
+                "WAITING_AREA",
+                "2026-04-19T10:01:00",
+                waiting_order=1,
+            )
+            create_request(
+                "REQF09",
+                users["V09"],
+                "FAST",
+                "F9",
+                10.0,
+                "WAITING_AREA",
+                "2026-04-19T10:02:00",
+                waiting_order=2,
+            )
+            create_request(
+                "REQT10",
+                users["V10"],
+                "SLOW",
+                "T10",
+                10.0,
+                "WAITING_AREA",
+                "2026-04-19T10:03:00",
+                waiting_order=2,
+            )
+
+            first_result = run_normal_scheduler(event_time="2026-04-19T10:00:00")
+            self.assertEqual([item["request_id"] for item in first_result["scheduled"]], ["REQF08", "REQF09"])
+
+            blocked_rows = {
+                row["request_id"]: row
+                for row in query_db(
+                    """
+                    SELECT request_id, request_status, station_id, waiting_area_order
+                    FROM charge_request
+                    WHERE request_id IN ('REQT07', 'REQT10')
+                    """
+                )
+            }
+            self.assertEqual(blocked_rows["REQT07"]["request_status"], "WAITING_AREA")
+            self.assertEqual(blocked_rows["REQT07"]["station_id"], None)
+            self.assertEqual(blocked_rows["REQT10"]["request_status"], "WAITING_AREA")
+            self.assertEqual(blocked_rows["REQT10"]["station_id"], None)
+            self.assertEqual(blocked_rows["REQT10"]["waiting_area_order"], 2)
+
+            second_result = run_normal_scheduler(event_time="2026-04-19T12:00:00", charge_mode="SLOW")
+            self.assertEqual([item["request_id"] for item in second_result["scheduled"]], ["REQT07", "REQT10"])
+            assigned_rows = {
+                row["request_id"]: row
+                for row in query_db(
+                    """
+                    SELECT cr.request_id, cs.station_code, cr.station_queue_position
+                    FROM charge_request cr
+                    JOIN charging_station cs ON cs.id = cr.station_id
+                    WHERE cr.request_id IN ('REQT07', 'REQT10')
+                    """
+                )
+            }
+            self.assertEqual(assigned_rows["REQT07"]["station_code"], "SLOW_02")
+            self.assertEqual(assigned_rows["REQT10"]["station_code"], "SLOW_01")
+
     def test_request_detail_uses_time_of_use_billing_fields(self):
         request_id = self._create_request(
             self.auth_headers,
@@ -582,6 +799,53 @@ class FrozenContractTests(unittest.TestCase):
         self.assertEqual(status_payload["queue_number"], "F2")
         self.assertEqual(status_payload["request_energy"], 25.0)
         self.assertEqual(status_payload["request_status"], "WAITING_AREA")
+
+    def test_acceptance_change_fails_outside_waiting_area(self):
+        with self.app.app_context():
+            replace_events(
+                [
+                    {
+                        "event_id": "EVT0001",
+                        "source": "XLSX",
+                        "at": "2026-04-19T10:00:00",
+                        "event_type": "APPLY",
+                        "vehicle_code": "V1",
+                        "charge_mode": "FAST",
+                        "value": 30,
+                        "raw_text": "(A,V1,F,30)",
+                        "enabled": True,
+                    },
+                    {
+                        "event_id": "EVT0002",
+                        "source": "XLSX",
+                        "at": "2026-04-19T10:10:00",
+                        "event_type": "CHANGE",
+                        "vehicle_code": "V1",
+                        "charge_mode": "FAST",
+                        "value": 10,
+                        "raw_text": "(C,V1,F,10)",
+                        "enabled": True,
+                    },
+                ],
+                "sample.xlsx",
+            )
+            execute_until("2026-04-19T10:10:00")
+
+            events = {item["event_id"]: item for item in list_events()}
+            self.assertEqual(events["EVT0001"]["status"], "EXECUTED")
+            self.assertEqual(events["EVT0002"]["status"], "FAILED")
+            self.assertEqual(events["EVT0002"]["error_message"], "当前状态不允许修改")
+
+            req_row = query_db(
+                """
+                SELECT request_energy, request_status
+                FROM charge_request
+                WHERE request_id = 'REQ0001'
+                """,
+                one=True,
+            )
+            self.assertEqual(float(req_row["request_energy"]), 30.0)
+            self.assertEqual(req_row["request_status"], "CHARGING")
 
     def test_cancel_waiting_area_request_sets_cancelled_without_detail(self):
         self._set_dispatch_mode("EXT_SINGLE_BATCH")
@@ -802,6 +1066,54 @@ class FrozenContractTests(unittest.TestCase):
         self.assertTrue(all(not row["is_fault_queue"] for row in waiting_payload["rows"]))
         self.assertGreaterEqual(waiting_payload["fault_queue_count"], 1)
         self.assertEqual(waiting_payload["fault_queue"][0]["effective_queue_number"], "T3")
+
+    def test_priority_fault_orders_fault_station_before_other_station_waiting_rows(self):
+        user_headers = [self.auth_headers]
+        for index in range(2, 7):
+            user_headers.append(self._register_and_login(f"user_{index:03d}"))
+        self._set_dispatch_mode("EXT_SINGLE_BATCH")
+        self._set_fault_dispatch_mode("PRIORITY")
+
+        request_ids = []
+        for index, headers in enumerate(user_headers):
+            request_ids.append(
+                self._create_request(
+                    headers,
+                    f"2026-04-19T10:0{index}:00",
+                    "SLOW",
+                    10.0,
+                )["data"]["request_id"]
+            )
+
+        with self.app.app_context():
+            execute_db("UPDATE charging_station SET queue_capacity = 3 WHERE charge_mode = 'SLOW'")
+            enqueue_request("SLOW_01", request_ids[0], "2026-04-19T10:00:00")
+            enqueue_request("SLOW_01", request_ids[1], "2026-04-19T10:01:00")
+            enqueue_request("SLOW_01", request_ids[2], "2026-04-19T10:02:00")
+            enqueue_request("SLOW_02", request_ids[3], "2026-04-19T10:03:00")
+            enqueue_request("SLOW_02", request_ids[4], "2026-04-19T10:04:00")
+            enqueue_request("SLOW_02", request_ids[5], "2026-04-19T10:05:00")
+
+        payload = self.client.post(
+            "/api/admin/stations/SLOW_02/fault",
+            headers=self.admin_headers,
+            json={"fault_time": "2026-04-19T10:30:00"},
+        ).get_json()["data"]
+        self.assertEqual(payload["fault_dispatch_mode"], "PRIORITY")
+        self.assertEqual(
+            [item["request_id"] for item in payload["scheduled"]],
+            [payload["remaining_request_id"], request_ids[4]],
+        )
+
+        waiting_payload = self.client.get(
+            "/api/admin/waiting-area",
+            headers=self.admin_headers,
+        ).get_json()["data"]
+        self.assertEqual(
+            [row["effective_queue_number"] for row in waiting_payload["fault_queue"]],
+            ["T6", "T2", "T3"],
+        )
+        self.assertTrue(all(not row["is_fault_queue"] for row in waiting_payload["rows"]))
 
     def test_time_order_fault_requeues_remaining_by_source_queue_number(self):
         user_headers = [self.auth_headers]

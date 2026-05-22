@@ -101,7 +101,7 @@
                 >
                   <strong>{{ userShort(row) }}</strong>
                   <span>ID {{ row.user_id || '--' }}</span>
-                  <span>{{ Number(row.request_energy || 0).toFixed(2) }} kWh</span>
+                  <span>{{ queueEnergyText(station, row, index) }}</span>
                   <em>{{ queueInlineText(station, row, index) }}</em>
                 </div>
               </template>
@@ -142,7 +142,7 @@
                   :style="{ '--pulse-delay': (slot.index % 5) * 0.18 + 's' }"
                 ></div>
                 <span class="slot-no">{{ String(slot.index).padStart(2, '0') }}</span>
-                <small v-if="slot.row">{{ queueNumberText(slot.row) }}</small>
+                <small v-if="slot.row">{{ waitingSlotText(slot.row) }}</small>
               </div>
             </div>
             <div class="wait-exit">出口<small>&gt;</small></div>
@@ -569,11 +569,30 @@ function queueNumberText(row) {
   return row.queue_number || '--'
 }
 
+function waitingSlotText(row) {
+  return row?.user_id || row?.vehicle_code || row?.username || queueNumberText(row)
+}
+
 function queueInlineText(station, row, index) {
-  if (isChargingRow(station, row, index)) return '正在服务'
+  if (isChargingRow(station, row, index)) {
+    return `正在服务 · 预计剩余 ${formatDurationSeconds(row?.charge_remaining_seconds)}`
+  }
   const frontCount = Math.max(0, index)
   const mode = modeText(row?.charge_mode || station?.charge_mode)
-  return `前方 ${frontCount} 辆 · ${mode}`
+  return `前方 ${frontCount} 辆 · ${mode} · 预计等待 ${formatDurationSeconds(row?.queue_wait_remaining_seconds ?? row?.queue_wait_seconds)}`
+}
+
+function queueEnergyText(station, row, index) {
+  if (isChargingRow(station, row, index)) {
+    return `剩余 ${Number(row?.remaining_energy ?? row?.request_energy ?? 0).toFixed(2)} kWh`
+  }
+  return `请求 ${Number(row?.request_energy || 0).toFixed(2)} kWh`
+}
+
+function formatDurationSeconds(seconds) {
+  const n = Number(seconds)
+  if (!Number.isFinite(n)) return '--'
+  return `${Math.ceil(Math.max(0, n) / 60)} min`
 }
 
 async function viewQueue(code) {

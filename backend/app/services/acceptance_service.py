@@ -759,30 +759,7 @@ def _execute_change(event, event_dt: str) -> dict:
         if event["event_value"] is not None and float(event["event_value"]) > 0
         else float(req["request_energy"])
     )
-    if req["request_status"] in {RequestStatus.QUEUED.value, RequestStatus.CHARGING.value}:
-        if charge_mode != req["charge_mode"]:
-            raise ValueError("充电区请求不允许变更充电模式")
-        estimated_finish = req["estimated_finish_time"]
-        if req["request_status"] == RequestStatus.CHARGING.value and req["charge_start_time"] and req["power_kw"]:
-            finish_dt = _parse_dt(req["charge_start_time"]) + timedelta(seconds=int(energy * 3600 / float(req["power_kw"])))
-            estimated_finish = _db_string(finish_dt)
-        execute_db(
-            """
-            UPDATE charge_request
-            SET request_energy = ?,
-                estimated_finish_time = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            [energy, estimated_finish, req["id"]],
-        )
-        if req["station_id"]:
-            settle_station_until_time(int(req["station_id"]), event_dt)
-            refresh_station_after_queue_change(int(req["station_id"]), event_dt)
-        dispatch_result = run_dispatch_scheduler(event_dt)
-        return {"request_id": req["request_id"], "queue_number": req["queue_number"], "dispatch": dispatch_result}
-
-    if req["request_status"] != RequestStatus.WAITING_AREA.value:
+    if req["request_status"] != RequestStatus.WAITING_AREA.value or int(req["waiting_area_order"] or 0) <= 0:
         raise ValueError("当前状态不允许修改")
 
     queue_number = req["queue_number"]
@@ -803,6 +780,33 @@ def _execute_change(event, event_dt: str) -> dict:
         """,
         [charge_mode, energy, queue_number, waiting_order, req["id"]],
     )
+    if charge_mode != req["charge_mode"]:
+        log_request_lifecycle(
+            str(req["request_id"]),
+            "REQUEST_MODE_CHANGED",
+            event_time=event_dt,
+            queue_number=queue_number,
+            charge_mode=charge_mode,
+            description=f"充电模式由 {req['charge_mode']} 修改为 {charge_mode}，重新排队",
+        )
+        log_request_lifecycle(
+            str(req["request_id"]),
+            "WAITING_AREA_ENTERED",
+            event_time=event_dt,
+            queue_number=queue_number,
+            charge_mode=charge_mode,
+            description="修改模式后进入等候区队尾",
+        )
+    elif energy != float(req["request_energy"]):
+        log_request_lifecycle(
+            str(req["request_id"]),
+            "REQUEST_ENERGY_CHANGED",
+            event_time=event_dt,
+            queue_number=queue_number,
+            charge_mode=charge_mode,
+            request_energy=energy,
+            description=f"请求电量由 {float(req['request_energy']):g} kWh 修改为 {energy:g} kWh",
+        )
     dispatch_result = run_dispatch_scheduler(event_dt)
     return {"request_id": req["request_id"], "queue_number": queue_number, "dispatch": dispatch_result}
 

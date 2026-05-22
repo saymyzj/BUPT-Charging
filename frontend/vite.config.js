@@ -1,8 +1,31 @@
-﻿import { defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import fs from 'node:fs'
+import path from 'node:path'
 
-const apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000'
+function readEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {}
+
+  const env = {}
+  const content = fs.readFileSync(filePath, 'utf8')
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#') || !line.includes('=')) continue
+
+    const splitAt = line.indexOf('=')
+    const key = line.slice(0, splitAt).trim()
+    const value = line.slice(splitAt + 1).trim().replace(/^['"]|['"]$/g, '')
+    if (key) env[key] = value
+  }
+  return env
+}
+
+const frontendDir = path.dirname(fileURLToPath(import.meta.url))
+const backendEnv = readEnvFile(path.resolve(frontendDir, '../backend/.env'))
+const apiHost = backendEnv.LISTEN_HOST || '127.0.0.1'
+const apiPort = backendEnv.LISTEN_PORT || '5000'
+const apiTarget = process.env.VITE_API_PROXY_TARGET || `http://${apiHost}:${apiPort}`
 
 export default defineConfig({
   plugins: [vue()],
@@ -13,7 +36,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    host: '0.0.0.0', // Ensure accessible via both 127.0.0.1 and localhost
+    host: '0.0.0.0',
     proxy: {
       '/health': {
         target: apiTarget,

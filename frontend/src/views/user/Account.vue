@@ -437,6 +437,8 @@ function processEventDescription(event) {
 function processIcon(eventType) {
   if (eventType === 'REQUEST_SUBMITTED') return 'assignment_turned_in'
   if (eventType === 'WAITING_AREA_ENTERED') return 'pending_actions'
+  if (eventType === 'REQUEST_MODE_CHANGED') return 'swap_horiz'
+  if (eventType === 'REQUEST_ENERGY_CHANGED') return 'edit'
   if (eventType === 'ASSIGNED_TO_STATION') return 'alt_route'
   if (eventType === 'CHARGING_STARTED') return 'offline_bolt'
   if (eventType === 'FAULT_INTERRUPTED') return 'error'
@@ -450,6 +452,7 @@ function processIconClass(eventType) {
   if (eventType === 'CHARGING_STARTED') return 'charging'
   if (eventType === 'FAULT_INTERRUPTED') return 'fault'
   if (eventType === 'FAULT_REQUEUED') return 'warning'
+  if (eventType === 'REQUEST_MODE_CHANGED' || eventType === 'REQUEST_ENERGY_CHANGED') return 'warning'
   if (eventType === 'CHARGING_COMPLETED') return 'done'
   return ''
 }

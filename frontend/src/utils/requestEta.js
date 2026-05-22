@@ -8,27 +8,31 @@ function formatMinutesUntil(time, nowMs = Date.now()) {
   return `${minutes} min`
 }
 
+function formatSeconds(seconds) {
+  const n = Number(seconds)
+  if (!Number.isFinite(n)) return '--'
+  return `${Math.ceil(Math.max(0, n) / 60)} min`
+}
+
 export function formatRequestRemainingText(request, now = Date.now()) {
   if (!request) return '--'
 
   const status = request.request_status
   if (status === REQUEST_STATUS.CHARGING) {
+    const remainingText = formatSeconds(request.charge_remaining_seconds)
+    if (remainingText !== '--') return remainingText
     return formatMinutesUntil(request.estimated_finish_time, now)
   }
 
   if (status === REQUEST_STATUS.WAITING_AREA || status === REQUEST_STATUS.QUEUED) {
+    const remainingText = formatSeconds(request.estimated_wait_remaining_seconds ?? request.queue_wait_remaining_seconds)
+    if (remainingText !== '--') return remainingText
+
     const startText = formatMinutesUntil(request.estimated_start_time, now)
     if (startText !== '--') return startText
 
-    const seconds = Number(request.estimated_wait_seconds)
-    if (!Number.isFinite(seconds)) return '--'
-    return `${Math.ceil(Math.max(0, seconds) / 60)} min`
+    return formatSeconds(request.estimated_wait_seconds)
   }
 
-  const seconds = Number(request.estimated_wait_seconds)
-  if (Number.isFinite(seconds) && seconds >= 0) {
-    return `${Math.ceil(seconds / 60)} min`
-  }
-
-  return '--'
+  return formatSeconds(request.estimated_wait_seconds)
 }
