@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 from app.enums import RequestStatus
@@ -9,6 +10,21 @@ from app.services.billing_service import ensure_request_detail
 from app.utils.db import execute_db, query_db
 
 QUEUE_ACTIVE_STATUSES = (RequestStatus.QUEUED.value, RequestStatus.CHARGING.value)
+
+
+LIFECYCLE_LABELS = {
+    "REQUEST_SUBMITTED": "请求已提交",
+    "WAITING_AREA_ENTERED": "等候区排队",
+    "REQUEST_MODE_CHANGED": "修改充电模式",
+    "REQUEST_ENERGY_CHANGED": "修改充电电量",
+    "ASSIGNED_TO_STATION": "分配到桩队列",
+    "CHARGING_STARTED": "充电中",
+    "FAULT_INTERRUPTED": "故障中断",
+    "FAULT_REQUEUED": "重新排队",
+    "CHARGING_COMPLETED": "充电完成",
+    "CHARGING_COMPLETED_EARLY": "提前结束充电",
+    "REQUEST_CANCELLED": "请求已取消",
+}
 
 
 def parse_iso_datetime(value):
@@ -33,6 +49,147 @@ def _event_datetime(event_time=None):
     if event_time is None:
         return datetime.now()
     return parse_iso_datetime(event_time)
+
+
+def log_request_lifecycle(request_id: str, event_type: str, event_time=None, **payload) -> None:
+    if not request_id:
+        return
+    occurred_at = _db_string(_event_datetime(event_time)) if event_time is not None else _db_string(datetime.now())
+    data = {
+        "at": occurred_at,
+        "label": payload.pop("label", LIFECYCLE_LABELS.get(event_type, event_type)),
+        **payload,
+    }
+    execute_db(
+        """
+        INSERT INTO scheduler_event_log (event_type, request_id, station_id, event_payload)
+        VALUES (?, ?, ?, ?)
+        """,
+        [
+            event_type,
+            str(request_id),
+            data.get("station_code") or data.get("station_id"),
+            json.dumps(data, ensure_ascii=False),
+        ],
+    )
+
+
+def _request_chain_ids(request_id: str) -> list[str]:
+    chain: list[str] = []
+    current = request_id
+    seen: set[str] = set()
+    while current and current not in seen:
+        seen.add(current)
+        row = query_db(
+            """
+            SELECT cr.request_id, source.request_id AS source_request_id
+            FROM charge_request cr
+            LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+            WHERE cr.request_id = ?
+            """,
+            [current],
+            one=True,
+        )
+        if not row:
+            break
+        chain.append(str(row["request_id"]))
+        current = row["source_request_id"]
+    return list(reversed(chain))
+
+
+def request_lifecycle(request_id: str) -> list[dict]:
+    request_ids = _request_chain_ids(request_id) or [request_id]
+    placeholders = ",".join("?" for _ in request_ids)
+    rows = query_db(
+        f"""
+        SELECT id, event_type, request_id, event_payload, created_at
+        FROM scheduler_event_log
+        WHERE request_id IN ({placeholders})
+          AND event_type IN ({",".join("?" for _ in LIFECYCLE_LABELS)})
+        ORDER BY id
+        """,
+        [*request_ids, *LIFECYCLE_LABELS.keys()],
+    )
+    events = []
+    for row in rows:
+        try:
+            payload = json.loads(row["event_payload"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        label = payload.get("label") or LIFECYCLE_LABELS.get(row["event_type"], row["event_type"])
+        events.append(
+            {
+                "id": int(row["id"]),
+                "request_id": row["request_id"],
+                "event_type": row["event_type"],
+                "label": label,
+                "at": payload.get("at") or row["created_at"],
+                "station_code": payload.get("station_code"),
+                "queue_position": payload.get("queue_position"),
+                "description": payload.get("description"),
+                "state": payload.get("state") or _lifecycle_state(row["event_type"]),
+            }
+        )
+    if events:
+        return sorted(events, key=lambda item: (str(item.get("at") or ""), int(item["id"])))
+    return _fallback_lifecycle(request_id)
+
+
+def _lifecycle_state(event_type: str) -> str:
+    if event_type == "FAULT_INTERRUPTED":
+        return "danger"
+    if event_type == "FAULT_REQUEUED":
+        return "warning"
+    if event_type in {"CHARGING_COMPLETED", "CHARGING_COMPLETED_EARLY", "REQUEST_CANCELLED"}:
+        return "done"
+    return "done"
+
+
+def _fallback_lifecycle(request_id: str) -> list[dict]:
+    row = query_db(
+        """
+        SELECT request_id, request_status, request_time, charge_start_time, charge_stop_time, station_queue_position, station_id
+        FROM charge_request
+        WHERE request_id = ?
+        """,
+        [request_id],
+        one=True,
+    )
+    if not row:
+        return []
+    events = [
+        {
+            "id": -2,
+            "request_id": request_id,
+            "event_type": "REQUEST_SUBMITTED",
+            "label": "请求已提交",
+            "at": _db_string(row["request_time"]),
+            "station_code": None,
+            "queue_position": None,
+            "description": None,
+            "state": "done",
+        }
+    ]
+    if row["request_status"] in QUEUE_ACTIVE_STATUSES or row["request_status"] in {
+        RequestStatus.COMPLETED.value,
+        RequestStatus.COMPLETED_EARLY.value,
+        RequestStatus.FAULT_INTERRUPTED.value,
+    }:
+        station = query_db("SELECT station_code FROM charging_station WHERE id = ?", [row["station_id"]], one=True)
+        events.append(
+            {
+                "id": -1,
+                "request_id": request_id,
+                "event_type": "ASSIGNED_TO_STATION",
+                "label": "分配到桩队列",
+                "at": _db_string(row["request_time"]),
+                "station_code": station["station_code"] if station else None,
+                "queue_position": row["station_queue_position"],
+                "description": None,
+                "state": "done",
+            }
+        )
+    return events
 
 
 def service_seconds_for_request(request_energy: float, power_kw: float) -> int:
@@ -218,15 +375,63 @@ def _active_count(station_id: int) -> int:
 def _fault_waiting_candidates(charge_mode: str):
     return query_db(
         """
-        SELECT request_id, charge_mode, request_energy, queue_number
-        FROM charge_request
-        WHERE charge_mode = ?
-          AND request_status = ?
-          AND waiting_area_order = 0
-        ORDER BY CAST(SUBSTR(queue_number, 2) AS INTEGER), id
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.queue_number,
+            COALESCE(source.queue_number, cr.queue_number) AS fault_order_queue_number
+        FROM charge_request cr
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        WHERE cr.charge_mode = ?
+          AND cr.request_status = ?
+          AND cr.waiting_area_order <= 0
+        ORDER BY
+            cr.waiting_area_order DESC,
+            CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER),
+            cr.id
         """,
         [charge_mode, RequestStatus.WAITING_AREA.value],
     )
+
+
+def fault_queue_candidates(charge_mode: str | None = None):
+    sql = """
+        SELECT
+            cr.id,
+            cr.request_id,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.queue_number,
+            cr.waiting_area_order,
+            cr.request_time,
+            cr.estimated_wait_seconds,
+            cr.estimated_start_time,
+            cr.estimated_finish_time,
+            source.queue_number AS source_queue_number,
+            COALESCE(source.queue_number, cr.queue_number) AS effective_queue_number,
+            u.user_id,
+            u.username,
+            u.battery_capacity
+        FROM charge_request cr
+        JOIN user u ON u.id = cr.user_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        WHERE cr.request_status = ?
+          AND cr.waiting_area_order <= 0
+    """
+    args = [RequestStatus.WAITING_AREA.value]
+    if charge_mode:
+        sql += " AND cr.charge_mode = ?"
+        args.append(charge_mode)
+    sql += """
+        ORDER BY
+            cr.charge_mode,
+            cr.waiting_area_order DESC,
+            CAST(SUBSTR(COALESCE(source.queue_number, cr.queue_number), 2) AS INTEGER),
+            cr.id
+    """
+    return query_db(sql, args)
 
 
 def _station_workload_seconds(station_id: int, as_of: datetime, power_kw: float) -> int:
@@ -342,10 +547,11 @@ def _reset_station_after_fault(station_id: int, event_dt: datetime) -> None:
     )
 
 
-def _mark_requests_for_fault_requeue(request_rows) -> list[str]:
+def _mark_requests_for_fault_requeue(request_rows, event_time=None) -> list[str]:
     request_ids = []
     for row in request_rows:
         request_ids.append(str(row["request_id"]))
+        from_station_code = row["station_code"] if "station_code" in row.keys() else None
         execute_db(
             """
             UPDATE charge_request
@@ -361,26 +567,88 @@ def _mark_requests_for_fault_requeue(request_rows) -> list[str]:
             """,
             [RequestStatus.WAITING_AREA.value, row["id"]],
         )
+        log_request_lifecycle(
+            str(row["request_id"]),
+            "FAULT_REQUEUED",
+            event_time=event_time or datetime.now(),
+            station_code=from_station_code,
+            description=f"原 {from_station_code} 队列因故障重新进入调度" if from_station_code else "因充电桩故障重新进入调度",
+        )
     return request_ids
+
+
+def _apply_priority_fault_queue_order(priority_request_ids: list[str], displaced_request_ids: list[str]) -> None:
+    for index, request_id in enumerate(priority_request_ids, start=1):
+        execute_db(
+            """
+            UPDATE charge_request
+            SET waiting_area_order = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE request_id = ?
+              AND request_status = ?
+            """,
+            [-index, request_id, RequestStatus.WAITING_AREA.value],
+        )
+    for index, request_id in enumerate(displaced_request_ids, start=1):
+        execute_db(
+            """
+            UPDATE charge_request
+            SET waiting_area_order = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE request_id = ?
+              AND request_status = ?
+            """,
+            [-(1000 + index), request_id, RequestStatus.WAITING_AREA.value],
+        )
+
+
+def _reset_fault_queue_order_for_time_order(charge_mode: str) -> None:
+    execute_db(
+        """
+        UPDATE charge_request
+        SET waiting_area_order = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE charge_mode = ?
+          AND request_status = ?
+          AND waiting_area_order <= 0
+        """,
+        [charge_mode, RequestStatus.WAITING_AREA.value],
+    )
 
 
 def _fault_requeue_rows_for_priority(station_id: int):
     return query_db(
         """
-        SELECT id, request_id, queue_number
-        FROM charge_request
-        WHERE station_id = ?
-          AND request_status = ?
-        ORDER BY station_queue_position, id
+        SELECT cr.id, cr.request_id, cr.queue_number, cs.station_code
+        FROM charge_request cr
+        JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.station_id = ?
+          AND cr.request_status = ?
+        ORDER BY cr.station_queue_position, cr.id
         """,
         [station_id, RequestStatus.QUEUED.value],
+    )
+
+
+def _same_mode_waiting_rows_outside_station(station_id: int, charge_mode: str):
+    return query_db(
+        """
+        SELECT cr.id, cr.request_id, cr.queue_number, cs.station_code
+        FROM charge_request cr
+        JOIN charging_station cs ON cs.id = cr.station_id
+        WHERE cr.station_id != ?
+          AND cs.charge_mode = ?
+          AND cr.request_status = ?
+        ORDER BY CAST(SUBSTR(cr.queue_number, 2) AS INTEGER), cr.id
+        """,
+        [station_id, charge_mode, RequestStatus.QUEUED.value],
     )
 
 
 def _fault_requeue_rows_for_time_order(charge_mode: str):
     return query_db(
         """
-        SELECT cr.id, cr.request_id, cr.queue_number
+        SELECT cr.id, cr.request_id, cr.queue_number, cs.station_code
         FROM charge_request cr
         JOIN charging_station cs ON cs.id = cr.station_id
         WHERE cs.charge_mode = ?
@@ -391,12 +659,18 @@ def _fault_requeue_rows_for_time_order(charge_mode: str):
     )
 
 
-def _create_remaining_fault_request(interrupted_row, remaining_energy: float, event_dt: datetime) -> str | None:
+def _create_remaining_fault_request(
+    interrupted_row,
+    remaining_energy: float,
+    event_dt: datetime,
+    include_in_fault_requeue: bool = False,
+    from_station_code: str | None = None,
+) -> str | None:
     if remaining_energy <= 0:
         return None
 
     request_id = _next_request_id()
-    queue_number = _next_queue_number(str(interrupted_row["charge_mode"]))
+    queue_number = str(interrupted_row["queue_number"])
     execute_db(
         """
         INSERT INTO charge_request (
@@ -419,15 +693,29 @@ def _create_remaining_fault_request(interrupted_row, remaining_energy: float, ev
             round(remaining_energy, 2),
             RequestStatus.WAITING_AREA.value,
             queue_number,
-            _next_waiting_area_order(str(interrupted_row["charge_mode"])),
+            0 if include_in_fault_requeue else _next_waiting_area_order(str(interrupted_row["charge_mode"])),
             _db_string(event_dt),
             interrupted_row["id"],
         ],
     )
+    log_request_lifecycle(
+        request_id,
+        "FAULT_REQUEUED",
+        event_time=event_dt,
+        station_code=from_station_code,
+        source_request_id=interrupted_row["request_id"],
+        source_queue_number=interrupted_row["queue_number"],
+        description=f"{interrupted_row['request_id']} 在 {from_station_code or '原充电桩'} 被中断后，剩余电量重新进入调度",
+    )
     return request_id
 
 
-def _interrupt_charging_request(req_row, station, event_dt: datetime) -> tuple[str | None, str | None]:
+def _interrupt_charging_request(
+    req_row,
+    station,
+    event_dt: datetime,
+    include_remaining_in_fault_requeue: bool = False,
+) -> tuple[str | None, str | None]:
     start_dt = parse_iso_datetime(req_row["charge_start_time"] or event_dt)
     if event_dt < start_dt:
         event_dt = start_dt
@@ -437,7 +725,7 @@ def _interrupt_charging_request(req_row, station, event_dt: datetime) -> tuple[s
     actual_energy = min(actual_energy, float(req_row["request_energy"]))
 
     if actual_energy <= 0:
-        _mark_requests_for_fault_requeue([req_row])
+        _mark_requests_for_fault_requeue([req_row], event_dt)
         return None, str(req_row["request_id"])
 
     remaining_energy = round(float(req_row["request_energy"]) - actual_energy, 2)
@@ -488,7 +776,20 @@ def _interrupt_charging_request(req_row, station, event_dt: datetime) -> tuple[s
         [duration_seconds, actual_energy, station["id"]],
     )
     ensure_request_detail(str(req_row["request_id"]))
-    remaining_request_id = _create_remaining_fault_request(req_row, remaining_energy, event_dt)
+    log_request_lifecycle(
+        str(req_row["request_id"]),
+        "FAULT_INTERRUPTED",
+        event_time=event_dt,
+        station_code=str(station["station_code"]),
+        description=f"{req_row['request_id']} 在 {station['station_code']} 被中断",
+    )
+    remaining_request_id = _create_remaining_fault_request(
+        req_row,
+        remaining_energy,
+        event_dt,
+        include_in_fault_requeue=include_remaining_in_fault_requeue,
+        from_station_code=str(station["station_code"]),
+    )
     return str(req_row["request_id"]), remaining_request_id
 
 
@@ -525,6 +826,104 @@ def run_fault_requeue_scheduler(charge_mode: str, event_time=None):
     return scheduled
 
 
+def _move_fault_requeue_to_public_waiting(request_ids: list[str], charge_mode: str) -> None:
+    active_ids = []
+    for request_id in request_ids:
+        row = query_db(
+            """
+            SELECT id
+            FROM charge_request
+            WHERE request_id = ?
+              AND request_status = ?
+              AND waiting_area_order <= 0
+            """,
+            [request_id, RequestStatus.WAITING_AREA.value],
+            one=True,
+        )
+        if not row:
+            continue
+        active_ids.append((request_id, row["id"]))
+    if not active_ids:
+        return
+    execute_db(
+        """
+        UPDATE charge_request
+        SET waiting_area_order = waiting_area_order + ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE charge_mode = ?
+          AND request_status = ?
+          AND waiting_area_order > 0
+        """,
+        [len(active_ids), charge_mode, RequestStatus.WAITING_AREA.value],
+    )
+    for index, (_, row_id) in enumerate(active_ids, start=1):
+        execute_db(
+            """
+            UPDATE charge_request
+            SET waiting_area_order = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            [index, row_id],
+        )
+
+
+def run_priority_fault_requeue_scheduler(
+    charge_mode: str,
+    priority_request_ids: list[str],
+    displaced_request_ids: list[str] | None = None,
+    event_time=None,
+):
+    event_dt = _event_datetime(event_time)
+    for station in _running_stations(charge_mode):
+        _settle_station_until(int(station["id"]), event_dt)
+
+    scheduled = []
+    priority_order = list(dict.fromkeys(str(item) for item in priority_request_ids))
+    displaced_order = list(dict.fromkeys(str(item) for item in (displaced_request_ids or [])))
+
+    while True:
+        candidates = _fault_waiting_candidates(charge_mode)
+        if not candidates:
+            break
+        candidates_by_id = {str(row["request_id"]): row for row in candidates}
+        candidate = None
+        for request_id in priority_order:
+            if request_id in candidates_by_id:
+                candidate = candidates_by_id[request_id]
+                break
+        if candidate is None:
+            for request_id in displaced_order:
+                if request_id in candidates_by_id:
+                    candidate = candidates_by_id[request_id]
+                    break
+        if candidate is None:
+            candidate = candidates[0]
+        target_station = _best_station_for_waiting_request(candidate, event_dt)
+        if not target_station:
+            break
+        ok, _ = enqueue_request(
+            str(target_station["station_code"]),
+            str(candidate["request_id"]),
+            event_dt,
+        )
+        if not ok:
+            break
+        scheduled.append(
+            {
+                "request_id": str(candidate["request_id"]),
+                "target_station_code": str(target_station["station_code"]),
+            }
+        )
+        scheduled_id = str(candidate["request_id"])
+        priority_order = [request_id for request_id in priority_order if request_id != scheduled_id]
+        displaced_order = [request_id for request_id in displaced_order if request_id != scheduled_id]
+
+    for station in _running_stations(charge_mode):
+        _settle_station_until(int(station["id"]), event_dt)
+    return scheduled
+
+
 def handle_station_fault(station_code: str, fault_time=None):
     event_dt = _event_datetime(fault_time)
     station = _load_station(station_code)
@@ -544,6 +943,7 @@ def handle_station_fault(station_code: str, fault_time=None):
     _settle_station_until(int(station["id"]), event_dt)
     station = _load_station(station_code)
 
+    mode = fault_dispatch_mode()
     current_req = query_db(
         """
         SELECT
@@ -567,20 +967,42 @@ def handle_station_fault(station_code: str, fault_time=None):
     interrupted_request_id = None
     remaining_request_id = None
     if current_req:
-        interrupted_request_id, remaining_request_id = _interrupt_charging_request(current_req, station, event_dt)
+        interrupted_request_id, remaining_request_id = _interrupt_charging_request(
+            current_req,
+            station,
+            event_dt,
+            include_remaining_in_fault_requeue=True,
+        )
 
-    mode = fault_dispatch_mode()
     if mode == "PRIORITY":
         requeue_rows = _fault_requeue_rows_for_priority(int(station["id"]))
+        displaced_rows = _same_mode_waiting_rows_outside_station(int(station["id"]), str(station["charge_mode"]))
     else:
         requeue_rows = _fault_requeue_rows_for_time_order(str(station["charge_mode"]))
+        displaced_rows = []
 
-    requeued_request_ids = _mark_requests_for_fault_requeue(requeue_rows)
+    requeued_request_ids = _mark_requests_for_fault_requeue(requeue_rows, event_dt)
+    displaced_request_ids = []
+    if mode == "PRIORITY":
+        displaced_request_ids = _mark_requests_for_fault_requeue(displaced_rows, event_dt)
     if current_req and interrupted_request_id is None and str(current_req["request_id"]) not in requeued_request_ids:
         requeued_request_ids.append(str(current_req["request_id"]))
 
     _reset_station_after_fault(int(station["id"]), event_dt)
-    scheduled = run_fault_requeue_scheduler(str(station["charge_mode"]), event_dt)
+    if mode == "PRIORITY":
+        priority_request_ids = []
+        if remaining_request_id:
+            priority_request_ids.append(str(remaining_request_id))
+        priority_request_ids.extend(requeued_request_ids)
+        _apply_priority_fault_queue_order(priority_request_ids, displaced_request_ids)
+        scheduled = run_priority_fault_requeue_scheduler(
+            str(station["charge_mode"]),
+            priority_request_ids,
+            displaced_request_ids,
+            event_dt,
+        )
+    else:
+        scheduled = run_fault_requeue_scheduler(str(station["charge_mode"]), event_dt)
 
     return {
         "station_code": station["station_code"],
@@ -614,7 +1036,8 @@ def handle_station_recover(station_code: str, recover_time=None):
         _settle_station_until(int(running_station["id"]), event_dt)
 
     requeue_rows = _fault_requeue_rows_for_time_order(str(station["charge_mode"]))
-    requeued_request_ids = _mark_requests_for_fault_requeue(requeue_rows)
+    requeued_request_ids = _mark_requests_for_fault_requeue(requeue_rows, event_dt)
+    _reset_fault_queue_order_for_time_order(str(station["charge_mode"]))
     scheduled = run_fault_requeue_scheduler(str(station["charge_mode"]), event_dt)
     normal_result = run_normal_scheduler(event_dt, str(station["charge_mode"]))
 
@@ -782,13 +1205,21 @@ def _complete_charging_request(station_id: int, event_dt: datetime) -> bool:
     _resequence_station_queue(station_id)
     _refresh_station_runtime(station_id, finish_time)
     ensure_request_detail(str(current_req["request_id"]))
+    station_row = query_db("SELECT station_code FROM charging_station WHERE id = ?", [station_id], one=True)
+    log_request_lifecycle(
+        str(current_req["request_id"]),
+        "CHARGING_COMPLETED",
+        event_time=finish_time,
+        station_code=station_row["station_code"] if station_row else None,
+        description="充电已正常完成",
+    )
     return True
 
 
 def _start_head_request_if_ready(station_id: int, event_dt: datetime) -> bool:
     head_req = query_db(
         """
-        SELECT id, request_time, estimated_start_time
+        SELECT id, request_id, request_time, estimated_start_time
         FROM charge_request
         WHERE station_id = ?
           AND request_status = ?
@@ -859,6 +1290,14 @@ def _start_head_request_if_ready(station_id: int, event_dt: datetime) -> bool:
             ],
         )
     _refresh_station_runtime(station_id, start_time)
+    station_row = query_db("SELECT station_code FROM charging_station WHERE id = ?", [station_id], one=True)
+    log_request_lifecycle(
+        str(head_req["request_id"]),
+        "CHARGING_STARTED",
+        event_time=start_time,
+        station_code=station_row["station_code"] if station_row else None,
+        description=f"{station_row['station_code']} 开始充电" if station_row else "开始充电",
+    )
     return True
 
 
@@ -884,7 +1323,7 @@ def enqueue_request(station_code: str, request_id: str, event_time=None, allow_c
 
     req_row = query_db(
         """
-        SELECT id, charge_mode, request_status
+        SELECT id, charge_mode, request_status, waiting_area_order
         FROM charge_request
         WHERE request_id = ?
         """,
@@ -920,6 +1359,16 @@ def enqueue_request(station_code: str, request_id: str, event_time=None, allow_c
         ],
     )
     _refresh_station_runtime(int(station["id"]), event_dt)
+    from_fault_queue = int(req_row["waiting_area_order"] or 1) <= 0
+    log_request_lifecycle(
+        request_id,
+        "ASSIGNED_TO_STATION",
+        event_time=event_dt,
+        station_code=str(station["station_code"]),
+        queue_position=active_count + 1,
+        label="分配到新的桩" if from_fault_queue else "分配到桩队列",
+        description=f"{station['station_code']} · 队列第 {active_count + 1} 位",
+    )
     return True, "success"
 
 
@@ -928,7 +1377,7 @@ def _waiting_candidates(charge_mode: str | None = None):
         SELECT request_id, charge_mode, request_energy, queue_number, waiting_area_order
         FROM charge_request
         WHERE request_status = ?
-          AND waiting_area_order IS NOT NULL
+          AND waiting_area_order > 0
     """
     args = [RequestStatus.WAITING_AREA.value]
     if charge_mode:
@@ -1041,11 +1490,20 @@ def run_dispatch_scheduler(event_time=None, charge_mode: str | None = None):
     mode = _dispatch_mode()
     if mode == "NORMAL":
         return run_normal_scheduler(event_time, charge_mode)
+    event_dt = _event_datetime(event_time)
+    scheduled = []
+    modes = [charge_mode] if charge_mode else ["FAST", "SLOW"]
+    for item_mode in modes:
+        scheduled.extend(run_fault_requeue_scheduler(item_mode, event_dt))
+        if _fault_waiting_candidates(item_mode):
+            return {"dispatch_mode": mode, "scheduled_count": len(scheduled), "scheduled": scheduled}
     if charge_mode and mode == "EXT_SINGLE_BATCH":
-        event_dt = _event_datetime(event_time)
-        scheduled = _dispatch_extended_candidates(event_dt, charge_mode, allow_cross_mode=False)
+        scheduled.extend(_dispatch_extended_candidates(event_dt, charge_mode, allow_cross_mode=False))
         return {"dispatch_mode": mode, "scheduled_count": len(scheduled), "scheduled": scheduled}
-    return run_extended_scheduler(event_time, mode)
+    result = run_extended_scheduler(event_time, mode)
+    result["scheduled"] = scheduled + result["scheduled"]
+    result["scheduled_count"] = len(result["scheduled"])
+    return result
 
 
 def _best_station_for_waiting_request(req_row, event_dt: datetime):
@@ -1063,7 +1521,28 @@ def _best_station_for_waiting_request(req_row, event_dt: datetime):
     return min(candidates, key=lambda item: (item[0], item[1]))[2]
 
 
-def run_normal_scheduler(event_time=None, charge_mode: str | None = None):
+def _normal_station_choice_for_waiting_head(req_row, event_dt: datetime):
+    candidates = []
+    for station in _running_stations(req_row["charge_mode"]):
+        active_count = _active_count(int(station["id"]))
+        capacity = int(station["queue_capacity"])
+        own_service = service_seconds_for_request(float(req_row["request_energy"]), float(station["power_kw"]))
+        workload = _station_workload_seconds(int(station["id"]), event_dt, float(station["power_kw"]))
+        candidates.append(
+            (
+                workload + own_service,
+                active_count >= capacity,
+                str(station["station_code"]),
+                station,
+            )
+        )
+    if not candidates:
+        return None, False
+    _, is_full, _, station = min(candidates, key=lambda item: item[:3])
+    return station, not is_full
+
+
+def run_normal_scheduler(event_time=None, charge_mode: str | None = None, ignore_fault_queue: bool = False):
     event_dt = _event_datetime(event_time)
     if _dispatch_mode() != "NORMAL":
         return {"dispatch_mode": _dispatch_mode(), "scheduled_count": 0, "scheduled": []}
@@ -1072,8 +1551,17 @@ def run_normal_scheduler(event_time=None, charge_mode: str | None = None):
     for station in stations:
         _settle_station_until(int(station["id"]), event_dt)
 
-    scheduled = []
     modes = [charge_mode] if charge_mode else ["FAST", "SLOW"]
+    scheduled = []
+    for mode in modes:
+        scheduled.extend(run_fault_requeue_scheduler(mode, event_dt))
+        if not ignore_fault_queue and _fault_waiting_candidates(mode):
+            return {
+                "dispatch_mode": "NORMAL",
+                "scheduled_count": len(scheduled),
+                "scheduled": scheduled,
+            }
+
     for mode in modes:
         while True:
             waiting_head = query_db(
@@ -1082,6 +1570,7 @@ def run_normal_scheduler(event_time=None, charge_mode: str | None = None):
                 FROM charge_request
                 WHERE charge_mode = ?
                   AND request_status = ?
+                  AND waiting_area_order > 0
                 ORDER BY waiting_area_order
                 LIMIT 1
                 """,
@@ -1091,8 +1580,8 @@ def run_normal_scheduler(event_time=None, charge_mode: str | None = None):
             if not waiting_head:
                 break
 
-            target_station = _best_station_for_waiting_request(waiting_head, event_dt)
-            if not target_station:
+            target_station, has_capacity = _normal_station_choice_for_waiting_head(waiting_head, event_dt)
+            if not target_station or not has_capacity:
                 break
 
             ok, _ = enqueue_request(

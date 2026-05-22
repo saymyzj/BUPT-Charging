@@ -50,6 +50,7 @@ def create_app(config_name='default'):
     from app.routes.stations import stations_bp
     from app.routes.batch_simulate import batch_bp
     from app.routes.admin import admin_bp
+    from app.routes.acceptance import acceptance_bp
     
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -58,6 +59,8 @@ def create_app(config_name='default'):
     app.register_blueprint(batch_bp, url_prefix='/api/test')
     app.register_blueprint(batch_bp, url_prefix='/api/batch', name='batch_legacy')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(acceptance_bp, url_prefix='/api/acceptance')
+    app.register_blueprint(acceptance_bp, url_prefix='/api/admin/acceptance', name='acceptance_admin_legacy')
     
     # 初始化数据库
     from app.utils.db import init_db

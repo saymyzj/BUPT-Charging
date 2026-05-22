@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>充电调度系统 - 设备控制</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-[#f4f7f6] text-gray-800 h-screen flex overflow-hidden">
+
+  <aside class="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    <div class="h-16 flex items-center gap-3 px-6 border-b border-gray-100">
+      <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-200">
+        <span class="material-icons text-lg">bolt</span>
+      </div>
+      <div>
+        <div class="text-base font-black tracking-tight text-gray-900 leading-tight">充电调度系统</div>
+        <div class="text-[10px] text-gray-400 font-bold tracking-widest">管理端</div>
+      </div>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+        <span class="material-icons text-[20px]">dashboard</span>
+        <span class="text-sm font-bold">总览</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+        <span class="material-icons text-[20px]">settings_applications</span>
+        <span class="text-sm font-bold">系统配置</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 font-bold transition-colors">
+        <span class="material-icons text-[20px]">ev_station</span>
+        <span class="text-sm">设备控制</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+        <span class="material-icons text-[20px]">people</span>
+        <span class="text-sm font-bold">用户管理</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+        <span class="material-icons text-[20px]">bar_chart</span>
+        <span class="text-sm font-bold">报表统计</span>
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-gray-100">
+      <div class="mb-4 px-2">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs font-bold text-gray-700">系统状态</span>
+        </div>
+        <div class="text-[10px] text-gray-500 mb-3">设备在线，监控稳定</div>
+        
+        <div class="flex justify-between text-[10px] text-gray-500 mb-1">
+          <span>在线设备</span>
+          <span class="font-bold text-gray-700">18 / 20</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-1.5 flex items-center">
+          <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 90%"></div>
+        </div>
+        <div class="text-[9px] text-gray-400 text-right mt-1">90%</div>
+      </div>
+      
+      <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 flex flex-col gap-3">
+        <div class="flex items-center justify-between cursor-pointer group">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+              <span class="material-icons text-sm">person</span>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-gray-900">admin</div>
+              <div class="text-[10px] text-gray-500">超级管理员</div>
+            </div>
+          </div>
+          <span class="material-icons text-gray-400 group-hover:text-gray-600">expand_more</span>
+        </div>
+        <button class="flex items-center justify-center gap-1.5 text-[11px] text-red-500 hover:text-red-600 font-bold border-t border-gray-200 pt-2 transition-colors">
+          <span class="material-icons text-[14px]">logout</span> 退出登录
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    
+    <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0 z-10">
+      <div class="flex-1">
+        <h1 class="text-xl font-black text-gray-900 tracking-tight">设备控制</h1>
+        <p class="text-[11px] text-gray-500 mt-0.5">充电桩启动、关闭、故障标记与恢复</p>
+      </div>
+      
+      <div class="flex justify-end items-center gap-4">
+        <button class="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 flex items-center gap-1.5 transition-colors">
+          <span class="material-icons text-[14px]">refresh</span> 刷新
+        </button>
+        <div class="relative cursor-pointer text-gray-500 hover:text-gray-700 mx-2">
+          <span class="material-icons text-xl mt-1">notifications_none</span>
+          <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold flex items-center justify-center rounded-full border border-white">3</span>
+        </div>
+        <div class="flex items-center gap-2 cursor-pointer bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+          <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-white"><span class="material-icons text-[12px]">person</span></div>
+          <span class="text-xs font-bold text-emerald-700">admin</span>
+          <span class="material-icons text-sm text-emerald-600">expand_more</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 lg:p-8 no-scrollbar">
+      <div class="max-w-[1400px] mx-auto space-y-6">
+        
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center"><span class="material-icons text-sm">computer</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">在线设备</div>
+                <div class="text-xl font-black text-gray-900 font-mono leading-none">18</div>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">+ 2</span></span>
+              <span>90%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1"><div class="bg-emerald-500 h-1 rounded-full" style="width: 90%"></div></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-green-50 text-green-500 flex items-center justify-center border border-green-100"><span class="material-icons text-sm">play_circle_outline</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">运行中</div>
+                <div class="text-xl font-black text-gray-900 font-mono leading-none">11</div>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">+ 1</span></span>
+              <span>55%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1"><div class="bg-green-500 h-1 rounded-full" style="width: 55%"></div></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center border border-red-100"><span class="material-icons text-sm">warning_amber</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">故障数</div>
+                <div class="text-xl font-black text-red-600 font-mono leading-none">2</div>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">- 1</span></span>
+              <span>10%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1"><div class="bg-red-500 h-1 rounded-full" style="width: 10%"></div></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-gray-50 text-gray-500 flex items-center justify-center border border-gray-200"><span class="material-icons text-sm">pause_circle_outline</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">空闲设备</div>
+                <div class="text-xl font-black text-gray-900 font-mono leading-none">5</div>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">+ 1</span></span>
+              <span>25%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1"><div class="bg-gray-400 h-1 rounded-full" style="width: 25%"></div></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center"><span class="material-icons text-sm">bolt</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">累计电量</div>
+                <div class="text-xl font-black text-gray-900 font-mono leading-none">342.56 <span class="text-[10px] font-bold text-gray-400">kWh</span></div>
+              </div>
+            </div>
+            <div class="flex justify-end items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">+ 23.18</span></span>
+            </div>
+            <div class="w-full bg-emerald-50 rounded-full h-1"></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center"><span class="material-icons text-sm">event_available</span></div>
+              <div class="text-right">
+                <div class="text-[10px] text-gray-400 font-bold mb-0.5">累计服务</div>
+                <div class="text-xl font-black text-gray-900 font-mono leading-none">1,248 <span class="text-[10px] font-bold text-gray-400">次</span></div>
+              </div>
+            </div>
+            <div class="flex justify-end items-center text-[10px] text-gray-400 mb-1.5 mt-3">
+              <span>较昨日 <span class="text-emerald-500 font-bold">+ 86</span></span>
+            </div>
+            <div class="w-full bg-emerald-50 rounded-full h-1"></div>
+          </div>
+
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr>
+                <th class="py-4 px-6 text-gray-400 font-normal border-b border-gray-100">编号</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100">模式</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100">状态</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100">当前服务</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100 text-center">队列长度</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100 text-center">累计次数</th>
+                <th class="py-4 px-4 text-gray-400 font-normal border-b border-gray-100">累计时长</th>
+                <th class="py-4 px-6 text-gray-400 font-normal border-b border-gray-100">累计电量</th>
+                <th class="py-4 px-6 text-gray-400 font-normal border-b border-gray-100">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50 text-gray-700">
+              
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="py-4 px-6 font-bold text-gray-900">FAST_01</td>
+                <td class="py-4 px-4 font-medium">快充</td>
+                <td class="py-4 px-4"><span class="text-emerald-500 font-bold">运行中</span></td>
+                <td class="py-4 px-4 text-gray-500 font-medium">空闲</td>
+                <td class="py-4 px-4 font-mono text-center">0</td>
+                <td class="py-4 px-4 font-mono text-center">7</td>
+                <td class="py-4 px-4 font-mono text-gray-500">6h 29m 23s</td>
+                <td class="py-4 px-6 font-mono font-medium">194.69 kWh</td>
+                <td class="py-4 px-6 font-bold flex gap-4">
+                  <button class="text-gray-400 hover:text-gray-700 transition-colors">关闭</button>
+                  <button class="text-red-400 hover:text-red-600 transition-colors">标记故障</button>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="py-4 px-6 font-bold text-gray-900">FAST_02</td>
+                <td class="py-4 px-4 font-medium">快充</td>
+                <td class="py-4 px-4"><span class="text-emerald-500 font-bold">运行中</span></td>
+                <td class="py-4 px-4 text-gray-900 font-medium">用户 202***003</td>
+                <td class="py-4 px-4 font-mono text-center">1</td>
+                <td class="py-4 px-4 font-mono text-center">2</td>
+                <td class="py-4 px-4 font-mono text-gray-500">52m 46s</td>
+                <td class="py-4 px-6 font-mono font-medium">26.38 kWh</td>
+                <td class="py-4 px-6 font-bold flex gap-4">
+                  <button class="text-red-400 hover:text-red-600 transition-colors">标记故障</button>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-gray-50/50 transition-colors bg-red-50/20">
+                <td class="py-4 px-6 font-bold text-gray-900">FAST_03</td>
+                <td class="py-4 px-4 font-medium">快充</td>
+                <td class="py-4 px-4"><span class="px-2 py-0.5 rounded bg-red-50 text-red-500 font-bold border border-red-100 text-[11px]">故障</span></td>
+                <td class="py-4 px-4 text-gray-500 font-medium">空闲</td>
+                <td class="py-4 px-4 font-mono text-center">0</td>
+                <td class="py-4 px-4 font-mono text-center">3</td>
+                <td class="py-4 px-4 font-mono text-gray-500">1h 55m 52s</td>
+                <td class="py-4 px-6 font-mono font-medium">57.93 kWh</td>
+                <td class="py-4 px-6 font-bold flex gap-4">
+                  <button class="text-blue-500 hover:text-blue-700 transition-colors">恢复</button>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="py-4 px-6 font-bold text-gray-900">SLOW_01</td>
+                <td class="py-4 px-4 font-medium">慢充</td>
+                <td class="py-4 px-4"><span class="text-emerald-500 font-bold">运行中</span></td>
+                <td class="py-4 px-4 text-gray-500 font-medium">空闲</td>
+                <td class="py-4 px-4 font-mono text-center">0</td>
+                <td class="py-4 px-4 font-mono text-center">1</td>
+                <td class="py-4 px-4 font-mono text-gray-500">14m 14s</td>
+                <td class="py-4 px-6 font-mono font-medium">2.37 kWh</td>
+                <td class="py-4 px-6 font-bold flex gap-4">
+                  <button class="text-gray-400 hover:text-gray-700 transition-colors">关闭</button>
+                  <button class="text-red-400 hover:text-red-600 transition-colors">标记故障</button>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="py-4 px-6 font-bold text-gray-900">SLOW_02</td>
+                <td class="py-4 px-4 font-medium">慢充</td>
+                <td class="py-4 px-4"><span class="text-gray-400 font-bold">空闲</span></td>
+                <td class="py-4 px-4 text-gray-500 font-medium">空闲</td>
+                <td class="py-4 px-4 font-mono text-center">0</td>
+                <td class="py-4 px-4 font-mono text-center">1</td>
+                <td class="py-4 px-4 font-mono text-gray-500">5h 45m 47s</td>
+                <td class="py-4 px-6 font-mono font-medium">57.63 kWh</td>
+                <td class="py-4 px-6 font-bold flex gap-4">
+                  <button class="text-gray-400 hover:text-gray-700 transition-colors">关闭</button>
+                  <button class="text-red-400 hover:text-red-600 transition-colors">标记故障</button>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+
+        <section>
+          <h3 class="text-sm font-bold text-gray-900 mb-3">操作规则</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            
+            <div class="bg-white rounded-xl p-5 border border-gray-100 border-t-2 border-t-emerald-400 shadow-sm">
+              <h4 class="text-sm font-bold text-emerald-600 mb-1">运行中</h4>
+              <p class="text-[11px] text-gray-500 mb-4">设备正在运行，允许以下操作</p>
+              <div class="space-y-2">
+                <div class="flex gap-4 p-2.5 rounded-lg border border-gray-50 bg-gray-50/50">
+                  <span class="text-xs font-bold text-gray-700 w-12">关闭</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">停止当前充电服务</span>
+                </div>
+                <div class="flex gap-4 p-2.5 rounded-lg border border-gray-50 bg-gray-50/50">
+                  <span class="text-xs font-bold text-gray-700 w-12">标记故障</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">将设备标记为故障，暂停服务</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-gray-50/50 rounded-xl p-5 border border-gray-200 border-t-2 border-t-gray-400 shadow-sm">
+              <h4 class="text-sm font-bold text-gray-600 mb-1">空闲</h4>
+              <p class="text-[11px] text-gray-500 mb-4">设备空闲中，允许以下操作</p>
+              <div class="space-y-2">
+                <div class="flex gap-4 p-2.5 rounded-lg border border-gray-100 bg-white">
+                  <span class="text-xs font-bold text-gray-700 w-12">启动</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">启动充电桩，进入运行状态</span>
+                </div>
+                <div class="flex gap-4 p-2.5 rounded-lg border border-gray-100 bg-white">
+                  <span class="text-xs font-bold text-gray-700 w-12">标记故障</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">将设备标记为故障，暂停服务</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-red-50/30 rounded-xl p-5 border border-red-100 border-t-2 border-t-red-400 shadow-sm">
+              <h4 class="text-sm font-bold text-red-500 mb-1">故障</h4>
+              <p class="text-[11px] text-gray-500 mb-4">设备处于故障状态，允许以下操作</p>
+              <div class="space-y-2">
+                <div class="flex gap-4 p-2.5 rounded-lg border border-red-50 bg-white/60">
+                  <span class="text-xs font-bold text-gray-700 w-12">恢复</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">清除故障标记，恢复运行</span>
+                </div>
+                <div class="flex gap-4 p-2.5 rounded-lg border border-red-50 bg-white/60">
+                  <span class="text-xs font-bold text-gray-700 w-12">标记故障</span>
+                  <span class="text-[11px] text-gray-500 mt-0.5">保持或更新故障状态信息</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

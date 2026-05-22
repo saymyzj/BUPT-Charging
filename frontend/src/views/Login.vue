@@ -138,8 +138,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getProfile, login, register } from '@/api/charging'
+import { login, register } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
+import { setAuthSession } from '@/utils/authSession'
 
 const router = useRouter()
 const scrolled = ref(false)
@@ -174,17 +175,9 @@ async function handleLogin() {
     const res = await login({ username: loginForm.value.username.trim(), password: loginForm.value.password })
     const data = unwrapResponseData(res)
     if (data.code !== undefined && data.code !== 0) { showMsgFn(data.message || '登录失败'); return }
-    localStorage.setItem('auth_token', data.token)
-    localStorage.setItem('user_role', data.role)
-    localStorage.setItem('user_id', data.user_id)
-    localStorage.setItem('username', loginForm.value.username.trim())
-    try {
-      const profileRes = await getProfile()
-      const profile = unwrapResponseData(profileRes)
-      if (profile.code === undefined || profile.code === 0) {
-        localStorage.setItem('username', profile.username || loginForm.value.username.trim())
-      }
-    } catch (_) { /* keep login form username */ }
+    setAuthSession({
+      token: data.token
+    })
     closeModal()
     router.push(data.role === 'ADMIN' ? '/admin/overview' : '/user/workspace')
   } catch (e) {

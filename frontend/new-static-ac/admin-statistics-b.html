@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>充电调度系统 - 报表统计</title>
+  <style>
+    :root{
+      --green:#34b27b;
+      --green-weak:#eaf8f1;
+      --green-deep:#1f8f60;
+      --blue:#4f86f7;
+      --blue-weak:#eef4ff;
+      --gold:#d8a23a;
+      --gold-weak:#fff8e8;
+      --red:#ef4444;
+      --red-weak:#fff1f1;
+      --text:#101828;
+      --sub:#667085;
+      --line:#e8ecef;
+      --bg:#f7faf8;
+      --panel:#fff;
+      --shadow:0 10px 28px rgba(16,24,40,.06);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;
+      color:var(--text);
+      background:linear-gradient(180deg,#fff 0%,#f7fbf9 100%);
+    }
+    a{text-decoration:none;color:inherit}
+
+    .layout{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns:216px 1fr;
+    }
+    .sidebar{
+      border-right:1px solid var(--line);
+      background:linear-gradient(180deg,#fff 0%,#f4fbf7 100%);
+      padding:18px 14px;
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
+    .brand{display:flex;gap:10px;align-items:flex-start;padding:8px 6px 14px}
+    .brand-icon{
+      width:50px;height:50px;border-radius:14px;
+      background:linear-gradient(135deg,#3db66e,#53c58c);
+      color:#fff;display:grid;place-items:center;font-size:24px;
+      box-shadow:0 10px 22px rgba(61,182,110,.22);
+    }
+    .brand-title{font-size:20px;font-weight:800;line-height:1.15}
+    .brand-sub{margin-top:4px;font-size:13px;color:var(--sub)}
+    .nav{display:grid;gap:8px;padding:4px 0}
+    .nav-item{
+      height:48px;border-radius:14px;display:flex;align-items:center;gap:12px;
+      padding:0 14px;color:#475467;font-size:15px;font-weight:650;
+    }
+    .nav-item:hover{background:#f6faf7}
+    .nav-item.active{background:rgba(52,178,123,.12);color:var(--green-deep)}
+    .nav-ico{width:18px;text-align:center;font-size:18px;opacity:.9}
+    .sidebar-footer{
+      margin-top:auto;
+      display:grid;
+      gap:14px;
+      padding-top:8px;
+    }
+    .state-card,.user-card{
+      background:#fff;border:1px solid #edf0f2;border-radius:16px;
+      box-shadow:var(--shadow);padding:14px;
+    }
+    .state-top{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(52,178,123,.12)}
+    .state-row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;color:var(--sub)}
+    .progress{height:6px;border-radius:999px;background:#e9f0eb;overflow:hidden;margin-top:10px}
+    .progress span{display:block;height:100%;background:linear-gradient(90deg,#48c08a,#34b27b);border-radius:inherit}
+    .user-card{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .user-left{display:flex;align-items:center;gap:10px}
+    .avatar{
+      width:40px;height:40px;border-radius:50%;background:var(--green-weak);color:var(--green-deep);
+      display:grid;place-items:center;font-weight:800;font-size:16px;
+    }
+    .user-name{font-weight:800}
+    .user-role{font-size:12px;color:var(--green);margin-top:2px;font-weight:700}
+    .logout{
+      width:36px;height:36px;border-radius:10px;border:1px solid #ffd5d5;background:#fff;
+      color:var(--red);display:grid;place-items:center;font-size:18px;
+    }
+
+    .main{min-width:0}
+    .topbar{
+      height:72px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 28px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.88);backdrop-filter:blur(12px);
+    }
+    .crumb{color:#98a2b3;font-size:13px}
+    .top-actions{display:flex;align-items:center;gap:14px;color:#344054;font-size:14px}
+    .top-pill{
+      border:1px solid #e5e7eb;background:#fff;border-radius:999px;padding:8px 12px;
+      display:inline-flex;align-items:center;gap:8px;font-weight:650;
+    }
+
+    .content{padding:24px 28px 30px}
+    .page-head{margin-bottom:18px}
+    .page-title{font-size:28px;font-weight:850;letter-spacing:-.02em;margin:0}
+    .page-sub{margin-top:8px;color:var(--sub);font-size:15px}
+
+    .head-row{
+      display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:14px 0 16px;
+    }
+    .tabs{
+      display:inline-flex;padding:4px;border:1px solid #e6eaee;border-radius:14px;background:#fff;box-shadow:var(--shadow);
+    }
+    .tab{
+      height:36px;min-width:66px;padding:0 14px;border-radius:10px;display:grid;place-items:center;
+      color:#667085;font-weight:700;font-size:14px;
+    }
+    .tab.active{background:#fff;color:var(--green-deep);box-shadow:inset 0 0 0 1px #dbe8e0}
+    .toolbar-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .select{
+      height:40px;border:1px solid #dde4e8;border-radius:12px;background:#fff;color:#344054;
+      padding:0 12px;display:inline-flex;align-items:center;gap:8px;font-weight:650;
+    }
+    .refresh{
+      height:40px;border-radius:12px;border:1px solid #d8eadf;background:linear-gradient(180deg,#4bbb87,#37ab77);
+      color:#fff;padding:0 16px;font-weight:800;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 18px rgba(52,178,123,.18);
+    }
+
+    .kpis{
+      display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:16px;
+    }
+    .kpi{
+      min-height:96px;border:1px solid #edf0f2;border-radius:18px;background:#fff;box-shadow:var(--shadow);
+      padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;
+    }
+    .kpi-label{color:#98a2b3;font-size:13px;font-weight:700}
+    .kpi-value{margin-top:9px;font-size:28px;font-weight:900;letter-spacing:-.03em}
+    .kpi-sub{margin-top:6px;color:#98a2b3;font-size:12px}
+    .kpi-icon{
+      width:46px;height:46px;border-radius:16px;display:grid;place-items:center;flex:0 0 auto;font-size:20px;
+    }
+    .kpi.a .kpi-icon{background:var(--green-weak);color:var(--green-deep)}
+    .kpi.b .kpi-icon{background:var(--blue-weak);color:var(--blue)}
+    .kpi.c .kpi-icon{background:var(--gold-weak);color:var(--gold)}
+    .kpi.d .kpi-icon{background:var(--red-weak);color:var(--red)}
+    .kpi.e .kpi-icon{background:#f4f7ff;color:#7a5af8}
+
+    .panel{
+      background:#fff;border:1px solid #edf0f2;border-radius:18px;box-shadow:var(--shadow);overflow:hidden;
+      margin-bottom:16px;
+    }
+    .panel-head{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 18px 14px;border-bottom:1px solid #f0f2f4;
+    }
+    .panel-head h2{margin:0;font-size:16px;font-weight:850}
+    .panel-meta{color:#98a2b3;font-size:13px}
+    table{width:100%;border-collapse:collapse}
+    thead th{
+      text-align:left;padding:14px 18px;background:#fbfcfc;color:#667085;font-size:13px;font-weight:700;
+      border-bottom:1px solid #edf0f2;
+    }
+    tbody td{
+      padding:14px 18px;border-bottom:1px solid #f0f2f4;color:#344054;font-size:14px;white-space:nowrap;
+    }
+    tbody tr:last-child td{border-bottom:0}
+    .pile{font-weight:800;color:#1d2939}
+    .money{font-weight:800;color:#1d2939}
+
+    .grid-2{
+      display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;
+    }
+    .chart-box{
+      min-height:320px;background:#fff;border:1px solid #edf0f2;border-radius:18px;box-shadow:var(--shadow);
+      padding:18px;
+    }
+    .chart-title{font-size:16px;font-weight:850;margin-bottom:18px}
+    .chart-wrap{display:grid;grid-template-columns:1fr 240px;gap:18px;align-items:stretch}
+    .bars{
+      position:relative;
+      height:260px;
+      display:flex;
+      align-items:flex-end;
+      gap:16px;
+      padding:18px 10px 14px 48px;
+      border-bottom:1px solid #edf0f2;
+      overflow:hidden;
+    }
+    .bars::before{
+      content:"";
+      position:absolute;
+      left:42px;
+      right:8px;
+      top:18px;
+      bottom:14px;
+      background:
+        linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 100% / 100% 25%,
+        linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 75% / 100% 25%,
+        linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 50% / 100% 25%,
+        linear-gradient(to top, rgba(232,236,239,.95) 1px, transparent 1px) 0 25% / 100% 25%;
+      background-repeat:no-repeat;
+      pointer-events:none;
+    }
+    .y-axis{
+      position:absolute;
+      left:0;
+      top:12px;
+      bottom:14px;
+      width:38px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      color:#98a2b3;
+      font-size:11px;
+      text-align:right;
+      padding-right:8px;
+      pointer-events:none;
+    }
+    .y-axis span{display:block;transform:translateY(50%)}
+    .bar-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0;position:relative;z-index:1}
+    .bar{
+      width:100%;max-width:92px;border-radius:14px 14px 6px 6px;position:relative;background:#edf0f2;
+      overflow:hidden;box-shadow:inset 0 -1px 0 rgba(255,255,255,.5);
+    }
+    .bar span{
+      position:absolute;left:0;bottom:0;width:100%;border-radius:inherit;min-height:16px;
+      background:linear-gradient(180deg,#59c892,#34b27b);
+    }
+    .bar.money span{background:linear-gradient(180deg,#f4c562,#d8a23a)}
+    .bar-label{font-size:12px;color:#98a2b3;font-weight:700}
+    .bar-value{font-size:13px;font-weight:850;color:#1d2939;white-space:nowrap}
+
+    .donut-side{width:240px;display:grid;gap:12px;align-content:start}
+    .donut{
+      width:170px;height:170px;border-radius:50%;
+      background:conic-gradient(#34b27b 0 42%, #4f86f7 42% 67%, #d8a23a 67% 100%);
+      margin:0 auto;position:relative;
+    }
+    .donut::after{
+      content:"";position:absolute;inset:28px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #edf0f2;
+    }
+    .donut-center{
+      position:absolute;inset:50%;transform:translate(-50%,-50%);z-index:1;text-align:center;min-width:88px;
+    }
+    .donut-center strong{display:block;font-size:13px;color:#667085}
+    .donut-center span{display:block;font-size:26px;font-weight:900;margin-top:6px}
+    .legend{display:grid;gap:10px;margin-top:8px}
+    .legend-row{display:flex;justify-content:space-between;gap:16px;color:#344054;font-size:13px}
+    .legend-left{display:flex;align-items:center;gap:8px}
+    .swatch{width:8px;height:8px;border-radius:50%}
+
+    .footer-note{
+      display:flex;justify-content:space-between;align-items:center;gap:12px;
+      color:#98a2b3;font-size:12px;padding:12px 2px 0;
+    }
+
+    @media (max-width:1180px){
+      .layout{grid-template-columns:1fr}
+      .sidebar{display:none}
+      .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .grid-2{grid-template-columns:1fr}
+      table{min-width:1080px}
+      .panel{overflow:auto}
+    }
+    @media (max-width:720px){
+      .content{padding:18px 14px 24px}
+      .kpis{grid-template-columns:1fr}
+      .topbar{padding:0 14px}
+      .head-row{align-items:stretch}
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <div class="brand-title">充电调度系统</div>
+          <div class="brand-sub">管理端</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item" href="#"><span class="nav-ico">▦</span><span>总览</span></a>
+        <a class="nav-item" href="#"><span class="nav-ico">⚙</span><span>系统配置</span></a>
+        <a class="nav-item" href="#"><span class="nav-ico">🔌</span><span>设备控制</span></a>
+        <a class="nav-item" href="#"><span class="nav-ico">👥</span><span>用户管理</span></a>
+        <a class="nav-item active" href="#"><span class="nav-ico">▮</span><span>报表统计</span></a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="state-card">
+          <div class="state-top"><span class="dot"></span>系统运行正常</div>
+          <div class="state-row"><span>在线设备</span><strong style="color:#344054;font-size:14px">5 / 5</strong></div>
+          <div class="progress"><span style="width:100%"></span></div>
+        </div>
+        <div class="user-card">
+          <div class="user-left">
+            <div class="avatar">A</div>
+            <div>
+              <div class="user-name">admin</div>
+              <div class="user-role">管理员</div>
+            </div>
+          </div>
+          <div class="logout">↗</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">充电调度系统 / 报表统计</div>
+        <div class="top-actions">
+          <div class="top-pill">刷新</div>
+          <div class="top-pill">通知</div>
+          <div class="top-pill">admin</div>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="page-head">
+          <h1 class="page-title">报表统计</h1>
+          <div class="page-sub">按日 / 周 / 月维度查看各桩充电数据</div>
+        </section>
+
+        <section class="head-row">
+          <div class="tabs">
+            <div class="tab active">日报</div>
+            <div class="tab">周报</div>
+            <div class="tab">月报</div>
+          </div>
+          <div class="toolbar-right">
+            <div class="select">日期范围 ▾</div>
+            <div class="select">充电桩 ▾</div>
+            <button class="refresh">⟳ 刷新</button>
+          </div>
+        </section>
+
+        <section class="kpis">
+          <div class="kpi a">
+            <div>
+              <div class="kpi-label">总充电次数</div>
+              <div class="kpi-value">16</div>
+              <div class="kpi-sub">较昨日 +4</div>
+            </div>
+            <div class="kpi-icon">⚡</div>
+          </div>
+          <div class="kpi b">
+            <div>
+              <div class="kpi-label">总充电电量</div>
+              <div class="kpi-value">379.0 kWh</div>
+              <div class="kpi-sub">快充占比 72%</div>
+            </div>
+            <div class="kpi-icon">▣</div>
+          </div>
+          <div class="kpi c">
+            <div>
+              <div class="kpi-label">总充电费</div>
+              <div class="kpi-value">¥227.97</div>
+              <div class="kpi-sub">电费结算金额</div>
+            </div>
+            <div class="kpi-icon">¥</div>
+          </div>
+          <div class="kpi d">
+            <div>
+              <div class="kpi-label">总服务费</div>
+              <div class="kpi-value">¥303.20</div>
+              <div class="kpi-sub">平台服务收入</div>
+            </div>
+            <div class="kpi-icon">◎</div>
+          </div>
+          <div class="kpi e">
+            <div>
+              <div class="kpi-label">总费用</div>
+              <div class="kpi-value">¥531.17</div>
+              <div class="kpi-sub">含电费与服务费</div>
+            </div>
+            <div class="kpi-icon">◔</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>详细报表</h2>
+            <div class="panel-meta">2026-05-18 至 2026-05-20</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>时段</th>
+                <th>充电桩</th>
+                <th>充电次数</th>
+                <th>充电时长</th>
+                <th>充电电量</th>
+                <th>充电费</th>
+                <th>服务费</th>
+                <th>总费用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2026-05-18</td><td class="pile">FAST_01</td><td>1</td><td>18m</td><td>9.00 kWh</td><td>¥6.30</td><td>¥7.20</td><td class="money">¥13.50</td></tr>
+              <tr><td>2026-05-18</td><td class="pile">SLOW_01</td><td>1</td><td>14m 14s</td><td>2.37 kWh</td><td>¥1.66</td><td>¥1.90</td><td class="money">¥3.56</td></tr>
+              <tr><td>2026-05-18</td><td class="pile">SLOW_02</td><td>1</td><td>5h 45m 47s</td><td>57.63 kWh</td><td>¥47.97</td><td>¥46.10</td><td class="money">¥94.07</td></tr>
+              <tr><td>2026-05-19</td><td class="pile">FAST_01</td><td>3</td><td>3h 20m</td><td>100.00 kWh</td><td>¥72.10</td><td>¥80.00</td><td class="money">¥152.10</td></tr>
+              <tr><td>2026-05-19</td><td class="pile">FAST_02</td><td>2</td><td>52m 46s</td><td>26.38 kWh</td><td>¥24.32</td><td>¥21.10</td><td class="money">¥45.42</td></tr>
+              <tr><td>2026-05-19</td><td class="pile">FAST_03</td><td>1</td><td>7m 15s</td><td>3.62 kWh</td><td>¥3.62</td><td>¥2.90</td><td class="money">¥6.52</td></tr>
+              <tr><td>2026-05-20</td><td class="pile">FAST_01</td><td>4</td><td>2h 51m 23s</td><td>85.69 kWh</td><td>¥34.28</td><td>¥68.55</td><td class="money">¥102.83</td></tr>
+              <tr><td>2026-05-20</td><td class="pile">FAST_02</td><td>1</td><td>1h 20m</td><td>40.00 kWh</td><td>¥16.00</td><td>¥32.00</td><td class="money">¥48.00</td></tr>
+              <tr><td>2026-05-20</td><td class="pile">FAST_03</td><td>2</td><td>1h 48m 37s</td><td>54.31 kWh</td><td>¥21.72</td><td>¥43.45</td><td class="money">¥65.17</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="grid-2">
+          <div class="chart-box">
+            <div class="chart-title">各桩充电电量 (kWh)</div>
+            <div class="bars">
+              <div class="y-axis"><span>200</span><span>150</span><span>100</span><span>50</span><span>0</span></div>
+              <div class="bar-item">
+                <div class="bar" style="height:100%"><span style="height:74%"></span></div>
+                <div class="bar-value">194.69 kWh</div>
+                <div class="bar-label">FAST_01</div>
+              </div>
+              <div class="bar-item">
+                <div class="bar" style="height:100%"><span style="height:25%"></span></div>
+                <div class="bar-value">66.38 kWh</div>
+                <div class="bar-label">FAST_02</div>
+              </div>
+              <div class="bar-item">
+                <div class="bar" style="height:100%"><span style="height:20%"></span></div>
+                <div class="bar-value">57.93 kWh</div>
+                <div class="bar-label">FAST_03</div>
+              </div>
+              <div class="bar-item">
+                <div class="bar" style="height:100%"><span style="height:12%"></span></div>
+                <div class="bar-value">2.37 kWh</div>
+                <div class="bar-label">SLOW_01</div>
+              </div>
+              <div class="bar-item">
+                <div class="bar" style="height:100%"><span style="height:44%"></span></div>
+                <div class="bar-value">57.63 kWh</div>
+                <div class="bar-label">SLOW_02</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-box">
+            <div class="chart-title">各桩总费用 (¥)</div>
+            <div class="chart-wrap">
+              <div class="bars" style="height:260px;gap:16px">
+                <div class="y-axis"><span>300</span><span>225</span><span>150</span><span>75</span><span>0</span></div>
+                <div class="bar-item">
+                  <div class="bar money" style="height:100%"><span style="height:62%"></span></div>
+                  <div class="bar-value">¥268.43</div>
+                  <div class="bar-label">FAST_01</div>
+                </div>
+                <div class="bar-item">
+                  <div class="bar money" style="height:100%"><span style="height:22%"></span></div>
+                  <div class="bar-value">¥93.42</div>
+                  <div class="bar-label">FAST_02</div>
+                </div>
+                <div class="bar-item">
+                  <div class="bar money" style="height:100%"><span style="height:19%"></span></div>
+                  <div class="bar-value">¥71.69</div>
+                  <div class="bar-label">FAST_03</div>
+                </div>
+                <div class="bar-item">
+                  <div class="bar money" style="height:100%"><span style="height:9%"></span></div>
+                  <div class="bar-value">¥3.56</div>
+                  <div class="bar-label">SLOW_01</div>
+                </div>
+                <div class="bar-item">
+                  <div class="bar money" style="height:100%"><span style="height:38%"></span></div>
+                  <div class="bar-value">¥94.07</div>
+                  <div class="bar-label">SLOW_02</div>
+                </div>
+              </div>
+              <div class="donut-side">
+                <div class="donut">
+                  <div class="donut-center">
+                    <strong>总费用</strong>
+                    <span>¥531</span>
+                  </div>
+                </div>
+                <div class="legend">
+                  <div class="legend-row"><div class="legend-left"><span class="swatch" style="background:var(--green)"></span>充电费</div><strong>¥227.97</strong></div>
+                  <div class="legend-row"><div class="legend-left"><span class="swatch" style="background:var(--gold)"></span>服务费</div><strong>¥303.20</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="footer-note">
+          <div>说明：报表按所选时间维度统计，不同维度下数据会自动聚合。</div>
+          <div>最后更新：2026-05-20 14:23:36</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

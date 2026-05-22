@@ -118,6 +118,8 @@ def _serialize_detail_row(detail_row):
         "charge_fee": float(detail_row["charge_fee"]),
         "service_fee": float(detail_row["service_fee"]),
         "total_fee": float(detail_row["total_fee"]),
+        "payment_status": detail_row["payment_status"],
+        "paid_at": _iso_string(detail_row["paid_at"]),
         "request_status": detail_row["request_status"],
     }
 
@@ -136,6 +138,8 @@ def get_request_detail(request_id: str):
             rd.charge_fee,
             rd.service_fee,
             rd.total_fee,
+            rd.payment_status,
+            rd.paid_at,
             rd.request_status
         FROM request_detail rd
         JOIN charge_request cr ON cr.id = rd.request_id

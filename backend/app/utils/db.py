@@ -46,6 +46,15 @@ V3_REQUIRED_COLUMNS = {
         'request_status',
     },
     'scheduler_config': {'config_key', 'config_value'},
+    'acceptance_event': {'event_id', 'event_time', 'event_type', 'status'},
+    'acceptance_snapshot': {'snapshot_time', 'snapshot_phase', 'snapshot_payload'},
+}
+
+V3_OPTIONAL_COLUMN_DEFS = {
+    'request_detail': {
+        'payment_status': "TEXT NOT NULL DEFAULT 'UNPAID'",
+        'paid_at': 'TIMESTAMP',
+    },
 }
 
 
@@ -79,6 +88,20 @@ def _table_columns(db, table_name: str):
     return {row[1] for row in db.execute(f"PRAGMA table_info({table_name})").fetchall()}
 
 
+def _charge_request_queue_number_allows_duplicates(db) -> bool:
+    if 'charge_request' not in _table_names(db):
+        return True
+    for index in db.execute("PRAGMA index_list(charge_request)").fetchall():
+        index_name = index[1]
+        is_unique = bool(index[2])
+        if not is_unique:
+            continue
+        columns = [row[2] for row in db.execute(f"PRAGMA index_info({index_name})").fetchall()]
+        if columns == ['queue_number']:
+            return False
+    return True
+
+
 def _schema_is_v3_compatible(db) -> bool:
     tables = _table_names(db)
     if not tables:
@@ -88,6 +111,8 @@ def _schema_is_v3_compatible(db) -> bool:
             return False
         if not required_columns.issubset(_table_columns(db, table_name)):
             return False
+    if not _charge_request_queue_number_allows_duplicates(db):
+        return False
     return True
 
 
@@ -131,6 +156,7 @@ def _create_fresh_database(database_path: str, schema_path: Path, apply_runtime_
     try:
         with open(schema_path, 'r', encoding='utf-8') as f:
             db.executescript(f.read())
+        _ensure_optional_columns(db)
         if apply_runtime_config:
             _apply_runtime_config(db)
         db.commit()
@@ -182,6 +208,7 @@ def _initialize_database_file(database_path: str, apply_runtime_config: bool = F
                 )
             with open(schema_path, 'r', encoding='utf-8') as f:
                 db.executescript(f.read())
+            _ensure_optional_columns(db)
             if apply_runtime_config:
                 _apply_runtime_config(db)
             db.commit()
@@ -240,6 +267,10 @@ def _apply_runtime_config(db):
         'charging_queue_len': int(current_app.config.get('CHARGING_QUEUE_LEN', 2)),
         'dispatch_mode': current_app.config.get('DISPATCH_MODE', 'NORMAL'),
         'fault_dispatch_mode': current_app.config.get('FAULT_DISPATCH_MODE', 'TIME_ORDER'),
+        'acceptance_enabled': '0',
+        'acceptance_simulation_time': '2026-05-20T06:00:00',
+        'acceptance_status': 'IDLE',
+        'acceptance_sample_name': '',
     }
     for key, value in config_values.items():
         db.execute(
@@ -250,6 +281,18 @@ def _apply_runtime_config(db):
             """,
             (key, value),
         )
+
+
+def _ensure_optional_columns(db):
+    tables = _table_names(db)
+    for table_name, column_defs in V3_OPTIONAL_COLUMN_DEFS.items():
+        if table_name not in tables:
+            continue
+        columns = _table_columns(db, table_name)
+        for column_name, column_def in column_defs.items():
+            if column_name in columns:
+                continue
+            db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
 
 
 def get_db():

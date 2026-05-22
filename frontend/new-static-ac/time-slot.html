@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高保真模拟时间轴面板</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    :root {
+      --green: #10b981;
+      --green-light: #d1fae5;
+      --green-dark: #059669;
+      --red: #ef4444;
+      --red-light: #fee2e2;
+      --blue: #3b82f6;
+      --blue-light: #eff6ff;
+      --text-main: #1e293b;
+      --text-sub: #64748b;
+      --text-muted: #94a3b8;
+      --border-color: #e2e8f0;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-hover: #f1f5f9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-page);
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .panel-container {
+      width: 100%;
+      max-width: 1180px;
+      background: var(--bg-card);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+      border: 1px solid var(--border-color);
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* --- 1. 顶部 Header --- */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--green-light);
+      color: var(--green-dark);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .header-title h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .header-title p {
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+
+    .header-right {
+      display: flex;
+      gap: 12px;
+    }
+
+    .top-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      background: var(--bg-page);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .badge-icon {
+      color: var(--text-sub);
+      font-size: 20px;
+    }
+
+    .badge-icon.green {
+      color: var(--green);
+    }
+
+    .badge-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .badge-label {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    .badge-value {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--green-dark);
+    }
+
+    /* --- 2. 时间轴配置 --- */
+    .config-section {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px 20px;
+      background: var(--bg-card);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--green-dark);
+      margin-bottom: 16px;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr 0.8fr;
+      gap: 16px;
+    }
+
+    .config-card {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .config-label {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .config-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .config-val small {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: normal;
+    }
+
+    /* 跳转间隔输入框特化 */
+    .jump-input-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .jump-input-wrapper input {
+      border: none;
+      outline: none;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      width: 80px;
+    }
+
+    .btn-jump-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 700;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* 倍速胶囊 */
+    .speed-capsule {
+      display: flex;
+      background: var(--bg-page);
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 4px;
+      margin-top: 4px;
+    }
+
+    .speed-btn {
+      flex: 1;
+      height: 26px;
+      border: none;
+      background: transparent;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-sub);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .speed-btn.active {
+      background: var(--green);
+      color: #fff;
+      box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+    }
+
+    /* --- 3. 时间轴主区域 --- */
+    .timeline-stage {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px 32px;
+    }
+
+    .timeline-track-container {
+      position: relative;
+      margin: 40px 0 30px 0;
+      padding: 0 40px; /* 留出两端文本的空间 */
+    }
+
+    .track-bg {
+      position: absolute;
+      top: 50%;
+      left: 40px;
+      right: 40px;
+      height: 4px;
+      background: #e2e8f0;
+      transform: translateY(-50%);
+      border-radius: 4px;
+    }
+
+    .track-fill {
+      position: absolute;
+      top: 50%;
+      left: 40px;
+      width: 25%; /* 当前进度 25% */
+      height: 4px;
+      background: var(--green);
+      transform: translateY(-50%);
+      border-radius: 4px;
+      z-index: 2;
+    }
+
+    /* 刻度线 - 位于轨道之上 */
+    .ticks-container {
+      position: absolute;
+      top: 50%;
+      left: 40px;
+      right: 40px;
+      height: 20px;
+      transform: translateY(-50%);
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .tick {
+      position: absolute;
+      width: 2px;
+      height: 10px;
+      background: #cbd5e1;
+      top: 5px;
+      transform: translateX(-50%);
+    }
+
+    .tick.passed {
+      background: #ffffff; /* 走过的刻度线变白，在绿色轨道上显现 */
+    }
+
+    .tick-label {
+      position: absolute;
+      top: 24px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* 游标与气泡 */
+    .cursor-group {
+      position: absolute;
+      left: calc(40px + 25%); /* 25% 进度位置 */
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+    }
+
+    .cursor-point {
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border: 3px solid var(--green);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+      cursor: pointer;
+    }
+
+    .cursor-bubble {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #fff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 6px 12px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      white-space: nowrap;
+    }
+
+    .cursor-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-right: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .bubble-label { font-size: 11px; color: var(--text-sub); margin-bottom: 2px; }
+    .bubble-time { font-size: 14px; font-weight: 800; color: var(--green-dark); }
+
+    /* 两端标签 */
+    .end-label {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .end-label.start { left: 0; }
+    .end-label.end { right: 0; }
+
+    .end-time {
+      background: var(--green);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 4px;
+    }
+
+    .end-label.end .end-time {
+      background: var(--bg-hover);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .end-text { font-size: 12px; color: var(--text-sub); }
+
+    /* 底部统计栏 */
+    .timeline-footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+      padding: 12px 16px;
+      background: var(--green-light);
+      border-radius: 8px;
+      opacity: 0.8;
+    }
+
+    .footer-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--green-dark);
+    }
+    
+    .footer-item.right {
+      color: var(--text-sub);
+    }
+
+    /* --- 4. 执行控制按钮群 --- */
+    .control-actions {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+
+    .action-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: 64px;
+      text-align: center;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background: var(--bg-hover);
+      border-color: #cbd5e1;
+    }
+
+    .btn-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    .btn-icon { font-size: 18px; }
+
+    .btn-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400; /* 降低字重，拉开层级 */
+    }
+
+    /* 特殊按钮样式 */
+    .action-btn.primary {
+      background: var(--green);
+      border: none;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    }
+    .action-btn.primary:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
+    .action-btn.primary .btn-title { color: #fff; font-size: 15px; }
+    .action-btn.primary .btn-sub { color: rgba(255,255,255,0.8); }
+    .action-btn.primary .btn-icon { font-size: 22px; }
+
+    .action-btn.danger { background: var(--red-light); border-color: #fecaca; }
+    .action-btn.danger .btn-title { color: var(--red); }
+    .action-btn.danger .btn-sub { color: #b91c1c; }
+
+    /* 禁用状态规范 */
+    .action-btn:disabled {
+      opacity: 0.5;
+      background: var(--bg-page);
+      cursor: not-allowed;
+      border-color: var(--border-color);
+    }
+    .action-btn:disabled .btn-title, .action-btn:disabled .btn-sub, .action-btn:disabled .btn-icon {
+      color: var(--text-muted) !important;
+    }
+
+    /* --- 5. 底部提示 --- */
+    .info-tip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--blue-light);
+      border-radius: 8px;
+      color: var(--blue);
+      font-size: 12px;
+    }
+    .info-tip .material-icons { font-size: 16px; }
+
+  </style>
+</head>
+<body>
+
+<div class="panel-container">
+
+  <!-- 1. 顶部 Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">
+        <span class="material-icons">schedule</span>
+      </div>
+      <div class="header-title">
+        <h1>模拟时间轴</h1>
+        <p>拖动时间轴或使用控制按钮改变模拟时刻，执行将按当前时刻推进真实业务状态</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="top-badge">
+        <span class="material-icons badge-icon">schedule</span>
+        <div class="badge-content">
+          <span class="badge-label">当前时刻</span>
+          <span class="badge-value">06:00:00</span>
+        </div>
+      </div>
+      <div class="top-badge">
+        <span class="material-icons badge-icon green">hexagon</span>
+        <div class="badge-content">
+          <span class="badge-label">待执行事件</span>
+          <span class="badge-value">0 辆</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 时间轴配置 -->
+  <div class="config-section">
+    <div class="section-title">
+      <span class="material-icons" style="font-size: 18px;">settings</span> 时间轴配置
+    </div>
+    <div class="config-grid">
+      <div class="config-card">
+        <span class="config-label">起点时刻</span>
+        <div class="config-val">06:00:00 <small>今天</small></div>
+      </div>
+      <div class="config-card">
+        <span class="config-label">终点时刻</span>
+        <div class="config-val">11:00:00 <small>今天</small></div>
+      </div>
+      <div class="config-card">
+        <span class="config-label">跳转间隔</span>
+        <div class="jump-input-wrapper">
+          <input type="text" value="08:00:00">
+          <button class="btn-jump-inline"><span class="material-icons" style="font-size:16px;">near_me</span>跳转</button>
+        </div>
+      </div>
+      <div class="config-card" style="background: transparent; border: none; padding: 0;">
+        <span class="config-label" style="padding-left: 4px;">时间跳转倍速</span>
+        <div class="speed-capsule">
+          <button class="speed-btn">1x</button>
+          <button class="speed-btn">5x</button>
+          <button class="speed-btn active">10x</button>
+          <button class="speed-btn">60x</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 时间轴主区域 -->
+  <div class="timeline-stage">
+    <div class="timeline-track-container">
+      
+      <!-- 两端标签 -->
+      <div class="end-label start">
+        <div class="end-time">06:00:00</div>
+        <div class="end-text">起点</div>
+      </div>
+      <div class="end-label end">
+        <div class="end-time">11:00:00</div>
+        <div class="end-text">终点</div>
+      </div>
+
+      <!-- 轨道底色与填充 -->
+      <div class="track-bg"></div>
+      <div class="track-fill"></div>
+
+      <!-- 刻度线层 (压在轨道上) -->
+      <div class="ticks-container">
+        <!-- 06:00 -->
+        <div class="tick passed" style="left: 0%;"></div>
+        <div class="tick-label" style="left: 0%;">06:00</div>
+        
+        <!-- 06:30 -->
+        <div class="tick passed" style="left: 10%;"></div>
+        <div class="tick-label" style="left: 10%;">06:30</div>
+
+        <!-- 07:00 -->
+        <div class="tick passed" style="left: 20%;"></div>
+        <div class="tick-label" style="left: 20%;">07:00</div>
+
+        <!-- 07:15 (当前进度 25% 所在处) -->
+        
+        <!-- 07:30 -->
+        <div class="tick" style="left: 30%;"></div>
+        <div class="tick-label" style="left: 30%;">07:30</div>
+
+        <!-- 08:00 -->
+        <div class="tick" style="left: 40%;"></div>
+        <div class="tick-label" style="left: 40%;">08:00</div>
+
+        <!-- 08:30 -->
+        <div class="tick" style="left: 50%;"></div>
+        <div class="tick-label" style="left: 50%;">08:30</div>
+
+        <!-- 09:00 -->
+        <div class="tick" style="left: 60%;"></div>
+        <div class="tick-label" style="left: 60%;">09:00</div>
+
+        <!-- 09:30 -->
+        <div class="tick" style="left: 70%;"></div>
+        <div class="tick-label" style="left: 70%;">09:30</div>
+
+        <!-- 10:00 -->
+        <div class="tick" style="left: 80%;"></div>
+        <div class="tick-label" style="left: 80%;">10:00</div>
+
+        <!-- 10:30 -->
+        <div class="tick" style="left: 90%;"></div>
+        <div class="tick-label" style="left: 90%;">10:30</div>
+
+        <!-- 11:00 -->
+        <div class="tick" style="left: 100%;"></div>
+        <div class="tick-label" style="left: 100%;">11:00</div>
+      </div>
+
+      <!-- 当前游标 -->
+      <div class="cursor-group">
+        <div class="cursor-bubble">
+          <div class="bubble-label">当前时刻</div>
+          <div class="bubble-time">07:15:00</div>
+        </div>
+        <div class="cursor-point"></div>
+      </div>
+
+    </div>
+
+    <!-- 底部状态条 -->
+    <div class="timeline-footer">
+      <div class="footer-item">
+        <span class="material-icons" style="font-size: 14px;">schedule</span> 当前模拟时长 01:15:00
+      </div>
+      <div class="footer-item right">
+        时间范围：5 小时
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 执行控制 -->
+  <div>
+    <div class="section-title">
+      <span class="material-icons" style="font-size: 18px;">bolt</span> 执行控制
+    </div>
+    <div class="control-actions">
+      
+      <button class="action-btn" disabled>
+        <div class="btn-title"><span class="material-icons btn-icon">skip_previous</span> 上一事件</div>
+        <div class="btn-sub">返回到上一个已执行事件</div>
+      </button>
+
+      <button class="action-btn" disabled>
+        <div class="btn-title"><span class="material-icons btn-icon">fast_forward</span> 执行到下一事件</div>
+        <div class="btn-sub">推进到下一个待执行事件时刻</div>
+      </button>
+
+      <button class="action-btn primary">
+        <div class="btn-title"><span class="material-icons btn-icon">play_circle_filled</span> 开始执行</div>
+        <div class="btn-sub">从当前时刻开始执行</div>
+      </button>
+
+      <button class="action-btn">
+        <div class="btn-title"><span class="material-icons btn-icon">pause</span> 暂停执行</div>
+        <div class="btn-sub">暂停当前正在执行的事件</div>
+      </button>
+
+      <button class="action-btn" disabled>
+        <div class="btn-title"><span class="material-icons btn-icon">skip_next</span> 下一事件</div>
+        <div class="btn-sub">查看下一个待执行事件详情</div>
+      </button>
+
+      <button class="action-btn danger">
+        <div class="btn-title"><span class="material-icons btn-icon">flag</span> 立即执行至最终态</div>
+        <div class="btn-sub">跳过所有中间事件<br>直接执行到结束时刻</div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- 5. 底部提示 -->
+  <div class="info-tip">
+    <span class="material-icons">info</span>
+    提示：使用时间跳转倍速可以加快模拟速度，推荐在测试环境中使用 10x 或更高倍速
+  </div>
+
+</div>
+
+</body>
+</html>
