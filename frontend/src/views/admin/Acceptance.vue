@@ -1345,8 +1345,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .editor-head { color: #475569; font-size: 12px; font-weight: 900; border-bottom: 1px solid #edf2ef; background: #fbfcfd; }
 .editor-row { border-bottom: 1px solid #f1f5f3; }
 .editor-row input, .editor-row select { height: 32px; border: 1px solid #dfe8e3; border-radius: 7px; padding: 0 10px; background: #fff; font-weight: 720; color: var(--ink); }
-.snapshot-grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: stretch; max-height: 720px; }
-.history-list { overflow: auto; max-height: 720px; }
+.snapshot-grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: stretch;}
+.history-list { overflow: auto; height: 0; min-height: 100%; }
 .history-list .card-head { position: sticky; top: 0; z-index: 2; background: #fff; }
 .snapshot-row { width: 100%; display: grid; grid-template-columns: 82px 1fr auto; gap: 10px; align-items: center; border: 0; border-bottom: 1px solid #edf2ef; background: #fff; padding: 12px 16px; text-align: left; cursor: pointer; }
 .snapshot-row:hover, .snapshot-row.active { background: #f0fdf4; box-shadow: inset 3px 0 0 #10b981; }
