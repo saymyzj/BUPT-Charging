@@ -62,17 +62,45 @@
 
       <!-- Charts -->
       <div class="grid-2">
-        <!-- Vertical bar chart: Energy -->
+        <!-- Vertical bar chart: Energy + Donut -->
         <div class="chart-box">
           <div class="chart-title">各桩充电电量 (kWh)</div>
-          <div class="bars">
-            <div class="y-axis">
-              <span v-for="v in yAxisEnergy" :key="v">{{ v }}</span>
+          <div class="chart-wrap">
+            <div class="bars">
+              <div class="y-axis">
+                <span v-for="v in yAxisEnergy" :key="v">{{ v }}</span>
+              </div>
+              <div class="bar-item" v-for="c in chartData" :key="c.code">
+                <div class="bar"><span :style="{ height: barH(c.energy, yAxisEnergyMax) + '%' }"></span></div>
+                <div class="bar-value mono">{{ fmtEnergy(c.energy) }}</div>
+                <div class="bar-label">{{ c.code }}</div>
+              </div>
             </div>
-            <div class="bar-item" v-for="c in chartData" :key="c.code">
-              <div class="bar"><span :style="{ height: barH(c.energy, yAxisEnergyMax) + '%' }"></span></div>
-              <div class="bar-value mono">{{ fmtEnergy(c.energy) }}</div>
-              <div class="bar-label">{{ c.code }}</div>
+            <div class="donut-side">
+              <div class="donut-ring">
+                <svg viewBox="0 0 36 36" class="donut-svg">
+                  <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f0f2f5" stroke-width="4"/>
+                  <circle v-for="seg in donutEnergySegments" :key="seg.code"
+                    cx="18" cy="18" r="15.915" fill="transparent"
+                    :stroke="seg.color" stroke-width="4"
+                    :stroke-dasharray="`${seg.pct} ${100 - Number(seg.pct)}`"
+                    :stroke-dashoffset="seg.dashOffset"
+                  />
+                </svg>
+                <div class="donut-center">
+                  <strong>总电量</strong>
+                  <span class="mono">{{ totalEnergyAll.toFixed(1) }}</span>
+                </div>
+              </div>
+              <div class="legend">
+                <div class="legend-row" v-for="seg in donutEnergySegments" :key="seg.code">
+                  <div class="legend-left">
+                    <span class="swatch" :style="{ background: seg.color }"></span>
+                    <span>{{ seg.code }}</span>
+                  </div>
+                  <strong class="mono">{{ seg.pct }}%</strong>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -213,6 +241,18 @@ const maxFee = computed(() => Math.max(...chartData.value.map(c => c.fee), 1))
 const chartDataSorted = computed(() => [...chartData.value].sort((a, b) => b.energy - a.energy))
 
 const COLORS = ['#34b27b', '#4f86f7', '#d8a23a', '#ef4444', '#7a5af8', '#98a2b3', '#f97316']
+const totalEnergyAll = computed(() => chartData.value.reduce((s, c) => s + c.energy, 0))
+const donutEnergySegments = computed(() => {
+  let offset = 0
+  const total = totalEnergyAll.value || 1
+  return chartData.value.map((c, i) => {
+    const pct = (c.energy / total) * 100
+    const seg = { code: c.code, pct: pct.toFixed(1), color: COLORS[i % COLORS.length], dashOffset: -offset }
+    offset += pct
+    return seg
+  })
+})
+
 const totalFeeAll = computed(() => chartData.value.reduce((s, c) => s + c.fee, 0))
 const donutSegments = computed(() => {
   let offset = 0
