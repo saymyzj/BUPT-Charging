@@ -113,111 +113,125 @@
     </section>
 
     <section class="overview-split">
-      <div class="split-main">
-        <section class="wait-area">
-          <div class="wait-head">
-            <div>
-              <h2>等候区实时状态 <span class="live-dot">实时更新</span></h2>
-            </div>
-            <div class="wait-legend">
-              <span><i class="blue"></i>快充等待</span>
-              <span><i class="orange"></i>慢充等待</span>
-              <span><i class="gray"></i>空闲车位</span>
-              <b>容量：{{ waitingCapacity }} 个车位</b>
-            </div>
+      <section class="wait-area">
+        <div class="wait-head">
+          <div>
+            <h2>等候区实时状态 <span class="live-dot">实时更新</span></h2>
           </div>
-          <div class="wait-parking">
-            <div class="wait-lane"></div>
-            <div class="wait-entry-car"></div>
-            <div class="parking-grid" :style="{ '--slot-count': parkingSlots.length }">
+          <div class="wait-legend">
+            <span><i class="blue"></i>快充等待</span>
+            <span><i class="orange"></i>慢充等待</span>
+            <span><i class="gray"></i>空闲车位</span>
+            <b>容量：{{ waitingCapacity }} 个车位</b>
+          </div>
+        </div>
+        <div class="wait-parking">
+          <div class="wait-lane"></div>
+          <div class="wait-entry-car"></div>
+          <div class="parking-grid" :style="{ '--slot-count': parkingSlots.length }">
+            <div
+              v-for="slot in parkingSlots"
+              :key="slot.index"
+              class="slot"
+              :class="[slot.row ? modeClass(slot.row.charge_mode) : 'empty']"
+            >
               <div
-                v-for="slot in parkingSlots"
-                :key="slot.index"
-                class="slot"
-                :class="[slot.row ? modeClass(slot.row.charge_mode) : 'empty']"
-              >
-                <div
-                  v-if="slot.row"
-                  class="slot-car"
-                  :style="{ '--pulse-delay': (slot.index % 5) * 0.18 + 's' }"
-                ></div>
-                <span class="slot-no">{{ String(slot.index).padStart(2, '0') }}</span>
-                <small v-if="slot.row">{{ waitingSlotText(slot.row) }}</small>
-              </div>
-            </div>
-            <div class="wait-exit">出口<small>&gt;</small></div>
-          </div>
-          <div class="wait-footnote">
-            <span>说明：等候区只展示普通等待车辆，故障队列不占用等候区容量。</span>
-            <span>快充等待 {{ waitingSummary.fast_queue_count || 0 }} 辆</span>
-            <span>慢充等待 {{ waitingSummary.slow_queue_count || 0 }} 辆</span>
-            <span>空闲车位 {{ freeWaitingSlots }} 个</span>
-          </div>
-        </section>
-
-        <section class="fault-area" :class="{ empty: !faultQueueRows.length }">
-          <div class="fault-area-head">
-            <div>
-              <h2><span class="fault-dot"></span>故障队列 <span class="fault-count-badge" v-if="faultQueueRows.length">{{ faultQueueRows.length }}</span></h2>
-              <p>故障桩中断后的车辆按优先级在此等待重新调度，不占用等候区容量</p>
-            </div>
-            <div class="fault-legend">
-              <span><i class="red"></i>故障车辆 {{ faultQueueRows.length }}</span>
-              <span><i class="blue"></i>快充 {{ faultQueueRows.filter(r => r.charge_mode === 'FAST').length }}</span>
-              <span><i class="orange"></i>慢充 {{ faultQueueRows.filter(r => r.charge_mode === 'SLOW').length }}</span>
-              <span><i class="purple"></i>续充 {{ faultQueueRows.filter(r => r.is_fault_followup).length }}</span>
+                v-if="slot.row"
+                class="slot-car"
+                :style="{ '--pulse-delay': (slot.index % 5) * 0.18 + 's' }"
+              ></div>
+              <span class="slot-no">{{ String(slot.index).padStart(2, '0') }}</span>
+              <small v-if="slot.row">{{ waitingSlotText(slot.row) }}</small>
             </div>
           </div>
-          <div class="fault-area-body">
-            <div class="fault-lane"></div>
-            <div class="fault-grid" v-if="faultQueueRows.length">
-              <div
-                v-for="row in faultQueueRows"
-                :key="row.request_id"
-                class="fault-slot"
-                :class="modeClass(row.charge_mode)"
-              >
-                <div class="fault-slot-rank">{{ row.user_id || row.vehicle_code || '--' }}</div>
-                <div class="fault-slot-info">
-                  <strong>{{ row.username || row.request_id }}</strong>
-                  <small>{{ queueNumberText(row) }} · {{ Number(row.request_energy || 0).toFixed(1) }} kWh · {{ row.is_fault_followup ? '续充' : '等待' }}</small>
-                </div>
-                <span class="fault-slot-mode" :class="modeClass(row.charge_mode)">{{ modeText(row.charge_mode) }}</span>
-              </div>
-            </div>
-            <div v-else class="fault-area-empty">
-              <span class="material-icons">verified</span>
-              <strong>当前无故障车辆</strong>
-              <span>若充电桩发生故障，受影响的车辆将在此处集中展示</span>
-            </div>
-          </div>
-          <div class="fault-footnote">
-            <span>故障队列独立于等候区，优先级高于普通排队车辆</span>
-          </div>
-        </section>
-
-      </div>
-
+          <div class="wait-exit">出口<small>&gt;</small></div>
+        </div>
+        <div class="wait-footnote">
+          <span>说明：等候区只展示普通等待车辆，故障队列不占用等候区容量。</span>
+          <span>快充等待 {{ waitingSummary.fast_queue_count || 0 }} 辆</span>
+          <span>慢充等待 {{ waitingSummary.slow_queue_count || 0 }} 辆</span>
+          <span>空闲车位 {{ freeWaitingSlots }} 个</span>
+        </div>
+      </section>
       <aside class="side-status">
-        <div class="side-card fault-queue-card">
-          <div class="side-icon red">障</div>
-          <strong>故障队列</strong>
-          <span>{{ faultQueueRows.length }} 辆等待优先重调度</span>
+        <div class="side-card">
+          <div class="side-icon orange">候</div>
+          <strong>车位占用</strong>
+          <span>{{ waitingTotal }} / {{ waitingCapacity }} 个车位</span>
+        </div>
+        <div class="side-card">
+          <div class="side-icon blue">快</div>
+          <strong>快充等待</strong>
+          <span>{{ waitingSummary.fast_queue_count || 0 }} 辆排队中</span>
+        </div>
+        <div class="side-card">
+          <div class="side-icon" style="background:#fff7ed;color:#f97316;">慢</div>
+          <strong>慢充等待</strong>
+          <span>{{ waitingSummary.slow_queue_count || 0 }} 辆排队中</span>
         </div>
         <div class="side-card">
           <div class="side-icon pulse">调</div>
           <strong>实时调度</strong>
           <span>队列与车位每 5 秒同步</span>
         </div>
-        <div class="side-card">
-          <div class="side-icon blue">队</div>
-          <strong>当前队列</strong>
-          <span>{{ stationQueueTotal }} 个桩内请求</span>
+      </aside>
+    </section>
+
+    <section class="overview-split">
+      <section class="fault-area" :class="{ empty: !faultQueueRows.length }">
+        <div class="fault-area-head">
+          <div>
+            <h2><span class="fault-dot"></span>故障队列 <span class="fault-count-badge" v-if="faultQueueRows.length">{{ faultQueueRows.length }}</span></h2>
+            <p>故障桩中断后的车辆按优先级在此等待重新调度，不占用等候区容量</p>
+          </div>
+          <div class="fault-legend">
+            <span><i class="red"></i>故障车辆 {{ faultQueueRows.length }}</span>
+            <span><i class="blue"></i>快充 {{ faultQueueRows.filter(r => r.charge_mode === 'FAST').length }}</span>
+            <span><i class="orange"></i>慢充 {{ faultQueueRows.filter(r => r.charge_mode === 'SLOW').length }}</span>
+            <span><i class="purple"></i>续充 {{ faultQueueRows.filter(r => r.is_fault_followup).length }}</span>
+          </div>
         </div>
-        <div class="side-card">
-          <div class="side-icon orange">候</div>
-          <strong>等候区</strong>
-          <span>{{ waitingTotal }} / {{ waitingCapacity }} 个车位</span>
+        <div class="fault-area-body">
+          <div class="fault-lane"></div>
+          <div class="fault-grid" v-if="faultQueueRows.length">
+            <div
+              v-for="row in faultQueueRows"
+              :key="row.request_id"
+              class="fault-slot"
+              :class="modeClass(row.charge_mode)"
+            >
+              <div class="fault-slot-rank">{{ row.user_id || row.vehicle_code || '--' }}</div>
+              <div class="fault-slot-info">
+                <strong>{{ row.username || row.request_id }}</strong>
+                <small>{{ queueNumberText(row) }} · {{ Number(row.request_energy || 0).toFixed(1) }} kWh · {{ row.is_fault_followup ? '续充' : '等待' }}</small>
+              </div>
+              <span class="fault-slot-mode" :class="modeClass(row.charge_mode)">{{ modeText(row.charge_mode) }}</span>
+            </div>
+          </div>
+          <div v-else class="fault-area-empty">
+            <span class="material-icons">verified</span>
+            <strong>当前无故障车辆</strong>
+          </div>
+        </div>
+        <div class="fault-footnote">
+          <span>故障队列独立于等候区，优先级高于普通排队车辆</span>
+        </div>
+      </section>
+      <aside class="side-status">
+        <div class="side-card fault-queue-card">
+          <div class="side-icon red">障</div>
+          <strong>故障车辆</strong>
+          <span>{{ faultQueueRows.length }} 辆等待重调度</span>
+        </div>
+        <div class="side-card fault-queue-card">
+          <div class="side-icon" style="background:#eff6ff;color:#2563eb;">快</div>
+          <strong>故障快充</strong>
+          <span>{{ faultQueueRows.filter(r => r.charge_mode === 'FAST').length }} 辆</span>
+        </div>
+        <div class="side-card fault-queue-card">
+          <div class="side-icon" style="background:#fff7ed;color:#f97316;">慢</div>
+          <strong>故障慢充</strong>
+          <span>{{ faultQueueRows.filter(r => r.charge_mode === 'SLOW').length }} 辆</span>
         </div>
       </aside>
     </section>
@@ -267,9 +281,9 @@
             <div><strong>总计</strong><span>{{ stations.length }}</span></div>
           </div>
           <div class="chart-legend">
-            <p><i class="green"></i>运行中 <strong>{{ statusCounts.running }}</strong></p>
-            <p><i class="red"></i>故障 <strong>{{ statusCounts.fault }}</strong></p>
-            <p><i class="gray"></i>关闭 <strong>{{ statusCounts.shutdown }}</strong></p>
+            <p><span class="leg-left"><i class="green"></i>运行中</span> <strong>{{ statusCounts.running }}</strong></p>
+            <p><span class="leg-left"><i class="red"></i>故障</span> <strong>{{ statusCounts.fault }}</strong></p>
+            <p><span class="leg-left"><i class="gray"></i>关闭</span> <strong>{{ statusCounts.shutdown }}</strong></p>
           </div>
         </div>
       </article>
@@ -280,9 +294,9 @@
             <div><strong>总计</strong><span>{{ totalQueued }}</span></div>
           </div>
           <div class="chart-legend">
-            <p><i class="blue"></i>快充等待 <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
-            <p><i class="orange"></i>慢充等待 <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
-            <p><i class="gray"></i>桩内队列 <strong>{{ stationQueueTotal }}</strong></p>
+            <p><span class="leg-left"><i class="blue"></i>快充等待</span> <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
+            <p><span class="leg-left"><i class="orange"></i>慢充等待</span> <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
+            <p><span class="leg-left"><i class="gray"></i>桩内队列</span> <strong>{{ stationQueueTotal }}</strong></p>
           </div>
         </div>
       </article>
@@ -293,9 +307,9 @@
             <div><strong>总计</strong><span>{{ waitingCapacity }}</span></div>
           </div>
           <div class="chart-legend">
-            <p><i class="blue"></i>快充等待 <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
-            <p><i class="orange"></i>慢充等待 <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
-            <p><i class="gray"></i>空闲车位 <strong>{{ freeWaitingSlots }}</strong></p>
+            <p><span class="leg-left"><i class="blue"></i>快充等待</span> <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
+            <p><span class="leg-left"><i class="orange"></i>慢充等待</span> <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
+            <p><span class="leg-left"><i class="gray"></i>空闲车位</span> <strong>{{ freeWaitingSlots }}</strong></p>
           </div>
         </div>
       </article>
@@ -1454,12 +1468,19 @@ i.gray { background: #98a2b3; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+  margin-top: 16px;
   margin-bottom: 16px;
 }
-.split-main {
-  display: grid;
-  gap: 10px;
+.overview-split > * {
+  order: 0 !important;
+  grid-row: 1;
+}
+.overview-split > :first-child {
+  grid-column: 1;
+}
+.overview-split > .side-status {
+  grid-column: 2;
 }
 
 .wait-area {
@@ -1779,12 +1800,13 @@ i.gray { background: #98a2b3; }
 }
 .fault-area-body {
   position: relative;
-  min-height: 80px;
-  padding: 18px 22px 20px;
+  min-height: 56px;
+  padding: 12px 16px 12px;
   background:
     radial-gradient(circle at 4% 48%, rgba(239,68,68,.06), transparent 22%),
     linear-gradient(180deg, #fff, #fffcfc);
   overflow: hidden;
+
 }
 .fault-lane {
   position: absolute;
@@ -1798,6 +1820,9 @@ i.gray { background: #98a2b3; }
   z-index: 0;
   overflow: hidden;
 }
+.fault-area.empty .fault-lane {
+  display: none;
+}
 .fault-lane::before {
   content: "";
   position: absolute;
@@ -1809,30 +1834,37 @@ i.gray { background: #98a2b3; }
 }
 .fault-grid {
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  display: flex;
   gap: 10px;
   z-index: 4;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.fault-grid::-webkit-scrollbar {
+  display: none;
 }
 .fault-slot {
   display: grid;
   grid-template-columns: 64px 1fr auto;
   gap: 0 12px;
   align-items: center;
-  padding: 12px 14px;
+  padding: 8px 12px;
   border: 1px solid #fecdd3;
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(180deg, #fff 0%, #fff8f8 100%);
-  box-shadow: 0 6px 16px rgba(239,68,68,.06);
+  box-shadow: 0 4px 12px rgba(239,68,68,.06);
   transition: box-shadow .15s, transform .15s;
+  min-width: 220px;
+  flex-shrink: 0;
 }
 .fault-slot:hover {
   box-shadow: 0 10px 24px rgba(239,68,68,.12);
   transform: translateY(-1px);
 }
 .fault-slot-rank {
-  width: 60px;
-  height: 44px;
+  width: 48px;
+  height: 36px;
   display: grid;
   place-items: center;
   border-radius: 12px;
@@ -1879,15 +1911,18 @@ i.gray { background: #98a2b3; }
 .fault-slot.fast .fault-slot-rank { background: #eff6ff; color: #2563eb; }
 .fault-slot.slow .fault-slot-rank { background: #fff7ed; color: #ea580c; }
 .fault-area-empty {
-  padding: 32px 18px;
+  padding: 10px 18px;
   text-align: center;
   color: #667085;
-  display: grid;
-  gap: 6px;
-  justify-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  z-index: 2;
 }
 .fault-area-empty .material-icons {
-  font-size: 36px;
+  font-size: 22px;
   color: #d1d5db;
 }
 .fault-area-empty strong {
@@ -1913,6 +1948,12 @@ i.gray { background: #98a2b3; }
   display: grid;
   gap: 10px;
   align-content: start;
+}
+
+.side-divider {
+  border: none;
+  border-top: 1px dashed #e5e7eb;
+  margin: 2px 0;
 }
 
 .side-card {
@@ -2163,8 +2204,7 @@ td strong {
 .chart-legend p {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   margin: 0;
   color: #344054;
   font-size: 13px;
@@ -2172,7 +2212,13 @@ td strong {
 }
 
 .chart-legend i {
-  margin-right: 8px;
+  margin-right: 0;
+}
+
+.leg-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .chart-legend strong {
