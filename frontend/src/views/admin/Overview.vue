@@ -288,15 +288,41 @@
         </div>
       </article>
       <article class="chart-box">
-        <h3>队列构成</h3>
+        <h3>车辆分布</h3>
         <div class="chart-content">
           <div class="donut" :style="queueDonutStyle">
-            <div><strong>总计</strong><span>{{ totalQueued }}</span></div>
+            <div><strong>总计</strong><span>{{ stationQueueTotal + waitingTotal + faultQueueRows.length }}</span></div>
           </div>
           <div class="chart-legend">
-            <p><span class="leg-left"><i class="blue"></i>快充等待</span> <strong>{{ waitingSummary.fast_queue_count || 0 }}</strong></p>
-            <p><span class="leg-left"><i class="orange"></i>慢充等待</span> <strong>{{ waitingSummary.slow_queue_count || 0 }}</strong></p>
-            <p><span class="leg-left"><i class="gray"></i>桩内队列</span> <strong>{{ stationQueueTotal }}</strong></p>
+            <p><span class="leg-left"><i class="green"></i>桩队列</span> <strong>{{ stationQueueTotal }}</strong></p>
+            <p><span class="leg-left"><i class="blue"></i>等待区队列</span> <strong>{{ waitingTotal }}</strong></p>
+            <p><span class="leg-left"><i class="red"></i>故障队列</span> <strong>{{ faultQueueRows.length }}</strong></p>
+          </div>
+        </div>
+      </article>
+      <article class="chart-box">
+        <h3>快充桩状态</h3>
+        <div class="chart-content">
+          <div class="donut" :style="fastStationDonutStyle">
+            <div><strong>总计</strong><span>{{ fastStations.length }}</span></div>
+          </div>
+          <div class="chart-legend">
+            <p><span class="leg-left"><i class="blue"></i>运行中</span> <strong>{{ fastRunning }}</strong></p>
+            <p><span class="leg-left"><i class="red"></i>故障</span> <strong>{{ fastStations.filter(s=>s.station_status==='FAULT').length }}</strong></p>
+            <p><span class="leg-left"><i class="gray"></i>关闭</span> <strong>{{ fastStations.filter(s=>s.station_status==='SHUTDOWN').length }}</strong></p>
+          </div>
+        </div>
+      </article>
+      <article class="chart-box">
+        <h3>慢充桩状态</h3>
+        <div class="chart-content">
+          <div class="donut" :style="slowStationDonutStyle">
+            <div><strong>总计</strong><span>{{ slowStations.length }}</span></div>
+          </div>
+          <div class="chart-legend">
+            <p><span class="leg-left"><i class="orange"></i>运行中</span> <strong>{{ slowRunning }}</strong></p>
+            <p><span class="leg-left"><i class="red"></i>故障</span> <strong>{{ slowStations.filter(s=>s.station_status==='FAULT').length }}</strong></p>
+            <p><span class="leg-left"><i class="gray"></i>关闭</span> <strong>{{ slowStations.filter(s=>s.station_status==='SHUTDOWN').length }}</strong></p>
           </div>
         </div>
       </article>
@@ -437,10 +463,29 @@ const stationDonutStyle = computed(() => {
 })
 
 const queueDonutStyle = computed(() => {
-  const total = Math.max(totalQueued.value, 1)
-  const fast = Number(waitingSummary.value.fast_queue_count || 0) / total * 100
-  const slow = fast + Number(waitingSummary.value.slow_queue_count || 0) / total * 100
-  return { background: `conic-gradient(#2563eb 0 ${fast}%, #f97316 ${fast}% ${slow}%, #98a2b3 ${slow}% 100%)` }
+  const total = Math.max(stationQueueTotal.value + waitingTotal.value + faultQueueRows.value.length, 1)
+  const station = stationQueueTotal.value / total * 100
+  const waiting = station + waitingTotal.value / total * 100
+  return { background: `conic-gradient(#10b981 0 ${station}%, #2563eb ${station}% ${waiting}%, #ef4444 ${waiting}% 100%)` }
+})
+
+const fastStations = computed(() => stations.value.filter(s => s.charge_mode === 'FAST'))
+const slowStations = computed(() => stations.value.filter(s => s.charge_mode === 'SLOW'))
+const fastRunning = computed(() => fastStations.value.filter(s => s.station_status === 'RUNNING').length)
+const slowRunning = computed(() => slowStations.value.filter(s => s.station_status === 'RUNNING').length)
+
+const fastStationDonutStyle = computed(() => {
+  const total = Math.max(fastStations.value.length, 1)
+  const running = fastRunning.value / total * 100
+  const fault = running + fastStations.value.filter(s => s.station_status === 'FAULT').length / total * 100
+  return { background: `conic-gradient(#2563eb 0 ${running}%, #ef4444 ${running}% ${fault}%, #98a2b3 ${fault}% 100%)` }
+})
+
+const slowStationDonutStyle = computed(() => {
+  const total = Math.max(slowStations.value.length, 1)
+  const running = slowRunning.value / total * 100
+  const fault = running + slowStations.value.filter(s => s.station_status === 'FAULT').length / total * 100
+  return { background: `conic-gradient(#f97316 0 ${running}%, #ef4444 ${running}% ${fault}%, #98a2b3 ${fault}% 100%)` }
 })
 
 const waitingDonutStyle = computed(() => {
@@ -2138,18 +2183,18 @@ td strong {
 
 .charts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .chart-box {
-  min-height: 230px;
-  padding: 16px 18px 14px;
+  min-height: 0;
+  padding: 12px 14px 10px;
 }
 
 .chart-box h3 {
-  margin: 0 0 14px;
-  font-size: 16px;
+  margin: 0 0 10px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: .2px;
   color: #101828;
@@ -2157,14 +2202,14 @@ td strong {
 
 .chart-content {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  grid-template-columns: 96px 1fr;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
 }
 
 .donut {
-  width: 132px;
-  height: 132px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -2173,8 +2218,8 @@ td strong {
 }
 
 .donut > div {
-  width: 82px;
-  height: 82px;
+  width: 56px;
+  height: 56px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -2184,30 +2229,30 @@ td strong {
 }
 
 .donut strong {
-  font-size: 12px;
+  font-size: 10px;
   color: #667085;
   font-weight: 850;
 }
 
 .donut span {
-  margin-top: 4px;
-  font-size: 18px;
+  margin-top: 2px;
+  font-size: 14px;
   font-weight: 950;
   color: #101828;
 }
 
 .chart-legend {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .chart-legend p {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
   color: #344054;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 650;
 }
 
