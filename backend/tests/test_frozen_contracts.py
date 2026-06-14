@@ -5,9 +5,11 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from flask import Flask
+from openpyxl import load_workbook
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -1323,6 +1325,67 @@ class FrozenContractTests(unittest.TestCase):
             )
         self.assertEqual(event["request_id"], "U001")
         self.assertEqual(request_id, "REQ0001")
+
+    def test_admin_exports_bills_and_action_details_xlsx(self):
+        request_id = self._create_request(
+            self.auth_headers,
+            "2026-04-19T09:50:00",
+            "FAST",
+            20.0,
+        )["data"]["request_id"]
+        with self.app.app_context():
+            run_normal_scheduler(event_time="2026-04-19T10:30:00", charge_mode="FAST")
+
+        bill_response = self.client.get(
+            "/api/admin/users/bills/export.xlsx",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(bill_response.status_code, 200)
+        bill_sheet = load_workbook(BytesIO(bill_response.data), data_only=True).active
+        self.assertEqual(bill_sheet.title, "用户账单")
+        self.assertEqual(
+            [bill_sheet.cell(1, column).value for column in range(1, 9)],
+            ["车号(用户ID)", "分配的桩号", "充电开始时间", "充电结束时间", "充电电量", "充电费", "服务费", "总费"],
+        )
+        self.assertEqual(
+            [bill_sheet.cell(2, column).value for column in range(1, 9)],
+            ["V1", "FAST_01", "2026-04-19T09:50:00", "2026-04-19T10:30:00", 20, 18.5, 16, 34.5],
+        )
+
+        detail_response = self.client.get(
+            "/api/admin/users/details/export.xlsx",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        detail_sheet = load_workbook(BytesIO(detail_response.data), data_only=True).active
+        self.assertEqual(detail_sheet.title, "用户详单")
+        self.assertEqual(
+            [detail_sheet.cell(1, column).value for column in range(1, 14)],
+            [
+                "车号(用户ID)",
+                "用户名",
+                "请求编号",
+                "排队号",
+                "充电模式",
+                "请求电量(kWh)",
+                "动作时间",
+                "动作类型",
+                "动作名称",
+                "充电桩",
+                "队列位置",
+                "请求状态",
+                "动作说明",
+            ],
+        )
+        labels = [detail_sheet.cell(row, 9).value for row in range(2, detail_sheet.max_row + 1)]
+        self.assertIn("请求已提交", labels)
+        self.assertIn("等候区排队", labels)
+        self.assertIn("分配到桩队列", labels)
+        self.assertIn("充电中", labels)
+        self.assertIn("充电完成", labels)
+        self.assertIn("生成账单", labels)
+        request_ids = {detail_sheet.cell(row, 3).value for row in range(2, detail_sheet.max_row + 1)}
+        self.assertEqual(request_ids, {request_id})
 
     def test_admin_cannot_update_battery_capacity_when_user_has_active_request(self):
         self._create_request(self.auth_headers, "2026-04-19T10:00:00", "FAST", 20.0)

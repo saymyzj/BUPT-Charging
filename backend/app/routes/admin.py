@@ -9,6 +9,7 @@ from flask import Blueprint, current_app, request, send_file
 from app.enums import DispatchMode, FaultDispatchMode
 from app.services.acceptance_service import acceptance_enabled, acceptance_time, record_manual_event
 from app.services.queue_model import (
+    LIFECYCLE_LABELS,
     fault_queue_candidates,
     handle_station_fault,
     handle_station_recover,
@@ -178,6 +179,34 @@ def _validate_positive_float(value):
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _autosize_sheet(ws) -> None:
+    for column in ws.columns:
+        width = max(len(str(cell.value or "")) for cell in column) + 2
+        ws.column_dimensions[column[0].column_letter].width = min(max(width, 12), 28)
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+
+def _xlsx_response(wb, download_name: str):
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _load_event_payload(raw_payload):
+    try:
+        payload = json.loads(raw_payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    return payload if isinstance(payload, dict) else {}
 
 
 @admin_bp.route("/system/config", methods=["GET"])
@@ -620,9 +649,9 @@ def get_user_detail(user_id):
     return success_response(payload)
 
 
-@admin_bp.route("/users/details/export.xlsx", methods=["GET"])
+@admin_bp.route("/users/bills/export.xlsx", methods=["GET"])
 @require_admin
-def export_user_details_xlsx():
+def export_user_bills_xlsx():
     if Workbook is None:
         return error_response(1003, "openpyxl is not installed")
 
@@ -644,7 +673,7 @@ def export_user_details_xlsx():
     )
     wb = Workbook()
     ws = wb.active
-    ws.title = "用户详单"
+    ws.title = "用户账单"
     headers = ["车号(用户ID)", "分配的桩号", "充电开始时间", "充电结束时间", "充电电量", "充电费", "服务费", "总费"]
     ws.append(headers)
     for row in rows:
@@ -660,19 +689,156 @@ def export_user_details_xlsx():
                 float(row["total_fee"]),
             ]
         )
-    for column in ws.columns:
-        width = max(len(str(cell.value or "")) for cell in column) + 2
-        ws.column_dimensions[column[0].column_letter].width = min(max(width, 12), 24)
+    _autosize_sheet(ws)
 
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="all-user-request-details.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    return _xlsx_response(wb, "all-user-bills.xlsx")
+
+
+@admin_bp.route("/users/details/export.xlsx", methods=["GET"])
+@require_admin
+def export_user_action_details_xlsx():
+    if Workbook is None:
+        return error_response(1003, "openpyxl is not installed")
+
+    lifecycle_events = tuple(LIFECYCLE_LABELS.keys())
+    placeholders = ",".join("?" for _ in lifecycle_events)
+    event_rows = query_db(
+        f"""
+        SELECT
+            u.user_id,
+            u.username,
+            cr.request_id,
+            cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.charge_mode,
+            cr.request_energy,
+            cr.request_status,
+            sel.id AS log_id,
+            sel.event_type,
+            sel.event_payload,
+            sel.created_at
+        FROM scheduler_event_log sel
+        JOIN charge_request cr ON cr.request_id = sel.request_id
+        JOIN user u ON u.id = cr.user_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        WHERE sel.event_type IN ({placeholders})
+        ORDER BY u.user_id, cr.request_time, cr.id, sel.id
+        """,
+        list(lifecycle_events),
     )
+    detail_rows = query_db(
+        """
+        SELECT
+            u.user_id,
+            u.username,
+            cr.request_id,
+            cr.queue_number,
+            source.queue_number AS source_queue_number,
+            cr.charge_mode,
+            cr.request_energy,
+            rd.request_status,
+            rd.detail_generated_at,
+            rd.station_code,
+            rd.total_fee
+        FROM request_detail rd
+        JOIN charge_request cr ON cr.id = rd.request_id
+        JOIN user u ON u.id = rd.user_id
+        LEFT JOIN charge_request source ON source.id = cr.fault_source_request_id
+        ORDER BY u.user_id, cr.request_time, cr.id, rd.id
+        """
+    )
+
+    rows = []
+    for row in event_rows:
+        payload = _load_event_payload(row["event_payload"])
+        rows.append(
+            {
+                "sort_user": row["user_id"],
+                "sort_request": row["request_id"],
+                "sort_at": payload.get("at") or row["created_at"],
+                "sort_order": int(row["log_id"]),
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "request_id": row["request_id"],
+                "queue_number": row["source_queue_number"] or row["queue_number"],
+                "charge_mode": payload.get("charge_mode") or row["charge_mode"],
+                "request_energy": payload.get("request_energy") or row["request_energy"],
+                "event_time": _iso_string(payload.get("at") or row["created_at"]),
+                "event_type": row["event_type"],
+                "label": payload.get("label") or LIFECYCLE_LABELS.get(row["event_type"], row["event_type"]),
+                "station_code": payload.get("station_code"),
+                "queue_position": payload.get("queue_position"),
+                "request_status": row["request_status"],
+                "description": payload.get("description"),
+            }
+        )
+
+    synthetic_offset = 1_000_000
+    for index, row in enumerate(detail_rows, start=1):
+        rows.append(
+            {
+                "sort_user": row["user_id"],
+                "sort_request": row["request_id"],
+                "sort_at": row["detail_generated_at"],
+                "sort_order": synthetic_offset + index,
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "request_id": row["request_id"],
+                "queue_number": row["source_queue_number"] or row["queue_number"],
+                "charge_mode": row["charge_mode"],
+                "request_energy": row["request_energy"],
+                "event_time": _iso_string(row["detail_generated_at"]),
+                "event_type": "BILL_GENERATED",
+                "label": "生成账单",
+                "station_code": row["station_code"],
+                "queue_position": None,
+                "request_status": row["request_status"],
+                "description": f"总费用 ¥{float(row['total_fee']):.2f}",
+            }
+        )
+    rows.sort(key=lambda item: (str(item["sort_user"]), str(item["sort_request"]), str(item["sort_at"] or ""), int(item["sort_order"])))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "用户详单"
+    ws.append(
+        [
+            "车号(用户ID)",
+            "用户名",
+            "请求编号",
+            "排队号",
+            "充电模式",
+            "请求电量(kWh)",
+            "动作时间",
+            "动作类型",
+            "动作名称",
+            "充电桩",
+            "队列位置",
+            "请求状态",
+            "动作说明",
+        ]
+    )
+    for row in rows:
+        ws.append(
+            [
+                row["user_id"],
+                row["username"],
+                row["request_id"],
+                row["queue_number"],
+                row["charge_mode"],
+                float(row["request_energy"]) if row["request_energy"] is not None else None,
+                row["event_time"],
+                row["event_type"],
+                row["label"],
+                row["station_code"],
+                row["queue_position"],
+                row["request_status"],
+                row["description"],
+            ]
+        )
+    _autosize_sheet(ws)
+
+    return _xlsx_response(wb, "all-user-action-details.xlsx")
 
 
 @admin_bp.route("/users/<user_id>/battery-capacity", methods=["PUT"])

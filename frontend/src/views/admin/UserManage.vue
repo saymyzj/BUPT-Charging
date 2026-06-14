@@ -13,8 +13,11 @@
         <button class="btn-refresh" :disabled="loading" @click="loadUsers">
           <span class="material-icons">refresh</span>刷新
         </button>
-        <button class="btn-export" @click="exportAllDetails">
-          <span class="material-icons">download</span>导出所有用户详单
+        <button class="btn-export" @click="exportAllBills">
+          <span class="material-icons">payments</span>导出账单
+        </button>
+        <button class="btn-export secondary" @click="exportAllDetails">
+          <span class="material-icons">download</span>导出详单
         </button>
       </div>
     </div>
@@ -184,7 +187,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { exportAllUserDetailsXlsx, getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
+import { exportAllUserBillsXlsx, exportAllUserDetailsXlsx, getUsers, getUserDetail, updateBatteryCapacity } from '@/api/charging'
 import { unwrapResponseData } from '@/api/request'
 import ActionDialog from '@/components/ActionDialog.vue'
 import { useActionDialog } from '@/composables/useActionDialog'
@@ -288,18 +291,27 @@ function detailRows(detail) {
   return detail?.historical_details || detail?.details || []
 }
 
-async function exportAllDetails() {
-  const res = await exportAllUserDetailsXlsx()
+function downloadBlobResponse(res, filename) {
   const blob = res instanceof Blob ? res : res?.data
   if (!blob) return
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = 'all-user-request-details.xlsx'
+  link.download = filename
   document.body.appendChild(link)
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+async function exportAllBills() {
+  const res = await exportAllUserBillsXlsx()
+  downloadBlobResponse(res, 'all-user-bills.xlsx')
+}
+
+async function exportAllDetails() {
+  const res = await exportAllUserDetailsXlsx()
+  downloadBlobResponse(res, 'all-user-action-details.xlsx')
 }
 
 async function editCapacity(u) {
@@ -390,6 +402,7 @@ onMounted(loadUsers)
 .btn-export:hover { background: #f9fafb; border-color: #d0d5dd; }
 .btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
 .btn-export { color: #047857; border-color: #bdebd6; background: #f0fdf8; }
+.btn-export.secondary { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
 
 .loading-state, .empty-state { color: #9ca3af; font-size: 15px; padding: 60px 0; text-align: center; }
 

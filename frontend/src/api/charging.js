@@ -70,6 +70,12 @@ export const exportAllUserDetailsXlsx = () => request({
   method: 'get',
   responseType: 'blob',
 })
+export const exportAllUserBillsXlsxUrl = '/api/admin/users/bills/export.xlsx'
+export const exportAllUserBillsXlsx = () => request({
+  url: exportAllUserBillsXlsxUrl,
+  method: 'get',
+  responseType: 'blob',
+})
 
 // 报表统计
 export const getReports = (granularity) => request({ url: '/api/admin/reports', method: 'get', params: { granularity } })

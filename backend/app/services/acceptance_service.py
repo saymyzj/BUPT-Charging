@@ -41,16 +41,11 @@ except ImportError:  # pragma: no cover - surfaced as a user-facing validation e
 ACCEPTANCE_BASE_DATE = "2026-05-20"
 DEFAULT_START_TIME = f"{ACCEPTANCE_BASE_DATE}T06:00:00"
 EVENT_RE = re.compile(r"^\(\s*([ABC])\s*,\s*([^,]+)\s*,\s*([FTO])\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$")
-TABLE_EXPORT_COLUMNS = [
+BASE_TABLE_EXPORT_COLUMNS = [
     ("time", "时刻"),
     ("event", "事件"),
-    ("FAST_01", "快充1"),
-    ("FAST_02", "快充2"),
-    ("FAST_03", "快充3"),
-    ("SLOW_01", "慢充1"),
-    ("SLOW_02", "慢充2"),
-    ("waiting_area", "等候区"),
 ]
+WAITING_AREA_EXPORT_COLUMN = ("waiting_area", "等候区")
 
 
 def _parse_dt(value: Any) -> datetime:
@@ -89,6 +84,38 @@ def _config_set(key: str, value: Any) -> None:
 def _config_get(key: str, default: Any = "") -> str:
     row = query_db("SELECT config_value FROM scheduler_config WHERE config_key = ?", [key], one=True)
     return str(row["config_value"]) if row else str(default)
+
+
+def _runtime_int_config(key: str, default: int) -> int:
+    try:
+        return max(0, int(current_app.config.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _runtime_positive_int_config(key: str, default: int) -> int:
+    return max(1, _runtime_int_config(key, default))
+
+
+def _station_label(station_code: str) -> str:
+    try:
+        station_index = int(station_code.split("_")[-1])
+    except (TypeError, ValueError):
+        return station_code
+    if station_code.startswith("FAST_"):
+        return f"快充{station_index}"
+    if station_code.startswith("SLOW_"):
+        return f"慢充{station_index}"
+    return station_code
+
+
+def _station_sort_key(station_code: str) -> tuple[int, int, str]:
+    prefix = 0 if station_code.startswith("FAST_") else 1 if station_code.startswith("SLOW_") else 2
+    try:
+        index = int(station_code.split("_")[-1])
+    except (TypeError, ValueError):
+        index = 9999
+    return (prefix, index, station_code)
 
 
 def acceptance_enabled() -> bool:
@@ -269,31 +296,38 @@ def _clear_all_runtime_data() -> None:
 
 
 def configure_acceptance_scenario() -> None:
-    set_dispatch_mode("NORMAL")
-    set_fault_dispatch_mode("TIME_ORDER")
-    for index in range(1, 4):
+    fast_station_count = _runtime_int_config("FAST_CHARGING_PILE_NUM", 3)
+    slow_station_count = _runtime_int_config("TRICKLE_CHARGING_PILE_NUM", 2)
+    waiting_area_capacity = _runtime_int_config("WAITING_AREA_SIZE", 6)
+    charging_queue_len = _runtime_positive_int_config("CHARGING_QUEUE_LEN", 2)
+    dispatch_mode_value = current_app.config.get("DISPATCH_MODE", "NORMAL")
+    fault_dispatch_mode_value = current_app.config.get("FAULT_DISPATCH_MODE", "TIME_ORDER")
+
+    set_dispatch_mode(dispatch_mode_value)
+    set_fault_dispatch_mode(fault_dispatch_mode_value)
+    for index in range(1, fast_station_count + 1):
         execute_db(
             """
             INSERT INTO charging_station (station_code, charge_mode, power_kw, station_status, queue_capacity)
-            VALUES (?, 'FAST', 30.0, 'RUNNING', 3)
+            VALUES (?, 'FAST', 30.0, 'RUNNING', ?)
             """,
-            [f"FAST_{index:02d}"],
+            [f"FAST_{index:02d}", charging_queue_len],
         )
-    for index in range(1, 3):
+    for index in range(1, slow_station_count + 1):
         execute_db(
             """
             INSERT INTO charging_station (station_code, charge_mode, power_kw, station_status, queue_capacity)
-            VALUES (?, 'SLOW', 10.0, 'RUNNING', 3)
+            VALUES (?, 'SLOW', 10.0, 'RUNNING', ?)
             """,
-            [f"SLOW_{index:02d}"],
+            [f"SLOW_{index:02d}", charging_queue_len],
         )
     config_values = {
-        "fast_station_count": 3,
-        "slow_station_count": 2,
-        "waiting_area_capacity": 10,
-        "charging_queue_len": 3,
-        "dispatch_mode": "NORMAL",
-        "fault_dispatch_mode": "TIME_ORDER",
+        "fast_station_count": fast_station_count,
+        "slow_station_count": slow_station_count,
+        "waiting_area_capacity": waiting_area_capacity,
+        "charging_queue_len": charging_queue_len,
+        "dispatch_mode": dispatch_mode_value,
+        "fault_dispatch_mode": fault_dispatch_mode_value,
     }
     for key, value in config_values.items():
         _config_set(key, value)
@@ -530,12 +564,12 @@ def parse_xlsx_file(file_storage) -> dict:
     return {
         "sample_name": filename,
         "scenario": {
-            "fast_station_count": 3,
-            "slow_station_count": 2,
-            "waiting_area_capacity": 10,
-            "charging_queue_len": 3,
-            "dispatch_mode": "NORMAL",
-            "fault_dispatch_mode": "TIME_ORDER",
+            "fast_station_count": _runtime_int_config("FAST_CHARGING_PILE_NUM", 3),
+            "slow_station_count": _runtime_int_config("TRICKLE_CHARGING_PILE_NUM", 2),
+            "waiting_area_capacity": _runtime_int_config("WAITING_AREA_SIZE", 6),
+            "charging_queue_len": _runtime_positive_int_config("CHARGING_QUEUE_LEN", 2),
+            "dispatch_mode": current_app.config.get("DISPATCH_MODE", "NORMAL"),
+            "fault_dispatch_mode": current_app.config.get("FAULT_DISPATCH_MODE", "TIME_ORDER"),
             "start_time": "06:00:00",
             "end_time": "11:00:00",
         },
@@ -1246,6 +1280,7 @@ def build_snapshot(snapshot_time: Any | None = None, phase: str = "CURRENT") -> 
         "stations": stations,
         "waiting_area": waiting_area,
         "waiting_area_count": len(waiting_area),
+        "waiting_area_capacity": int(_config_get("waiting_area_capacity", _runtime_int_config("WAITING_AREA_SIZE", 6)) or 0),
         "fault_queue": fault_queue,
         "fault_queue_count": len(fault_queue),
         "events_at_time": [_event_payload(row) for row in pending_at_time],
@@ -1314,11 +1349,10 @@ def _table_row(at_time: str, stations: list[dict], waiting_area: list[dict], eve
     return {
         "time": _clock_string(at_time),
         "event": event_text,
-        "FAST_01": cell("FAST_01"),
-        "FAST_02": cell("FAST_02"),
-        "FAST_03": cell("FAST_03"),
-        "SLOW_01": cell("SLOW_01"),
-        "SLOW_02": cell("SLOW_02"),
+        **{
+            station["station_code"]: cell(station["station_code"])
+            for station in sorted(stations, key=lambda item: _station_sort_key(item["station_code"]))
+        },
         "waiting_area": waiting_text,
     }
 
@@ -1363,11 +1397,10 @@ def _table_row_for_xlsx(at_time: str, stations: list[dict], waiting_area: list[d
     return {
         "time": _clock_string(at_time),
         "event": event_text,
-        "FAST_01": cell("FAST_01"),
-        "FAST_02": cell("FAST_02"),
-        "FAST_03": cell("FAST_03"),
-        "SLOW_01": cell("SLOW_01"),
-        "SLOW_02": cell("SLOW_02"),
+        **{
+            station["station_code"]: cell(station["station_code"])
+            for station in sorted(stations, key=lambda item: _station_sort_key(item["station_code"]))
+        },
         "waiting_area": waiting_text,
     }
 
@@ -1388,7 +1421,6 @@ def snapshot_history() -> list[dict]:
         SELECT id, event_id, snapshot_time, snapshot_phase, snapshot_payload, created_at
         FROM acceptance_snapshot
         ORDER BY id DESC
-        LIMIT 200
         """
     )
     history = []
@@ -1436,7 +1468,7 @@ def _table_export_rows() -> list[dict]:
         """
         SELECT id, event_id, snapshot_time, snapshot_phase, snapshot_payload
         FROM acceptance_snapshot
-        WHERE snapshot_phase = 'AFTER'
+        WHERE snapshot_phase IN ('AFTER', 'CURRENT', 'FINAL')
         ORDER BY snapshot_time, id
         """
     )
@@ -1460,23 +1492,56 @@ def _table_export_rows() -> list[dict]:
     return rows
 
 
+def _table_export_columns(rows: list[dict]) -> list[tuple[str, str]]:
+    station_codes = sorted(
+        {
+            key
+            for row in rows
+            for key in row.keys()
+            if key not in {"time", "event", "waiting_area"}
+        },
+        key=_station_sort_key,
+    )
+    return [
+        *BASE_TABLE_EXPORT_COLUMNS,
+        *((code, _station_label(code)) for code in station_codes),
+        WAITING_AREA_EXPORT_COLUMN,
+    ]
+
+
 def export_table_xlsx() -> BytesIO:
     if Workbook is None:
         raise RuntimeError("openpyxl is not installed; cannot export xlsx")
 
     from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     ws = wb.active
     ws.title = "表格视图"
-    ws.append(["", "", "(车号,已充电量,当前费用)", "", "", "", "", "等候区(车号,充电类型,充电量)；故障队列(车号,已充电量,当前费用)"])
-    ws.append([label for _, label in TABLE_EXPORT_COLUMNS])
+    rows = _table_export_rows()
+    columns = _table_export_columns(rows)
+    station_column_count = max(0, len(columns) - 3)
+    station_header_cells = (
+        ["(车号,已充电量,当前费用)"] + [""] * (station_column_count - 1)
+        if station_column_count
+        else []
+    )
+    ws.append(
+        [
+            "",
+            "",
+            *station_header_cells,
+            "等候区(车号,充电类型,充电量)；故障队列(车号,已充电量,当前费用)",
+        ]
+    )
+    ws.append([label for _, label in columns])
 
-    for row in _table_export_rows():
+    for row in rows:
         ws.append(
             [
                 row.get(key) or ("状态快照" if key == "event" else "")
-                for key, _ in TABLE_EXPORT_COLUMNS
+                for key, _ in columns
             ]
         )
 
@@ -1488,23 +1553,22 @@ def export_table_xlsx() -> BytesIO:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    widths = {
-        "A": 12,
-        "B": 28,
-        "C": 30,
-        "D": 30,
-        "E": 30,
-        "F": 30,
-        "G": 30,
-        "H": 42,
-    }
-    for column, width in widths.items():
+    for column_index, (key, _) in enumerate(columns, start=1):
+        column = get_column_letter(column_index)
+        if key == "time":
+            width = 12
+        elif key == "event":
+            width = 28
+        elif key == "waiting_area":
+            width = 42
+        else:
+            width = 30
         ws.column_dimensions[column].width = width
     for row in ws.iter_rows(min_row=3):
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
     ws.freeze_panes = "A3"
-    ws.auto_filter.ref = f"A2:H{ws.max_row}"
+    ws.auto_filter.ref = f"A2:{get_column_letter(len(columns))}{ws.max_row}"
 
     stream = BytesIO()
     wb.save(stream)

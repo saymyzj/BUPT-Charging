@@ -353,7 +353,7 @@
               </article>
             </div>
             <div class="mini-waiting">
-              <b>等候区 {{ board.snapshot?.waiting_area_count || 0 }}/10</b>
+              <b>等候区 {{ board.snapshot?.waiting_area_count || 0 }}/{{ waitingAreaCapacity(board.snapshot) }}</b>
               <div>
                 <span v-for="item in board.snapshot?.waiting_area || []" :key="item.request_id">
                   {{ item.vehicle_code }} {{ item.queue_number }} {{ item.charge_mode }} {{ item.request_energy }}度
@@ -379,21 +379,28 @@
           <button class="tool-btn compact" @click="exportTableXlsx"><span class="material-icons">download</span>导出 xlsx</button>
         </div>
       </div>
-      <table class="acceptance-table">
+      <table class="acceptance-table" :style="{ minWidth: acceptanceTableMinWidth }">
         <thead>
-          <tr><th>时刻</th><th>事件</th><th>快充1</th><th>快充2</th><th>快充3</th><th>慢充1</th><th>慢充2</th><th>等候区</th></tr>
+          <tr>
+            <th>时刻</th>
+            <th>事件</th>
+            <th v-for="station in tableStationColumns" :key="station.station_code">
+              {{ station.display_name || stationLabel(station.station_code) }}
+            </th>
+            <th>等候区</th>
+          </tr>
         </thead>
         <tbody>
           <tr v-for="row in tableSnapshotRows" :key="row.id">
             <td class="time-cell">{{ formatClock(row.time) }}</td>
             <td class="event-cell">{{ row.event || '状态快照' }}</td>
-            <td v-for="key in tableStationKeys" :key="key" class="station-cell">
-              <div class="table-slot" :class="{ empty: !stationFor(row.snapshot, key)?.queue?.length, fault: stationFor(row.snapshot, key)?.station_status === 'FAULT' }">
-                <template v-if="stationFor(row.snapshot, key)?.station_status === 'FAULT'">
+            <td v-for="station in tableStationColumns" :key="station.station_code" class="station-cell">
+              <div class="table-slot" :class="{ empty: !stationFor(row.snapshot, station.station_code)?.queue?.length, fault: stationFor(row.snapshot, station.station_code)?.station_status === 'FAULT' }">
+                <template v-if="stationFor(row.snapshot, station.station_code)?.station_status === 'FAULT'">
                   <span class="empty-text danger-text">故障</span>
                 </template>
-                <template v-else-if="stationFor(row.snapshot, key)?.queue?.length">
-                  <div v-for="item in stationFor(row.snapshot, key).queue" :key="item.request_id" class="charge-chip">
+                <template v-else-if="stationFor(row.snapshot, station.station_code)?.queue?.length">
+                  <div v-for="item in stationFor(row.snapshot, station.station_code).queue" :key="item.request_id" class="charge-chip">
                     <b>{{ item.vehicle_code }}</b>
                     <span>{{ item.charged_energy }}度 / ¥{{ item.current_fee }}</span>
                     <em :class="item.status">{{ item.status === 'CHARGING' ? '充电中' : '排队' }}</em>
@@ -483,7 +490,6 @@ const tabs = [
   { key: 'table', label: '表格视图', icon: 'table_view' },
 ]
 const speeds = [1, 5, 10, 60]
-const tableStationKeys = ['FAST_01', 'FAST_02', 'FAST_03', 'SLOW_01', 'SLOW_02']
 
 const simulationTime = computed(() => state.value?.simulation_time || '2026-05-20T06:00:00')
 const clockText = computed(() => formatClock(simulationTime.value))
@@ -513,8 +519,8 @@ const tableRows = computed(() => {
 const tableSnapshotRows = computed(() => {
   const rowsByEvent = new Map()
   snapshots.value.forEach(item => {
-    if (item.phase !== 'AFTER') return
-    const key = item.event_id || `${item.snapshot_time}-${item.clock}`
+    if (!['AFTER', 'CURRENT', 'FINAL'].includes(item.phase)) return
+    const key = item.event_id && item.phase === 'AFTER' ? item.event_id : `${item.phase}-${item.id}`
     if (!rowsByEvent.has(key)) {
       rowsByEvent.set(key, {
         id: `snapshot-${item.id}`,
@@ -539,6 +545,25 @@ const tableSnapshotRows = computed(() => {
   }
   return rows
 })
+const tableStationColumns = computed(() => {
+  const byCode = new Map()
+  tableSnapshotRows.value.forEach(row => {
+    const stations = row.snapshot?.stations || []
+    stations.forEach(station => {
+      if (station?.station_code && !byCode.has(station.station_code)) {
+        byCode.set(station.station_code, station)
+      }
+    })
+  })
+  const liveStations = snapshot.value?.stations || []
+  liveStations.forEach(station => {
+    if (station?.station_code && !byCode.has(station.station_code)) {
+      byCode.set(station.station_code, station)
+    }
+  })
+  return Array.from(byCode.values()).sort((a, b) => stationSortKey(a.station_code).localeCompare(stationSortKey(b.station_code)))
+})
+const acceptanceTableMinWidth = computed(() => `${110 + 190 + tableStationColumns.value.length * 260 + 270}px`)
 const selectedSnapshot = computed(() => selectedSnapshotItem.value?.snapshot || null)
 const snapshotPair = computed(() => {
   const target = selectedSnapshotItem.value
@@ -727,8 +752,11 @@ async function loadSnapshot() {
 async function loadSnapshots() {
   const data = unwrapResponseData(await getAcceptanceSnapshots())
   snapshots.value = data.snapshots || []
-  if (!selectedSnapshotItem.value && snapshots.value.length) {
+  const selectedStillExists = selectedSnapshotItem.value && snapshots.value.some(item => item.id === selectedSnapshotItem.value.id)
+  if (!selectedStillExists && snapshots.value.length) {
     selectedSnapshotItem.value = snapshots.value[0]
+  } else if (!snapshots.value.length) {
+    selectedSnapshotItem.value = null
   }
 }
 
@@ -1044,6 +1072,25 @@ function secondOfDayToClock(seconds) {
 
 function stationFor(snapshotValue, stationCode) {
   return (snapshotValue?.stations || []).find(station => station.station_code === stationCode)
+}
+
+function stationSortKey(stationCode) {
+  const text = String(stationCode || '')
+  const prefix = text.startsWith('FAST_') ? '0' : text.startsWith('SLOW_') ? '1' : '2'
+  const match = text.match(/_(\d+)$/)
+  const index = String(match ? Number(match[1]) : 9999).padStart(4, '0')
+  return `${prefix}-${index}-${text}`
+}
+
+function stationLabel(stationCode) {
+  const text = String(stationCode || '')
+  const match = text.match(/^(FAST|SLOW)_(\d+)$/)
+  if (!match) return text || '--'
+  return `${match[1] === 'FAST' ? '快充' : '慢充'}${Number(match[2])}`
+}
+
+function waitingAreaCapacity(snapshotValue) {
+  return snapshotValue?.waiting_area_capacity ?? snapshotValue?.acceptance?.config?.waiting_area_capacity ?? '--'
 }
 
 function pushActionLog(text, level = 'run') {
@@ -1428,10 +1475,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .acceptance-table-card { overflow: auto; max-height: 680px; }
 .card-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.acceptance-table { min-width: 1760px; }
 .acceptance-table th:nth-child(1) { width: 110px; }
 .acceptance-table th:nth-child(2) { width: 190px; }
-.acceptance-table th:nth-child(n+3):nth-child(-n+7) { width: 260px; }
+.acceptance-table th:nth-child(n+3):not(:last-child) { width: 260px; }
 .acceptance-table th:last-child { width: 270px; }
 th, td { border-top: 1px solid #edf2ef; padding: 10px 12px; vertical-align: middle; text-align: center; white-space: normal; font-size: 12px; line-height: 1.45; overflow: hidden; }
 th { position: sticky; top: 0; z-index: 2; color: #475569; background: #fbfcfd; text-align: center; font-weight: 900; }
