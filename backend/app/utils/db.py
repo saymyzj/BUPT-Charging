@@ -151,6 +151,12 @@ def _should_rebuild_for_sqlite_error(exc: sqlite3.Error) -> bool:
     return any(marker in message for marker in SQLITE_REBUILD_ERROR_MARKERS)
 
 
+def _config_bool(value, default: bool = False) -> bool:
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
 def _create_fresh_database(database_path: str, schema_path: Path, apply_runtime_config: bool = False):
     db = sqlite3.connect(database_path)
     try:
@@ -192,7 +198,11 @@ def _rebuild_database_file(
     return backup_path
 
 
-def _initialize_database_file(database_path: str, apply_runtime_config: bool = False):
+def _initialize_database_file(
+    database_path: str,
+    apply_runtime_config: bool = False,
+    reset_runtime_data: bool = False,
+):
     db_path = Path(database_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     schema_path = _schema_path(database_path)
@@ -210,7 +220,7 @@ def _initialize_database_file(database_path: str, apply_runtime_config: bool = F
                 db.executescript(f.read())
             _ensure_optional_columns(db)
             if apply_runtime_config:
-                _apply_runtime_config(db)
+                _apply_runtime_config(db, reset_runtime_data=reset_runtime_data)
             db.commit()
             return
         finally:
@@ -235,12 +245,30 @@ def _initialize_database_file(database_path: str, apply_runtime_config: bool = F
         )
 
 
-def _apply_runtime_config(db):
+def _clear_runtime_tables(db):
+    db.execute("UPDATE charging_station SET current_request_id = NULL")
+    for table in (
+        'acceptance_snapshot',
+        'acceptance_event',
+        'request_detail',
+        'charging_session',
+        'charge_request',
+        'charging_station',
+        'notification',
+        'scheduler_event_log',
+    ):
+        db.execute(f"DELETE FROM {table}")
+
+
+def _apply_runtime_config(db, reset_runtime_data: bool = False):
     if not has_app_context():
         return
 
+    if reset_runtime_data:
+        _clear_runtime_tables(db)
+
     request_count = db.execute("SELECT COUNT(*) FROM charge_request").fetchone()[0]
-    if request_count == 0:
+    if reset_runtime_data or request_count == 0:
         db.execute("DELETE FROM charging_station")
         queue_len = int(current_app.config.get('CHARGING_QUEUE_LEN', 2))
         for index in range(1, int(current_app.config.get('FAST_CHARGING_PILE_NUM', 3)) + 1):
@@ -295,6 +323,13 @@ def _ensure_optional_columns(db):
             db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
 
 
+def _auto_init_db_on_start() -> bool:
+    if not has_app_context():
+        return False
+    default = False if current_app.config.get('TESTING') else False
+    return _config_bool(current_app.config.get('AUTO_INIT_DB_ON_START'), default)
+
+
 def get_db():
     """
     获取数据库连接
@@ -333,7 +368,11 @@ def init_db(app_or_path):
     if hasattr(app_or_path, 'app_context'):
         app = app_or_path
         with app.app_context():
-            _initialize_database_file(current_app.config['DATABASE_PATH'], apply_runtime_config=True)
+            _initialize_database_file(
+                current_app.config['DATABASE_PATH'],
+                apply_runtime_config=True,
+                reset_runtime_data=_auto_init_db_on_start(),
+            )
 
         app.teardown_appcontext(close_db)
         return

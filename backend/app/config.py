@@ -28,6 +28,13 @@ def _env_int(name, default):
     return int(value)
 
 
+def _env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() not in {"0", "false", "no", "off"}
+
+
 class Config:
     """Base runtime configuration."""
 
@@ -43,6 +50,7 @@ class Config:
     LISTEN_HOST = os.environ.get("LISTEN_HOST") or "127.0.0.1"
     LISTEN_PORT = _env_int("LISTEN_PORT", 5000)
     AUTO_REBUILD_INCOMPATIBLE_DB = os.environ.get("AUTO_REBUILD_INCOMPATIBLE_DB", "1")
+    AUTO_INIT_DB_ON_START = _env_bool("AUTO_INIT_DB_ON_START", True)
 
     JWT_EXPIRATION_HOURS = _env_int("JWT_EXPIRATION_HOURS", 24)
 
@@ -78,6 +86,7 @@ class TestingConfig(Config):
     TESTING = True
     DATABASE_PATH = os.environ.get("TEST_DATABASE_PATH") or os.path.join(Config.BASE_DIR, "charging_system_test.db")
     LOG_DIR = os.environ.get("TEST_LOG_DIR") or os.path.join(Config.BASE_DIR, "logs", "test")
+    AUTO_INIT_DB_ON_START = _env_bool("TEST_AUTO_INIT_DB_ON_START", False)
 
 
 config = {
